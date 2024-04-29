@@ -303,13 +303,6 @@ contains
     real(r8), pointer :: fldcw(:,:)
 
     ! oslo aerosols
-    real(r8) :: interfaceTendToLowestLayer(pcols)
-    real(r8) :: deltaH(pcols)
-    real(r8) :: massLostDD(pcols)
-    real(r8) :: MMRNew(pcols)
-    real(r8) :: lossRate(pcols)
-    real(r8) :: totalProd(pcols)
-
     real(r8) :: logSigma
     logical  :: is_done(pcnst,2)
     !-----------------------------------------------------------------------
@@ -359,6 +352,7 @@ contains
        do lphase = 1, 2   ! loop over interstitial / cloud-borne forms
 
           if (lphase == 1) then   ! interstial aerosol - calc settling/dep velocities of mode
+
              logSigma = log(lifeCycleSigma(m))
 
              ! rad_aer = volume mean wet radius (m)
@@ -390,9 +384,10 @@ contains
              endif
              is_done(mm,lphase)=.true.
 
-             if (lphase == 1) then
-                jvlc = 2              !mass in clean air tracers
+             ! Calculate sediment velocity
 
+             if (lphase == 1) then
+                jvlc = 2 ! mass in clean air tracers
                 !Process tracers have their own velocity based on fixed size / density
                 !Calculate the velocity to use for this specie..
                 if ( is_process_mode(mm, .false.) ) then
@@ -408,12 +403,13 @@ contains
                         vlc_dry(:,:,jvlc), vlc_trb(:,jvlc), vlc_grv(:,:,jvlc),  &
                         rad_aer(:,:), dens_aer(:,:), sg_aer(:,:), 3, lchnk)
                 endif
-
              else
                 jvlc = 4              !mass in cloud tracers
              endif
 
              if (mm <= 0) cycle
+
+             ! Calculate sediment tendency
 
              if ((lphase == 1) .and. (lspec <= getNumberOfTracersInMode(m))) then
                 ptend%lq(mm) = .TRUE.
@@ -430,50 +426,7 @@ contains
 
                 ! calculate the tendencies and sfc fluxes from the above velocities
                 call oslo_aero_dust_sediment_tend(ncol, dt, pint(:,:), pmid, pdel, t , &
-                     q(:,:,mm),  pvmzaer,  ptend%q(:,:,mm), sflx, &
-                     dusttend_to_ll_out=interfaceTendToLowestLayer)
-
-                !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                !%%%%%% FIX FOR SHORT DRYDEP LIFE-TIMES
-                !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                !Some tracers have short lifetime with respect to dry dep:
-                !Solve implicitly for eqn for emission and dry dep in lowest layer
-                deltaH(:ncol) = pdel(:ncol,pver)/rho(:ncol,pver)/gravit     ![m] height of layer
-                !print*, "deltaH", deltaH(:ncol)
-
-                lossRate(:ncol) = vlc_dry(:ncol,pver,jvlc)/deltaH(:ncol)            ![1/s] loss rate out of layer
-                !print*, "lossRate", lossRate(:ncol)
-                !print*, "interfaceFluxesToLowestLayer", interfaceFluxToLowestLayer(:ncol)
-
-                !OBS OBS OBS DIRTY FIX but need approx 2-3 weeks for proper solution
-                !special treatment of BC_AX because BC_AX is not treated with
-                !boundary mixing in activation (is by definition not activated!)
-                !Therefor emissions are already added in "normal" boundary layer
-                !mixing routine..
-                !The proper fix to this is to skip the special treatment of BC_AX
-                !and skip the index "0" for that mixture alltogether!
-                if(mm .eq. l_bc_ax) then
-                   totalProd(:ncol) = interfaceTendToLowestLayer(:ncol)
-                else
-                   totalProd(:ncol) = cflx(:ncol,mm)*gravit/pdel(:ncol,pver) + interfaceTendToLowestLayer(:ncol)
-                end if
-
-                !Do solution
-                where(lossRate(:ncol)*dt .gt. 1.e-2_r8)
-                   MMRNew(:ncol) = q(:ncol,pver,mm)*exp(-lossRate(:ncol)*dt)   &
-                        + totalProd(:ncol)/lossRate(:ncol)*(1.0_r8 - exp(-lossRate(:ncol)*dt))
-                elsewhere
-                   MMRNew(:ncol) = q(:ncol,pver,mm)+ totalProd(:ncol)*dt - q(:ncol,pver,mm)*lossRate(:ncol)*dt
-                end where
-
-                !C0 + Pdt -massLostDD = CNew   ==>
-                massLostDD(:ncol) = q(:ncol,pver,mm) - MMRNew(:ncol) + totalProd(:ncol)*dt
-
-                !Overwrite tendency in lowest layer to include emissions
-                !They are then not included in vertical diffusion!!
-                ptend%q(:ncol,pver,mm) = (MMRNew(:ncol)-q(:ncol,pver,mm))/dt
-                sflx(:ncol) = massLostDD(:ncol)*pdel(:ncol,pver) / gravit / dt
-                !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                     q(:,:,mm),  pvmzaer,  ptend%q(:,:,mm), sflx)
 
                 ! apportion dry deposition into turb and gravitational settling for tapes
                 dep_trb = 0._r8
@@ -537,7 +490,8 @@ contains
 
     ! if the user has specified prescribed aerosol dep fluxes then
     ! do not set cam_out dep fluxes according to the prognostic aerosols
-    if (.not.aerodep_flx_prescribed()) then
+
+    if (.not. aerodep_flx_prescribed()) then
        call  oslo_set_srf_drydep(ncol, aerdepdryis, aerdepdrycw, &
             cam_out%bcphidry, cam_out%bcphodry, cam_out%ocphidry, cam_out%ocphodry, &
             cam_out%dstdry1, cam_out%dstdry2, cam_out%dstdry3, cam_out%dstdry4)

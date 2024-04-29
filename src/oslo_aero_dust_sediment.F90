@@ -67,7 +67,7 @@ contains
 
   !===============================================================================
   subroutine oslo_aero_dust_sediment_tend ( ncol,   dtime,  pint, pmid, pdel, t, &
-       dustmr, pvdust, dusttend, sfdust, dusttend_to_ll_out )
+       dustmr, pvdust, dusttend, sfdust)
 
     !----------------------------------------------------------------------
     !  Apply Particle Gravitational Sedimentation
@@ -85,7 +85,6 @@ contains
     real(r8), intent(in)  :: pvdust (pcols,pverp)      ! vertical velocity of dust drops  (Pa/s)
     real(r8), intent(out) :: dusttend(pcols,pver)      ! dust tend
     real(r8), intent(out) :: sfdust(pcols)             ! surface flux of dust (rain, kg/m/s)
-    real(r8),intent(out),optional  :: dusttend_to_ll_out(pcols) ! fluxes at the interfaces, dust (positive = down
 
     ! Local variables
     integer  :: i,k
@@ -133,11 +132,6 @@ contains
 
     ! convert flux out the bottom to mass units Pa -> kg/m2/s
     sfdust(:ncol) = fxdust(:ncol,pverp) / (dtime*gravit)
-
-    ! fluxes at the interface
-    if(present(dusttend_to_ll_out))then
-       dusttend_to_ll_out(1:ncol) = fxdust(:ncol,pver)/(dtime*pdel(:ncol,pver))
-    end if
 
   end subroutine oslo_aero_dust_sediment_tend
 
