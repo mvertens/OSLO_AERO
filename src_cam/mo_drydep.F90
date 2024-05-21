@@ -322,11 +322,10 @@ contains
     logical :: prog_modal_aero
 
     ! determine if modal aerosols are active so that fraction_landuse array is initialized for modal aerosal dry dep
-#ifdef OSLO_AERO
+    ! OSLO_AERO begin
     prog_modal_aero = .true.
-#else
-    call phys_getopts(prog_modal_aero_out=prog_modal_aero)
-#endif
+    ! OSLO_AERO end
+
     call dvel_inti_fromlnd()
 
     if( masterproc ) then
