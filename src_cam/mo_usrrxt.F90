@@ -3,9 +3,9 @@ module mo_usrrxt
   use shr_kind_mod,     only : r8 => shr_kind_r8
   use cam_logfile,      only : iulog
   use ppgrid,           only : pver, pcols
-#ifdef OSLO_AERO
+  ! OSLO_AERO begin
   use oslo_aero_share,  only: nmodes_oslo=> nmodes
-#endif
+  ! OSLO_AERO end
 
   implicit none
 
@@ -764,7 +764,7 @@ contains
     integer :: ntot_amode
 
     real(r8), pointer :: sfc_array(:,:,:), dm_array(:,:,:)
- !TS2
+
     real(r8) ::  aterm(ncol)
     real(r8) ::  natom
     real(r8) ::  nyield
@@ -772,12 +772,12 @@ contains
     real(r8) ::  exp_natom
 
     ! get info about the modal aerosols
+
     ! get ntot_amode
-#ifdef OSLO_AERO
+    ! OSLO_AERO begin
     ntot_amode = nmodes_oslo
-#else
-    call rad_cnst_get_info(0, nmodes=ntot_amode)
-#endif
+    ! OSLO_AERO end
+
     if (ntot_amode>0) then
        allocate(sfc_array(pcols,pver,ntot_amode), dm_array(pcols,pver,ntot_amode) )
     else

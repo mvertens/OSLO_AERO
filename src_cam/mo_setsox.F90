@@ -33,21 +33,15 @@ contains
     use mo_chem_utls, only : get_spc_ndx, get_inv_ndx
     use spmd_utils,   only : masterproc
     use phys_control, only : phys_getopts
-#ifdef OSLO_AERO
+    ! OSLO_AERO begin
     use oslo_aero_sox_cldaero, only : sox_cldaero_init
-#else
-    use sox_cldaero_mod, only : sox_cldaero_init
-#endif
-
+    ! OSLO_AERO_END
     implicit none
 
-#ifdef OSLO_AERO
+    ! OSLO_AERO begin
     modal_aerosols = .true.
     cloud_borne = .true.
-#else
-    call phys_getopts(prog_modal_aero_out=modal_aerosols )
-    cloud_borne = modal_aerosols
-#endif
+    ! OSLO_AERO end
 
     !-----------------------------------------------------------------
     !       ... get species indicies
@@ -181,13 +175,10 @@ contains
     use chem_mods,    only : adv_mass
     use physconst,    only : mwdry, gravit
     use mo_constants, only : pi
-#ifdef OSLO_AERO
+    ! OSLO_AERO begin
     use oslo_aero_sox_cldaero, only : sox_cldaero_update, sox_cldaero_create_obj, sox_cldaero_destroy_obj
     use oslo_aero_sox_cldaero, only : cldaero_conc_t
-#else
-    use sox_cldaero_mod, only : sox_cldaero_update, sox_cldaero_create_obj, sox_cldaero_destroy_obj
-    use cldaero_mod,     only : cldaero_conc_t
-#endif
+    ! OSLO_AERO end
     !
     implicit none
     !
