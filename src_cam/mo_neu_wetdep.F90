@@ -14,8 +14,10 @@ module mo_neu_wetdep
   use cam_abortutils,   only : endrun
   use shr_drydep_mod,   only : n_species_table, species_name_table, dheff
   use gas_wetdep_opts,  only : gas_wetdep_method, gas_wetdep_list, gas_wetdep_cnt
-  use phys_control,     only: phys_getopts ! OSLO_AERO
-  use mo_constants,     only: rgrav        ! OSLO_AERO
+  ! OSLO_AERO begin
+  use phys_control,     only: phys_getopts
+  use mo_constants,     only: rgrav
+  ! OSLO_AERO end
 !
   implicit none
 !
@@ -53,7 +55,7 @@ subroutine neu_wetdep_init
 !
   use constituents, only : cnst_get_ind,cnst_mw
   use cam_history,  only : addfld, add_default, horiz_only
-  use phys_control, only : phys_getopts
+  use phys_control, only : phys_getopts, cam_chempkg_is
 !
   integer :: m,l
   character*20 :: test_name
@@ -87,6 +89,9 @@ subroutine neu_wetdep_init
 ! mapping based on the MOZART4 wet removal subroutine;
 ! this might need to be redone (JFL: Sep 2010)
 !
+! Skip mapping if using GEOS-Chem; all GEOS-Chem species are in dep_data_file
+! (heff table) specified in namelist drv_flds_in (EWL: Dec 2022)
+  if ( .not. cam_chempkg_is('geoschem_mam4') ) then
     select case( trim(test_name) )
 !
 ! CCMI: added SO2t and NH_50W
@@ -110,6 +115,7 @@ subroutine neu_wetdep_init
       case(  'SOAGbb4' )
          test_name = 'SOAGff4'
     end select
+  endif
 !
     do l = 1,n_species_table
 !
@@ -460,7 +466,7 @@ subroutine neu_wetdep_tend(lchnk,ncol,mmr,pmid,pdel,zint,tfld,delt, &
 !
   end do
 !
-#ifdef OSLO_AERO
+  ! OSLO_AERO begin
   !This is output normally in mo_chm_diags, but if neu wetdep, we have to output it here!
   call phys_getopts( history_aerosol_out = history_aerosol)
   if (history_aerosol) then
@@ -473,7 +479,8 @@ subroutine neu_wetdep_tend(lchnk,ncol,mmr,pmid,pdel,zint,tfld,delt, &
         call outfld('WD_A_'//trim(gas_wetdep_list(m)),wrk_wd(:ncol),ncol,lchnk)
      end do
   end if
-#endif
+  ! OSLO_AERO end
+
 
   if ( do_diag ) then
     call outfld('QT_RAIN_HNO3', qt_rain, ncol, lchnk )

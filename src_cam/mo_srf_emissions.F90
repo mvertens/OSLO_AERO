@@ -10,9 +10,9 @@ module mo_srf_emissions
   use ioFileMod,     only : getfil
   use cam_logfile,   only : iulog
   use tracer_data,   only : trfld,trfile
-#ifdef OSLO_AERO
+  ! OSLO_AERO begin
   use oslo_aero_ocean, only: oslo_aero_dms_inq
-#endif
+  ! OSLO_AERO end
 
   implicit none
 
@@ -39,9 +39,9 @@ module mo_srf_emissions
   type(emission), allocatable :: emissions(:)
   integer                     :: n_emis_files
   integer :: c10h16_ndx, isop_ndx
-#ifdef OSLO_AERO
+  ! OSLO_AERO begin
   integer :: dms_ndx
-#endif
+  ! OSLO_AERO end
 
 contains
 
@@ -291,9 +291,10 @@ contains
 
     c10h16_ndx = get_spc_ndx('C10H16')
     isop_ndx = get_spc_ndx('ISOP')
-#ifdef OSLO_AERO
+    ! OSLO_AERO begin
     dms_ndx = get_spc_ndx('DMS')
-#endif
+    ! OSLO_AERO end
+
   end subroutine srf_emissions_inti
 
   subroutine set_srf_emissions_time( pbuf2d, state )
@@ -410,7 +411,7 @@ contains
     declination = dec_max * cos((doy_loc - 172._r8)*twopi/dayspy)
     tod = (calday - doy_loc) + .5_r8
 
-#ifdef OSLO_AERO
+    ! OSLO_AERO begin
     ! Zero DMS emissions if option is not "from file"
     ! oslo_aero_dms_inq() Returns "true" if "emissions from file"
     if (.not. oslo_aero_dms_inq()) then
@@ -418,7 +419,7 @@ contains
           sflx(:ncol,dms_ndx) = 0.0_r8
        end if
     end if
-#endif
+  ! OSLO_AERO end
 
     do i = 1,ncol
        !
