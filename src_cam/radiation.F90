@@ -776,6 +776,10 @@ subroutine radiation_tend( &
 
 
    ! Local variables
+   ! OSLO_AERO begin
+   integer                  :: band
+   logical                  :: idrf
+   ! OSLO_AERO end
    type(rad_out_t), pointer :: rd  ! allow rd_out to be optional by allocating a local object
                                    ! if the argument is not present
    logical  :: write_output

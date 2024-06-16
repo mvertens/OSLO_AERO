@@ -18,6 +18,7 @@ module oslo_aero_optical_params
   use oslo_aero_conc,      only: calculateBulkProperties, partitionMass
   use oslo_aero_sw_tables, only: interpol0, interpol1, interpol2to3, interpol4, interpol5to10
   use oslo_aero_aerocom,   only: aerocom1, aerocom2
+  use perf_mod,            only: t_startf, t_stopf
 
   implicit none
   private
@@ -124,6 +125,8 @@ contains
     real(r8) :: batotlw01(pcols,pver)
     real(r8) :: daerh2o(pcols)
     !-------------------------------------------------------------------------
+
+    call t_startf('oslo_aero_optical_params')
 
     ! calculate relative humidity for table lookup into rh grid
     call qsat_water(state%t(1:ncol,1:pver), state%pmid(1:ncol,1:pver), es(1:ncol,1:pver), qs(1:ncol,1:pver), ncol, pver)
@@ -237,10 +240,12 @@ contains
     enddo
 
     ! find common input parameters for use in the interpolation routines
+    call t_startf('oslo_aero_input_interpol')
     call inputForInterpol (ncol, rhum, xrh, irh1,   &
          f_soana, xfombg, ifombg1, faitbc, xfbcbg, ifbcbg1,  &
          fnbc, xfbcbgn, ifbcbgn1, Nnatk, Cam, xct, ict1,     &
          focm, fcm, xfac, ifac1, fbcm, xfbc, ifbc1, faqm, xfaq, ifaq1)
+    call t_stopf('oslo_aero_input_interpol')
 
 #ifdef AEROCOM
     call aerocom1(lchnk, ncol, Cam, Nnatk, deltah_km, &
@@ -249,6 +254,7 @@ contains
        xfombg, ifombg1, Ctotdry)
 #endif
 
+    call t_startf('oslo_aero_interpol')
     ! (Wet) Optical properties for each of the aerosol modes:
     lw_on = .true.  ! No LW optics needed for RH=0 (interpol returns 0-values)
 
@@ -297,6 +303,8 @@ contains
     call interpol4 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xfbcbgn, ifbcbgn1, xct, ict1,  &
          xfac, ifac1, xfaq, ifaq1, ssa, asym, be, ke, lw_on, kalw)
+
+    call t_stopf('oslo_aero_interpol')
 
     ! Determine Ctot
     Ctot(:,:) = 0.0_r8
@@ -570,6 +578,8 @@ contains
          xct, ict1, xfac, ifac1, xfbc, ifbc1, xfaq, ifaq1, xfbcbg, ifbcbg1, xfbcbgn, ifbcbgn1, &
          xfombg, ifombg1, xrh, irh1)
 #endif
+
+    call t_stopf('oslo_aero_optical_params')
 
   end subroutine oslo_aero_optical_params_calc
 
