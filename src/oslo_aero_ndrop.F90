@@ -20,6 +20,7 @@ module oslo_aero_ndrop
   use cam_history,       only: addfld, add_default, horiz_only, fieldname_len, outfld
   use cam_abortutils,    only: endrun
   use cam_logfile,       only: iulog
+  use perf_mod,          only: t_startf, t_stopf
   !
   use oslo_aero_share,   only: calculateNumberMedianRadius
   use oslo_aero_share,   only: getNumberOfTracersInMode, getNumberOfAerosolTracers, getTracerIndex
@@ -544,6 +545,7 @@ contains
     end do
 
     !Output this
+    call t_startf('ndrop_calculateNumberMedianRadius')
     call calculateNumberMedianRadius(numberConcentration, volumeConcentration, lnSigma, numberMedianRadius, ncol)
     do n=1,nmodes
        sigma(:ncol,:,n) = DEXP(lnSigma(:ncol,:,n))
@@ -561,6 +563,7 @@ contains
        varName = "HYGRO"//trim(modeString)
        call outfld(varName, hygroscopicity(:ncol,:,n), ncol,lchnk)
     end do
+    call t_stopf('ndrop_calculateNumberMedianRadius')
 
     alert = .FALSE.
     do k=top_lev,pver
@@ -632,8 +635,10 @@ contains
        nnew = 2
 
        !get constituent fraction
+       call t_startf('ndrop_getConstituentFraction')
        componentFractionOK(:,:,:) = 0.0_r8
        do k=top_lev, pver
+
           do m = 1,ntot_amode
              if(m .le. nbmodes)then
                 do l = 1, nspec_amode(m)
@@ -679,8 +684,10 @@ contains
              endif
           end do !tracers
        end do    !levels
+       call t_stopf('ndrop_getConstituentFraction')
        !debug sum fraction for "i" done
 
+       call t_startf('ndrop_getNumberConc')
        debugSumFraction(:) = 0.0_r8 !sum of component lDebug in level k
        do m = 1, nmodes ! Number of modes
           !Get number concentration of this mode
@@ -715,8 +722,10 @@ contains
              enddo ! k (levels)
           end do   ! l (species)
        end do      ! m (modes)
+       call t_stopf('ndrop_getNumberConc')
 
        ! droplet nucleation/aerosol activation
+       call t_startf('ndrop_nucleation_activation')
 
        ! tau_cld_regenerate = time scale for regeneration of cloudy air
        !    by (horizontal) exchange with clear air
@@ -892,6 +901,7 @@ contains
 
        enddo  ! grow_shrink_main_k_loop
        ! end of k-loop for growing/shrinking cloud calcs ......................
+       call t_stopf('ndrop_nucleation_activation')
 
        ! ......................................................................
        ! start of k-loop for calc of old cloud activation tendencies ..........
@@ -902,6 +912,7 @@ contains
        ! into layer k.  however, activated particles in k mix out to k+1,
        ! so they are incorrectly depleted with no replacement
 
+       call t_startf('ndrop_oldcloud_activation')
        ! old_cloud_main_k_loop
        do k = top_lev, pver
           kp1 = min0(k+1, pver)
@@ -1089,14 +1100,15 @@ contains
           end if
 
        end do  ! old_cloud_main_k_loop
+       call t_stopf('ndrop_oldcloud_activation')
 
        ! switch nsav, nnew so that nnew is the updated aerosol
        ntemp = nsav
        nsav  = nnew
        nnew  = ntemp
 
+       call t_startf('ndrop_newdroplets')
        ! load new droplets in layers above, below clouds
-
        dtmin = dtmicro
        ekk(top_lev-1) = 0.0_r8
        ekk(pver) = 0.0_r8
@@ -1197,8 +1209,10 @@ contains
        do lptr2=1,n_aerosol_tracers
           mact_tracer(:,lptr2) = mact_tracer(:,lptr2) /(mfullact_tracer(:,lptr2) + smallNumber)
        end do
+       call t_stopf('ndrop_newdroplets')
 
        ! old_cloud_nsubmix_loop
+       call t_startf('ndrop_oldcloud_nsubmix')
        do n = 1, nsubmix
           qncld(:) = qcld(:)
           ! switch nsav, nnew so that nsav is the updated aerosol
@@ -1266,7 +1280,9 @@ contains
 
           end do !Number of aerosol tracers
        end do ! old_cloud_nsubmix_loop
+       call t_stopf('ndrop_oldcloud_nsubmix')
 
+       call t_startf('ndrop_rest')
        !Set back to the original framework
        !Could probably continue in tracer-space from here
        !but return back to mixture for easier use of std. NCAR code
@@ -1291,7 +1307,6 @@ contains
        end do
 
        ! evaporate particles again if no cloud
-
        do k = top_lev, pver
           if (cldn(i,k) == 0._r8) then
              ! no ice or liquid cloud
@@ -1396,6 +1411,7 @@ contains
           end do    !modes
 
        end if  !prog_modal_aero
+       call t_stopf('ndrop_rest')
 
     end do  ! overall_main_i_loop
 

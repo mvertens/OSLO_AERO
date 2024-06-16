@@ -24,6 +24,7 @@ module oslo_aero_microp
   use cam_history,            only: addfld, add_default, outfld
   use cam_logfile,            only: iulog
   use cam_abortutils,         only: endrun
+  use perf_mod,               only: t_startf, t_stopf
   !
   use oslo_aero_ndrop,        only: ndrop_init_oslo, dropmixnuc_oslo
   use oslo_aero_conc,         only: oslo_aero_conc_calc
@@ -90,18 +91,19 @@ contains
     real(r8) :: microp_aero_bulk_scale  = 2._r8    ! prescribed aerosol bulk sulfur scale factor
 
     ! NOTE: the following are not currently used - but are needed to have the namelist work in cam
-    real(r8) :: microp_aero_npccn_scale = unset_r8 ! prescribed aerosol bulk sulfur scale factor
-    real(r8) :: microp_aero_wsub_scale  = unset_r8 ! subgrid vertical velocity (liquid) scale factor
-    real(r8) :: microp_aero_wsubi_scale = unset_r8 ! subgrid vertical velocity (ice) scale factor
-    real(r8) :: microp_aero_wsub_min    = unset_r8 ! subgrid vertical velocity (liquid) minimum
-    real(r8) :: microp_aero_wsubi_min   = unset_r8 ! subgrid vertical velocity (ice) minimum
+    real(r8) :: microp_aero_npccn_scale = unset_r8  ! prescribed aerosol bulk sulfur scale factor
+    real(r8) :: microp_aero_wsub_scale = unset_r8   ! subgrid vertical velocity (liquid) scale factor
+    real(r8) :: microp_aero_wsubi_scale = unset_r8  ! subgrid vertical velocity (ice) scale factor
+    real(r8) :: microp_aero_wsub_min = unset_r8     ! subgrid vertical velocity (liquid) minimum (before scale factor)
+    real(r8) :: microp_aero_wsub_min_asf = unset_r8 ! subgrid vertical velocity (liquid) minimum (after scale factor)
+    real(r8) :: microp_aero_wsubi_min = unset_r8    ! subgrid vertical velocity (ice) minimum
 
     ! Local variables
     integer :: unitn, ierr
     character(len=*), parameter :: subname = 'microp_aero_readnl'
 
-    namelist /microp_aero_nl/ microp_aero_bulk_scale, microp_aero_npccn_scale, microp_aero_wsub_min, &
-                              microp_aero_wsubi_min, microp_aero_wsub_scale, microp_aero_wsubi_scale
+   namelist /microp_aero_nl/ microp_aero_bulk_scale, microp_aero_npccn_scale, microp_aero_wsub_min, &
+                             microp_aero_wsubi_min, microp_aero_wsub_scale, microp_aero_wsubi_scale, microp_aero_wsub_min_asf
     !-----------------------------------------------------------------------------
 
     if (masterproc) then
@@ -299,7 +301,9 @@ contains
 
     ! save copy of cloud borne aerosols for use in heterogeneous freezing
     if (use_hetfrz_classnuc) then
+       call t_startf('oslo_microp_hetfrz_save')
        call hetfrz_classnuc_oslo_save_cbaero(state, pbuf)
+       call t_stopf('oslo_microp_hetfrz_save')
     end if
 
     ! initialize time-varying parameters
@@ -365,13 +369,16 @@ contains
     if (trim(eddy_scheme) == 'CLUBB_SGS') deallocate(tke)
 
     ! Get size distributed interstitial aerosol
+    call t_startf('microp_aero_conc_calc')
     call oslo_aero_conc_calc(ncol, state%q, rho, CProcessModes, &
          f_c, f_bc, f_aq, f_so4_cond, f_soa, cam, f_acm, f_bcm, f_aqm, f_so4_condm, f_soam, &
          numberConcentration, volumeConcentration, hygroscopicity, lnsigma, hasAerosol, volumeCore, volumeCoat)
+    call t_stopf('microp_aero_conc_calc')
 
     ! -----------------
     ! ICE Nucleation
     ! -----------------
+    call t_startf('oslo_microp_ice_nucleation')
     call nucleate_ice_oslo_calc(state1, wsubi, pbuf, deltatin, ptend_loc, numberConcentration)
 
     call physics_ptend_sum(ptend_loc, ptend_all, ncol)
@@ -383,11 +390,13 @@ contains
           lcldm(i,k) = max(ast(i,k), mincld)
        end do
     end do
+    call t_stopf('oslo_microp_ice_nucleation')
 
     ! -----------------
     ! Droplet Activation
     ! -----------------
 
+    call t_startf('microp_droplet_activation')
     ! partition cloud fraction into liquid water part
     lcldn = 0._r8
     lcldo = 0._r8
@@ -457,13 +466,16 @@ contains
           end if
        end do
     end do
+    call t_stopf('microp_droplet_activation')
 
     ! heterogeneous freezing
     if (use_hetfrz_classnuc) then
+       call t_startf('microp_hetfrz_calc')
        call hetfrz_classnuc_oslo_calc(state1, deltatin, factnum, pbuf, &
             numberConcentration, volumeConcentration, &
             f_acm, f_bcm, f_aqm, f_so4_condm, f_soam, &
             hygroscopicity, lnsigma, cam, volumeCore, volumeCoat)
+       call t_stopf('microp_hetfrz_calc')
     end if
 
   end subroutine oslo_aero_microp_run
