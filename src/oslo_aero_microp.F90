@@ -35,7 +35,6 @@ module oslo_aero_microp
   use oslo_aero_share,        only: nmodes_oslo => nmodes
   use oslo_aero_share,        only: MODE_IDX_DST_A2, MODE_IDX_DST_A3, MODE_IDX_SO4_AC, MODE_IDX_OMBC_INTMIX_COAT_AIT
   use oslo_aero_share,        only: lifeCycleNumberMedianRadius, l_dst_a2, l_dst_a3, l_bc_ai
-  use oslo_aero_share,        only: getNumberOfTracersInMode, getTracerIndex, getCloudTracerIndex
 
   implicit none
   private

@@ -26,7 +26,7 @@ module oslo_aero_ndrop
   use oslo_aero_share,   only: getNumberOfTracersInMode, getNumberOfAerosolTracers, getTracerIndex
   use oslo_aero_share,   only: getCloudTracerName, getCloudTracerIndex, getConstituentFraction
   use oslo_aero_share,   only: fillAerosolTracerList, fillInverseAerosolTracerList
-  use oslo_aero_share,   only: nmodes, nbmodes
+  use oslo_aero_share,   only: nmodes, nbmodes, max_tracers_per_mode
   use oslo_aero_share,   only: smallNumber
 
   implicit none
@@ -81,6 +81,9 @@ module oslo_aero_ndrop
   ! Indices for MAM species in the ptend%q array.  Needed for prognostic aerosol case.
   integer, allocatable :: mam_cnst_idx(:,:)
 
+  integer  :: tracer_index(0:nmodes,max_tracers_per_mode)  ! tracer index
+  real(r8) :: sumFraction2(pcnst,pver)
+
   logical :: tendencyCounted(pcnst) = .false. ! set flags true for constituents with non-zero tendencies
   integer :: n_aerosol_tracers
   integer :: aerosolTracerList(pcnst)         !List where indexes 1...n_aerosol_tracers are the indexes in pcnst
@@ -94,8 +97,7 @@ module oslo_aero_ndrop
   end type ptr2d_t
 
   ! modal aerosols
-  logical :: prog_modal_aero     ! true when modal aerosols are prognostic
-  logical :: lq(pcnst) = .false. ! set flags true for constituents with non-zero tendencies
+  logical :: lq(pcnst) = .false.      ! set flags true for constituents with non-zero tendencies
 
 !===============================================================================
 contains
@@ -103,7 +105,7 @@ contains
 
   subroutine ndrop_init_oslo()
 
-    integer            :: ii, l, lptr, m, mm
+    integer            :: ii, l, lptr, m, mm, k
     integer            :: nspec_max    ! max number of species in a mode
     character(len=32)  :: tmpname
     character(len=32)  :: tmpname_cw
@@ -147,6 +149,25 @@ contains
        nspec_amode(m) = getNumberOfTracersInMode(m)
     enddo
 
+    do m = 1,ntot_amode
+      do l = 1, nspec_amode(m)
+        tracer_index(m,l) = getTracerIndex(m,l,.false.)
+      end do
+    end do
+
+    sumFraction2(:,:) = 0.0_r8
+    do k=top_lev, pver
+      do l=1,pcnst
+        do m=1,ntot_amode
+          do lptr=1,nspec_amode(m)
+            if (tracer_index(m,lptr) == l) then
+              sumFraction2(l,k) = sumFraction2(l,k) + 1.0_r8
+            endif
+          end do ! tracers in mode
+        end do ! mode
+      end do
+    end do
+
     ! Init the table for local indexing of mam number conc and mmr.
     ! This table uses species index 0 for the number conc.
 
@@ -177,10 +198,8 @@ contains
 
     ! Add dropmixnuc tendencies for all modal aerosol species
 
-    call phys_getopts(history_amwg_out = history_amwg, &
-         history_aerosol_out = history_aerosol, prog_modal_aero_out=prog_modal_aero)
+    call phys_getopts(history_amwg_out=history_amwg, history_aerosol_out=history_aerosol)
 
-    prog_modal_aero = .TRUE.
     n_aerosol_tracers = getNumberOfAerosolTracers()
     call fillAerosolTracerList(aerosolTracerList)
     call fillInverseAerosolTracerList(aerosolTracerList, inverseAerosolTracerList, n_aerosol_tracers)
@@ -195,7 +214,7 @@ contains
     !Set up tendencies for tracers (output)
     do m=1,ntot_amode
        do l=1,nspec_amode(m)
-          lptr = getTracerIndex(m,l,.false.)
+          lptr = tracer_index(m,l)
 
           if(.NOT. lq(lptr))then
              !add dropmixnuc tendencies
@@ -430,8 +449,8 @@ contains
     real(r8), allocatable :: fn_tmp(:), fm_tmp(:)
     real(r8), allocatable :: fluxn_tmp(:), fluxm_tmp(:)
     real(r8)              :: componentFraction
-    real(r8)              :: componentFractionOK(pver,nmodes,pcnst)
-    real(r8)              :: sumFraction
+    real(r8)              :: componentFractionOK(nmodes,pcnst,pver)
+    real(r8)              :: sumFraction(pcnst,pver)
     logical               :: alert
     real(r8), dimension(pver, pcnst) :: massBalance
     real(r8), dimension(pver, pcnst) :: newMass
@@ -514,33 +533,28 @@ contains
 
        !NOTE: SEVERAL POINTERS POINT TO SAME FIELD, E.G. CONDENSATE WHICH IS IN SEVERAL MODES
        do l = 1, nspec_amode(m)
-          tracerIndex      =  getTracerIndex(m,l,.false.)                   !Index in q
+          tracerIndex      =  tracer_index(m,l)                     !Index in q
           cloudTracerIndex =  getCloudTracerIndex(m,l)              !Index in phys-buffer
           mm               =  mam_idx(m,l)                          !Index in raer/qqcw
           raer(mm)%fld =>  state%q(:,:,tracerIndex)                 !NOTE: These are total fields (for example condensate)
           call pbuf_get_field(pbuf, CloudTracerIndex, qqcw(mm)%fld) !NOTE: These are total fields (for example condensate)
        enddo
     enddo
-    allocate(                             &
-         fn_tmp(ntot_amode),                 &
-         fm_tmp(ntot_amode),                 &
-         fluxn_tmp(ntot_amode),              &
-         fluxm_tmp(ntot_amode)               )
+    allocate(                   &
+         fn_tmp(ntot_amode),    &
+         fm_tmp(ntot_amode),    &
+         fluxn_tmp(ntot_amode), &
+         fluxm_tmp(ntot_amode))
 
     wtke = 0._r8
 
-    if (prog_modal_aero) then
-       ! aerosol tendencies
-       call physics_ptend_init(ptend, state%psetcols, 'ndrop', lq=lq)
-    else
-       ! no aerosol tendencies
-       call physics_ptend_init(ptend, state%psetcols, 'ndrop')
-    end if
+    ! aerosol tendencies
+    call physics_ptend_init(ptend, state%psetcols, 'ndrop', lq=lq)
 
     !Improve this later by using only cloud points ?
     do k = top_lev, pver
        do i=1,ncol
-          cs(i,k)  = pmid(i,k)/(rair*temp(i,k))        ! air density (kg/m3)
+          cs(i,k) = pmid(i,k)/(rair*temp(i,k))        ! air density (kg/m3)
        end do
     end do
 
@@ -636,54 +650,62 @@ contains
 
        !get constituent fraction
        call t_startf('ndrop_getConstituentFraction')
+       call t_startf('ndrop_getConstituentFraction_calc_aersolFraction')
        componentFractionOK(:,:,:) = 0.0_r8
        do k=top_lev, pver
-
-          do m = 1,ntot_amode
-             if(m .le. nbmodes)then
-                do l = 1, nspec_amode(m)
-                   !calculate fraction of component "l" in mode "m" based on concentrations in clear air
-                   componentFractionOK(k,m,getTracerIndex(m,l,.false.))       &
-                        = getConstituentFraction(CProcessModes(i,k), &
-                        f_c(i,k), f_bc(i,k), f_aq(i,k), f_so4_cond(i,k), f_soa(i,k),  &
-                        Cam(i,k,m), f_acm(i,k,m), f_bcm(i,k,m), f_aqm(i,k,m), &
-                        f_so4_condm(i,k,m), f_soam(i,k,m), getTracerIndex(m,l,.false.)  )
-                end do
-             else
-                do l = 1, nspec_amode(m)
-                   componentFractionOK(k,m,getTracerIndex(m,l,.false.)) = 1.0_r8
-                end do
-             endif
-          end do
-
-          !Loop over all tracers ==> check that sums to one
-          !for all tracers which exist in the oslo-modes
-          do l=1,pcnst
-             sumFraction = 0.0_r8
-             do m=1,ntot_amode
-                sumFraction = sumFraction + componentFractionOK(k,m,l)
+         do m = 1,ntot_amode
+           if (m .le. nbmodes)then
+             do l = 1, nspec_amode(m)
+               !calculate fraction of component "l" in mode "m" based on concentrations in clear air
+               tracerIndex = tracer_index(m,l)
+               componentFractionOK(m,tracerIndex,k) = getConstituentFraction(CProcessModes(i,k), &
+                    f_c(i,k), f_bc(i,k), f_aq(i,k), f_so4_cond(i,k), f_soa(i,k),  &
+                    Cam(i,k,m), f_acm(i,k,m), f_bcm(i,k,m), f_aqm(i,k,m), &
+                    f_so4_condm(i,k,m), f_soam(i,k,m), tracerIndex )
              end do
-             if(sumFraction .gt. 1.e-2_r8)then  !Just scale what comes out if componentFraction is larger than 1%
-                do m=1,ntot_amode
-                   componentFractionOK(k,m,l) = &
-                        componentFractionOK(k,m,l)/sumFraction
-                end do
-             else       !negative or zero fraction for this species
-                !distribute equal fraction to all receiver modes
-                sumFraction = 0.0_r8
-                do m=1,ntot_amode
-                   do lptr=1,getNumberOfTracersInMode(m)
-                      if(getTracerIndex(m,lptr,.FALSE.) .eq. l ) then
-                         sumFraction = sumFraction + 1.0_r8
-                      endif
-                   end do ! tracers in mode
-                end do    ! mode
-                do m=1,ntot_amode
-                   componentFractionOK(k,m,l)=1.0_r8/max(1.e-30_r8, sumFraction)
-                end do !modes
-             endif
-          end do !tracers
-       end do    !levels
+           else
+             do l = 1, nspec_amode(m)
+               tracerIndex = tracer_index(m,l)
+               componentFractionOK(m,tracerIndex,k) = 1.0_r8
+             end do
+           endif
+         end do
+       end do
+       call t_stopf('ndrop_getConstituentFraction_calc_aersolFraction')
+
+       !Loop over all tracers ==> check that sums to one
+       !for all tracers which exist in the oslo-modes
+
+       call t_startf('ndrop_getConstituentFraction_check_trackerNormalization1')
+       sumFraction(:,:) = 0.0_r8
+       do k=top_lev, pver
+         do l=1,pcnst
+           do m=1,ntot_amode
+             sumFraction(l,k) = sumFraction(l,k) + componentFractionOK(m,l,k)
+           end do
+         end do
+       end do
+       call t_stopf('ndrop_getConstituentFraction_check_trackerNormalization1')
+
+       call t_startf('ndrop_getConstituentFraction_check_trackerNormalization3')
+       do k=top_lev, pver
+         do l=1,pcnst
+           if (sumFraction(l,k) .gt. 1.e-2_r8) then
+             !Just scale what comes out if componentFraction is larger than 1%
+             do m=1,ntot_amode
+               componentFractionOK(m,l,k) = componentFractionOK(m,l,k)/sumFraction(l,k)
+             end do
+           else
+             ! negative or zero fraction for this species
+             ! distribute equal fraction to all receiver modes
+             do m=1,ntot_amode
+               componentFractionOK(m,l,k)=1.0_r8/max(1.e-30_r8, sumFraction2(l,k))
+             end do !modes
+           endif
+         end do !tracers
+       end do  !levels
+       call t_stopf('ndrop_getConstituentFraction_check_trackerNormalization3')
+
        call t_stopf('ndrop_getConstituentFraction')
        !debug sum fraction for "i" done
 
@@ -698,8 +720,8 @@ contains
              !Approximate number concentration in each mode by total
              !cloud number concentration scaled by how much is available of
              !each mode
-             raercol_cw(k,mm,nsav) = ncldwtr(i,k)*numberConcentration(i,k,m)&
-                  /max(1.e-30_r8, sum(numberConcentration(i,k,1:nmodes)))
+             raercol_cw(k,mm,nsav) = ncldwtr(i,k)*numberConcentration(i,k,m) &
+                                    /max(1.e-30_r8, sum(numberConcentration(i,k,1:nmodes)))
           enddo
 
           !These are the mass mixing ratios
@@ -714,7 +736,8 @@ contains
                 if(m .gt. nbmodes) then
                    componentFraction = 1.0_r8
                 else
-                   componentFraction = componentFractionOK(k,m,getTracerIndex(m,l,.false.))
+                   tracerIndex = tracer_index(m,l)
+                   componentFraction = componentFractionOK(m,tracerIndex,k)
                 endif
                 !Assign to the components used here i.e. distribute condensate/coagulate to modes
                 raercol_cw(k,mm,nsav) = qqcw(mm)%fld(i,k)*componentFraction
@@ -889,7 +912,8 @@ contains
                    if(m .gt. nbmodes)then
                       constituentFraction = 1.0_r8
                    else
-                      constituentFraction = componentFractionOK(k,m,getTracerIndex(m,l,.false.)  )
+                      tracerIndex = tracer_index(m,l)
+                      constituentFraction = componentFractionOK(m,tracerIndex,k)
                    endif
 
                    dact    = dum*raer(mm)%fld(i,k)*constituentFraction
@@ -1191,7 +1215,7 @@ contains
        mfullact_tracer(:,:) = 0.0_r8
        do m=1,ntot_amode
           do l=1,nspec_amode(m)
-             lptr = getTracerIndex(m,l,.FALSE.)  !which tracer are we talking about
+             lptr = tracer_index(m,l)  !which tracer are we talking about
              lptr2  = inverseAerosolTracerList(lptr)    !which index is this in the list of aerosol-tracers
              mm = mam_idx(m,l)
              raercol_tracer(:,lptr2,nnew) = raercol_tracer(:,lptr2,nnew) &
@@ -1220,7 +1244,7 @@ contains
           nsav    = nnew
           nnew    = ntemp
           srcn(:) = 0.0_r8
-
+          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
           !First mix cloud droplet number concentration
           do m = 1, ntot_amode
              mm = mam_idx(m,0)
@@ -1236,7 +1260,9 @@ contains
                   + raercol_cw(pver,mm,nsav)*(nact(pver,m) - taumix_internal_pver_inv)
              srcn(pver) = srcn(pver) + max(0.0_r8,tmpa)
           end do
+          call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
 
+          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
           !mixing of cloud droplets
           call explmix_oslo(qcld, srcn, ekkp, ekkm, overlapp,  &
                overlapm, qncld, zero, zero, pver, dtmix, .false.)
@@ -1260,7 +1286,9 @@ contains
              call explmix_oslo( raercol(:,mm,nnew), source, ekkp, ekkm, overlapp,  &
                   overlapm, raercol(:,mm,nsav), zero, flxconv, pver, dtmix, .true., raercol_cw(:,mm,nsav))
           end do
+          call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
 
+          call t_startf('ndrop_calc_VertMix_aerotracker')
           do lptr2=1,n_aerosol_tracers
              source(top_lev:pver-1) = mact_tracer(top_lev:pver-1,lptr2) &
                   *(raercol_tracer(top_lev+1:pver,lptr2,nsav))
@@ -1279,18 +1307,20 @@ contains
                   raercol_cw_tracer(:,lptr2,nsav))
 
           end do !Number of aerosol tracers
+          call t_stopf('ndrop_calc_VertMix_aerotracker')
+
        end do ! old_cloud_nsubmix_loop
        call t_stopf('ndrop_oldcloud_nsubmix')
 
        call t_startf('ndrop_rest')
-       !Set back to the original framework
-       !Could probably continue in tracer-space from here
-       !but return back to mixture for easier use of std. NCAR code
+       ! Set back to the original framework
+       ! Could probably continue in tracer-space from here
+       ! but return back to mixture for easier use of std. NCAR code
        tendencyCounted(:)=.FALSE.
        do m = 1, ntot_amode
           do l=1,nspec_amode(m)
              mm=mam_idx(m,l)
-             lptr = getTracerIndex(m,l,.FALSE.)
+             lptr = tracer_index(m,l)
              lptr2 = inverseAerosolTracerList(lptr)
              !All the tracer-space contains sum of all
              !modes ==> put in first available component
@@ -1341,76 +1371,73 @@ contains
        end do
        ndropcol(i) = ndropcol(i)/gravit
 
-       if (prog_modal_aero) then
 
-          raertend = 0._r8
-          qqcwtend = 0._r8
+       raertend = 0._r8
+       qqcwtend = 0._r8
 
-          coltend_cw(i,:)=0.0_r8
-          coltend(i,:) = 0.0_r8
+       coltend_cw(i,:)=0.0_r8
+       coltend(i,:) = 0.0_r8
 
-          !Need to initialize first because process modes arrive several times
-          tendencyCounted(:) = .FALSE.
-          do m=1,ntot_amode
-             do l = 1,getNumberOfTracersInMode(m)
-                lptr = getTracerIndex(m,l,.false.)
-                mm = mam_idx(m,l)
+       !Need to initialize first because process modes arrive several times
+       tendencyCounted(:) = .FALSE.
+       do m=1,ntot_amode
+         do l = 1,getNumberOfTracersInMode(m)
+           lptr = tracer_index(m,l)
+           mm = mam_idx(m,l)
 
-                !column tendencies for output
-                if(.NOT. tendencyCounted(lptr))then
-                   coltend_cw(i,lptr) = coltend_cw(i,lptr) &
-                        + sum( pdel(i,top_lev:pver)*(raercol_cw(top_lev:pver,mm,nnew) & !New, splitted,
-                        - qqcw(mm)%fld(i,top_lev:pver) ) )/gravit*dtinv      !Old, total
-                   tendencyCounted(lptr) = .TRUE.
-                else  !Already subtracted total old value, just add new
-                   coltend_cw(i,lptr) = coltend_cw(i,lptr)  &
-                        + sum(pdel(i,top_lev:pver)*raercol_cw(top_lev:pver,mm,nnew))/gravit*dtinv !total already subtracted
-                end if
+           !column tendencies for output
+           if(.NOT. tendencyCounted(lptr))then
+             coltend_cw(i,lptr) = coltend_cw(i,lptr) &
+                  + sum( pdel(i,top_lev:pver)*(raercol_cw(top_lev:pver,mm,nnew) & !New, splitted,
+                  - qqcw(mm)%fld(i,top_lev:pver) ) )/gravit*dtinv      !Old, total
+             tendencyCounted(lptr) = .TRUE.
+           else  !Already subtracted total old value, just add new
+             coltend_cw(i,lptr) = coltend_cw(i,lptr)  &
+                  + sum(pdel(i,top_lev:pver)*raercol_cw(top_lev:pver,mm,nnew))/gravit*dtinv !total already subtracted
+           end if
 
-                ptend%q(i,:,lptr) = 0.0_r8  !Initialize tendencies
-                qqcw(mm)%fld(i,:) = 0.0_r8  !Throw out old concentrations before summing new ones
-             end do  ! Tracers
-          end do     ! Modes
+           ptend%q(i,:,lptr) = 0.0_r8  !Initialize tendencies
+           qqcw(mm)%fld(i,:) = 0.0_r8  !Throw out old concentrations before summing new ones
+         end do  ! Tracers
+       end do     ! Modes
 
-          !First, sum up all the tracer mass concentrations
-          do m = 1, ntot_amode
-             do l = 1, nspec_amode(m)
-                mm   = mam_idx(m,l)                !tracer indices for aerosol mass mixing ratios in raer-arrays
-                lptr = getTracerIndex(m,l,.false.) !index in q-array (1-pcnst)
+       !First, sum up all the tracer mass concentrations
+       do m = 1, ntot_amode
+         do l = 1, nspec_amode(m)
+           mm   = mam_idx(m,l)                !tracer indices for aerosol mass mixing ratios in raer-arrays
+           lptr = tracer_index(m,l)           !index in q-array (1-pcnst)
 
-                !This is a bit tricky since in our scheme the tracers can arrive several times
-                !the same tracer can exist in several modes, e.g. condensate!!
-                !Here we sum this into "qqcw" and "ptend" so that they contain TOTAL of those tracers
+           !This is a bit tricky since in our scheme the tracers can arrive several times
+           !the same tracer can exist in several modes, e.g. condensate!!
+           !Here we sum this into "qqcw" and "ptend" so that they contain TOTAL of those tracers
 
-                !raercol and raercol_cw do not have totals, they have process-tracers splitted onto modes
+           !raercol and raercol_cw do not have totals, they have process-tracers splitted onto modes
 
-                !Tendency at this point is the sum (original value subtracted below)
-                ptend%q(i,top_lev:pver,lptr)   =    ptend%q(i,top_lev:pver,lptr) + raercol(top_lev:pver,mm,nnew)
-                !for cloud water concentrations, we don't get tendency , only new concentration
-                qqcw(mm)%fld(i,top_lev:pver)   =    qqcw(mm)%fld(i,top_lev:pver) + raercol_cw(top_lev:pver,mm,nnew)
+           !Tendency at this point is the sum (original value subtracted below)
+           ptend%q(i,top_lev:pver,lptr)   =    ptend%q(i,top_lev:pver,lptr) + raercol(top_lev:pver,mm,nnew)
+           !for cloud water concentrations, we don't get tendency , only new concentration
+           qqcw(mm)%fld(i,top_lev:pver)   =    qqcw(mm)%fld(i,top_lev:pver) + raercol_cw(top_lev:pver,mm,nnew)
 
-             end do
-          end do
+         end do
+       end do
 
-          !Need this check due to some tracers (e.g. condensate) several times
-          tendencyCounted(:) = .FALSE.
+       !Need this check due to some tracers (e.g. condensate) several times
+       tendencyCounted(:) = .FALSE.
 
-          ! Recalculating cloud-borne aerosol number mixing ratios
-          do m=1,ntot_amode
+       ! Recalculating cloud-borne aerosol number mixing ratios
+       do m=1,ntot_amode
 
-             !Now that all new aerosol masses are summed up, we subtract the original concentrations to obtain the tendencies
-             do l= 1,nspec_amode(m)
-                mm = mam_idx(m,l)
-                lptr = getTracerIndex(m,l,.false.)
-                if(.NOT. tendencyCounted(lptr)) then
-                   ptend%q(i,top_lev:pver,lptr) = (ptend%q(i,top_lev:pver,lptr) - raer(mm)%fld(i,top_lev:pver))*dtinv
-                   coltend(i,lptr) = sum(pdel(i,top_lev:pver)*ptend%q(i,top_lev:pver,lptr))/gravit !Save column tendency
-                   tendencyCounted(lptr) = .TRUE.
-                endif
-             end do !species
-          end do    !modes
-
-       end if  !prog_modal_aero
+         !Now that all new aerosol masses are summed up, we subtract the original concentrations to obtain the tendencies
+         do l= 1,nspec_amode(m)
+           mm = mam_idx(m,l)
+           lptr = tracer_index(m,l)
+           if(.NOT. tendencyCounted(lptr)) then
+             ptend%q(i,top_lev:pver,lptr) = (ptend%q(i,top_lev:pver,lptr) - raer(mm)%fld(i,top_lev:pver))*dtinv
+             coltend(i,lptr) = sum(pdel(i,top_lev:pver)*ptend%q(i,top_lev:pver,lptr))/gravit !Save column tendency
+             tendencyCounted(lptr) = .TRUE.
+           endif
+         end do !species
+       end do    !modes
        call t_stopf('ndrop_rest')
 
     end do  ! overall_main_i_loop
@@ -1434,7 +1461,7 @@ contains
     do m = 1, ntot_amode
        do l = 1, nspec_amode(m)
           mm = mam_idx(m,l)
-          lptr = getTracerIndex(m,l,.false.)
+          lptr = tracer_index(m,l)
           if(.NOT. tendencyCounted(lptr))then
              call outfld(fieldname(mm), coltend(:ncol,lptr), ncol, lchnk)
              call outfld(fieldname_cw(mm), coltend_cw(:ncol,lptr), ncol, lchnk)
