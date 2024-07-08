@@ -6,12 +6,13 @@ module oslo_aero_conc
   use ppgrid       ,         only: pcols, pver
   use physconst    ,         only: density_water =>rhoh2o, molecularWeightWater=>mwh2o, pi
   use constituents ,         only: pcnst, cnst_name
+  use perf_mod     ,         only: t_startf, t_stopf
   !
   use oslo_aero_logn_tables, only: intlog1to3_sub, intlog4_sub, intlog5to10_sub
   use oslo_aero_coag,        only: normalizedCoagulationSink
   use oslo_aero_condtend,    only: normalizedCondensationSink, COND_VAP_H2SO4, COND_VAP_ORG_SV
   use oslo_aero_share,       only: smallNumber, volumeToNumber,smallNumber
-  use oslo_aero_share,       only: nmodes, nbmodes
+  use oslo_aero_share,       only: nmodes, nbmodes, max_tracers_per_mode
   use oslo_aero_share,       only: istracerinmode, getNumberofBackgroundtracersInMode, getTracerIndex
   use oslo_aero_share,       only: l_bc_ac, l_soa_a1, l_bc_ai, l_om_ai, l_bc_ni, l_om_ni, l_soa_na, l_om_ac
   use oslo_aero_share,       only: l_so4_a1, l_so4_a2, l_so4_ac, l_so4_na
@@ -84,24 +85,34 @@ contains
     real(r8) :: f_soana(pcols,pver) ! [-]
 
     !Get mass, number concentration and the total add-ons (previous convaer)
+    call t_startf('oslo_aero_conc_calc_calculateBulkProperties')
     call calculateBulkProperties(ncol, mmr, rho_air, numberConcentration, CProcessModes, &
          f_c, f_bc, f_aq, f_so4_cond, f_soa, f_aitbc, f_nbc, f_soana)
+    call t_stopf('oslo_aero_conc_calc_calculateBulkProperties')
 
     ! Find the points where we have aerosol (number concentration)
+    call t_startf('oslo_aero_conc_calc_getAerosolMask')
     call getAerosolMask(ncol, numberConcentration, hasAerosol)
+    call t_stopf('oslo_aero_conc_calc_getAerosolMask')
 
     ! Find out how much is added per size-mode (modalapp)
+    call t_startf('oslo_aero_conc_calc_partitionMass')
     call partitionMass( ncol, numberConcentration, CProcessModes, &
          f_c, f_bc, f_aq, f_so4_cond, f_soa, cam, f_acm, f_bcm, f_aqm, f_so4_condm, f_soam)
+    call t_stopf('oslo_aero_conc_calc_partitionMass')
 
     ! Calculate they hygroscopicity
+    call t_startf('oslo_aero_conc_calc_calculateHygroscopicity')
     call calculateHygroscopicity(  ncol, mmr, numberConcentration, rho_air, Cam, &
          f_acm, f_bcm, f_aqm, hasAerosol, hygroscopicity, &
          volumeConcentration, volumeCore, volumeCoat)
+    call t_stopf('oslo_aero_conc_calc_calculateHygroscopicity')
 
     ! Do the interpolation to new modes
+    call t_startf('oslo_aero_conc_calc_doLognormalInterpolation')
     call doLognormalInterpolation(ncol, numberConcentration, hasAerosol, cam, &
          volumeConcentration, f_c, f_acm, f_bcm, f_aqm, f_aitbc, lnSigma)
+    call t_stopf('oslo_aero_conc_calc_doLognormalInterpolation')
 
   end subroutine oslo_aero_conc_calc
 
@@ -256,10 +267,17 @@ contains
     real(r8) :: massConcentrationTracerInMode(pcols,pver)
     real(r8) :: averageRadiusCore(pcols,pver)  ![m]
     real(r8) :: averageRadiusTotal(pcols,pver) ![m]
+    integer  :: tracer_index(1:nmodes, max_tracers_per_mode)
 
     ! initialize
     hygroscopicity(:,:,:) = 0.0_r8
     volumeConcentration(:,:,:)=0.0_r8
+
+    do kcomp = 1,nmodes
+      do l = 1,getNumberOfBackgroundTracersInMode(kcomp)
+        tracer_index(kcomp,l) = getTracerIndex(kcomp,l,.false.)
+      end do
+    end do
 
     do kcomp=1,nmodes
 
@@ -280,8 +298,7 @@ contains
        !Loop over tracers in mode
        do l=1,getNumberOfBackgroundTracersInMode(kcomp)
 
-          tracerIndex = getTracerIndex(kcomp,l,.false.) !get index in physcis space
-
+          tracerIndex = tracer_index(kcomp,l) !get index in physcis space
           do k=1,pver
              massConcentrationTracerInMode(:ncol,k) = mmr(:ncol,k,tracerIndex)*rho_air(:ncol,k)
           end do
