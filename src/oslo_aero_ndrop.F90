@@ -23,11 +23,12 @@ module oslo_aero_ndrop
   use perf_mod,          only: t_startf, t_stopf
   !
   use oslo_aero_share,   only: calculateNumberMedianRadius
-  use oslo_aero_share,   only: getNumberOfTracersInMode, getNumberOfAerosolTracers, getTracerIndex
-  use oslo_aero_share,   only: getCloudTracerName, getCloudTracerIndex, getConstituentFraction
+  use oslo_aero_share,   only: getNumberOfTracersInMode, getNumberOfAerosolTracers
+  use oslo_aero_share,   only: getCloudTracerName, getTracerIndex
   use oslo_aero_share,   only: fillAerosolTracerList, fillInverseAerosolTracerList
   use oslo_aero_share,   only: nmodes, nbmodes, max_tracers_per_mode
-  use oslo_aero_share,   only: smallNumber
+  use oslo_aero_share,   only: smallNumber, CloudTracerIndex
+  use oslo_aero_share,   only: l_so4_a1, l_so4_ac, l_so4_a2, l_bc_ac, l_om_ac, l_soa_a1
 
   implicit none
   private
@@ -37,7 +38,6 @@ module oslo_aero_ndrop
   public :: dropmixnuc_oslo
 
   ! private routines
-  private :: explmix_oslo
   private :: maxsat_oslo
   private :: ccncalc_oslo
   private :: activate_modal_oslo
@@ -377,22 +377,22 @@ contains
     real(r8) :: wdiab                           ! diabatic vertical velocity
     real(r8) :: ekd(pver)                       ! diffusivity for droplets (m2/s)
     real(r8) :: ekk(0:pver)                     ! density*diffusivity for droplets (kg/m3 m2/s)
-    real(r8) :: ekkp(pver)                      ! zn*zs*density*diffusivity
-    real(r8) :: ekkm(pver)                      ! zn*zs*density*diffusivity
-
+    real(r8) :: ekkp(pver)                      ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
+    real(r8) :: ekkm(pver)                      ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
+                                                ! above layer k  (k,k+1 interface)
     real(r8) :: dum, dumc
     real(r8) :: tmpa
     real(r8) :: dact
     real(r8) :: fluxntot                        ! (#/cm2/s)
     real(r8) :: dtmix
     real(r8) :: alogarg
-    real(r8) :: overlapp(pver), overlapm(pver)  ! cloud overlap
-
+    real(r8) :: overlapp(pver), overlapm(pver)  ! cloud overlap below, cloud overlap above
     real(r8) :: nsource(pcols,pver)             ! droplet number source (#/kg/s)
     real(r8) :: ndropmix(pcols,pver)            ! droplet number mixing (#/kg/s)
     real(r8) :: ndropcol(pcols)                 ! column droplet number (#/m2)
     real(r8) :: cldo_tmp, cldn_tmp
     real(r8) :: tau_cld_regenerate
+    real(r8) :: tau_cld_regenerate_exp
     real(r8) :: zeroaer(pver)
     real(r8) :: taumix_internal_pver_inv        ! 1/(internal mixing time scale for k=pver) (1/s)
 
@@ -443,7 +443,7 @@ contains
     real(r8)              :: volumeCore(pcols,pver,nmodes)
     real(r8)              :: volumeCoat(pcols,pver,nmodes)
     integer               :: tracerIndex
-    integer               :: cloudTracerIndex
+    integer               :: cloud_tracer_index
     integer               :: kcomp
     integer               :: speciesMap(nmodes)
     real(r8), allocatable :: fn_tmp(:), fm_tmp(:)
@@ -534,10 +534,10 @@ contains
        !NOTE: SEVERAL POINTERS POINT TO SAME FIELD, E.G. CONDENSATE WHICH IS IN SEVERAL MODES
        do l = 1, nspec_amode(m)
           tracerIndex      =  tracer_index(m,l)                     !Index in q
-          cloudTracerIndex =  getCloudTracerIndex(m,l)              !Index in phys-buffer
+          cloud_tracer_index = cloudTracerIndex(tracerIndex)        !Index in phys-buffer
           mm               =  mam_idx(m,l)                          !Index in raer/qqcw
           raer(mm)%fld =>  state%q(:,:,tracerIndex)                 !NOTE: These are total fields (for example condensate)
-          call pbuf_get_field(pbuf, CloudTracerIndex, qqcw(mm)%fld) !NOTE: These are total fields (for example condensate)
+          call pbuf_get_field(pbuf, cloud_tracer_index, qqcw(mm)%fld) !NOTE: These are total fields (for example condensate)
        enddo
     enddo
     allocate(                   &
@@ -596,6 +596,11 @@ contains
        call endrun()
     endif
 
+    ! tau_cld_regenerate = time scale for regeneration of cloudy air
+    ! by (horizontal) exchange with clear air
+    tau_cld_regenerate = 3600.0_r8 * 3.0_r8
+    tau_cld_regenerate_exp = exp(-dtmicro/tau_cld_regenerate)
+
     ! overall_main_i_loop
     do i = 1, ncol
 
@@ -650,6 +655,7 @@ contains
 
        !get constituent fraction
        call t_startf('ndrop_getConstituentFraction')
+
        call t_startf('ndrop_getConstituentFraction_calc_aersolFraction')
        componentFractionOK(:,:,:) = 0.0_r8
        do k=top_lev, pver
@@ -658,10 +664,40 @@ contains
              do l = 1, nspec_amode(m)
                !calculate fraction of component "l" in mode "m" based on concentrations in clear air
                tracerIndex = tracer_index(m,l)
-               componentFractionOK(m,tracerIndex,k) = getConstituentFraction(CProcessModes(i,k), &
-                    f_c(i,k), f_bc(i,k), f_aq(i,k), f_so4_cond(i,k), f_soa(i,k),  &
-                    Cam(i,k,m), f_acm(i,k,m), f_bcm(i,k,m), f_aqm(i,k,m), &
-                    f_so4_condm(i,k,m), f_soam(i,k,m), tracerIndex )
+
+               if((l_so4_a1 == tracerIndex))then !so4 condensation
+                  componentFractionOK(m,tracerIndex,k)= &
+                       (Cam(i,k,m)*(1.0_r8-f_acm(i,k,m))*(1.0_r8-f_aqm(i,k,m))*(f_so4_condm(i,k,m))) &
+                       /(CProcessModes(i,k)*(1.0_r8-f_c(i,k))*(1.0_r8-f_aq(i,k))*f_so4_cond(i,k)+smallNumber) !total so4 condensate
+
+               else if(l_so4_ac == tracerIndex) then ! so4 coagulation
+                  componentFractionOK(m,tracerIndex,k) = &
+                       (Cam(i,k,m)*(1.0_r8 - f_acm(i,k,m))*(1.0_r8 - f_aqm(i,k,m))*(1.0_r8 - f_so4_condm(i,k,m))) &
+                       /(CProcessModes(i,k)*(1.0_r8-f_c(i,k))*(1.0_r8-f_aq(i,k))*(1.0_r8-f_so4_cond(i,k)) + smallNumber)
+
+               else if(l_so4_a2 == tracerIndex) then  !so4 wet phase
+                  componentFractionOK(m,tracerIndex,k) = &
+                       (Cam(i,k,m)*(1.0_r8-f_acm(i,k,m))*f_aqm(i,k,m)) &
+                       /(CProcessModes(i,k)*(1.0_r8-f_c(i,k))*(f_aq(i,k))+smallNumber)
+
+               else if(l_bc_ac == tracerIndex)then  !bc coagulated
+                  componentFractionOK(m,tracerIndex,k) = &
+                       (Cam(i,k,m)*f_acm(i,k,m)*f_bcm(i,k,m)) & ! bc fraction of carbonaceous
+                       /(CProcessModes(i,k)*f_c(i,k)*f_bc(i,k)+smallNumber)
+
+               else if(l_om_ac == tracerIndex ) then  !oc coagulated
+                  componentFractionOK(m,tracerIndex,k) = &
+                       (Cam(i,k,m)*f_acm(i,k,m)*(1.0_r8-f_bcm(i,k,m))*(1.0_r8-f_soam(i,k,m))) &
+                       /(CProcessModes(i,k)*f_c(i,k)*(1.0_r8-f_bc(i,k))*(1.0_r8-f_soa(i,k))+smallNumber)
+
+               else if (l_soa_a1 == tracerIndex) then !SOA condensate
+                  componentFractionOK(m,tracerIndex,k) = &
+                       Cam(i,k,m) * f_acm(i,k,m) * (1.0_r8 -f_bcm(i,k,m)) * (f_soam(i,k,m)) &
+                       /(CProcessModes(i,k)*f_c(i,k)*(1.0_r8 -f_bc(i,k))*f_soa(i,k) + smallNumber)
+               end if
+               if (componentFractionOK(m,tracerIndex,k) >  1.0_r8)then
+                  componentFractionOK(m,tracerIndex,k) = 1.0_r8
+               endif
              end do
            else
              do l = 1, nspec_amode(m)
@@ -750,10 +786,6 @@ contains
        ! droplet nucleation/aerosol activation
        call t_startf('ndrop_nucleation_activation')
 
-       ! tau_cld_regenerate = time scale for regeneration of cloudy air
-       !    by (horizontal) exchange with clear air
-       tau_cld_regenerate = 3600.0_r8 * 3.0_r8
-
        ! k-loop for growing/shrinking cloud calcs .............................
        ! grow_shrink_main_k_loop: &
        do k = top_lev, pver
@@ -794,7 +826,7 @@ contains
           !    treat the reduction of cloud fraction from when cldn(i,k) < cldo(i,k)
           !    and also dissipate the portion of the cloud that will be regenerated
           cldo_tmp = lcldo(i,k)
-          cldn_tmp = lcldn(i,k) * exp( -dtmicro/tau_cld_regenerate )
+          cldn_tmp = lcldn(i,k) * tau_cld_regenerate_exp
           !    alternate formulation
           !    cldn_tmp = cldn(i,k) * max( 0.0_r8, (1.0_r8-dtmicro/tau_cld_regenerate) )
 
@@ -1263,48 +1295,80 @@ contains
           call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
 
           call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
-          !mixing of cloud droplets
-          call explmix_oslo(qcld, srcn, ekkp, ekkm, overlapp,  &
-               overlapm, qncld, zero, zero, pver, dtmix, .false.)
 
-          !Mix number concentrations consistently!!
+          ! mixing of cloud droplets
+          do k=top_lev,pver
+             kp1 = min(k+1,pver)
+             km1 = max(k-1,top_lev)
+             qcld(k) = qncld(k) + dtmix*(srcn(k) &
+               + ekkp(k)*(overlapp(k)*qncld(kp1)-qncld(k))&
+               + ekkm(k)*(overlapm(k)*qncld(km1)-qncld(k)) )
+             qcld(k) = max(qcld(k),0._r8) ! force to non-negative if (q(k)<-1.e-30) then
+          end do
+
+          ! call explmix_oslo(qcld, srcn, ekkp, ekkm, overlapp, overlapm, &
+          !      qncld, zero, zero, pver, dtmix, .false.)
+
+          ! Mix number concentrations consistently!!
           do m = 1, ntot_amode
              mm = mam_idx(m,0)
-             ! rce-comment -   activation source in layer k involves particles from k+1
-             !	              source(:)= nact(:,m)*(raercol(:,mm,nsav))
+
+             ! activation source in layer k involves particles from k+1
              source(top_lev:pver-1) = nact(top_lev:pver-1,m)*(raercol(top_lev+1:pver,mm,nsav))
-             ! rce-comment - new formulation for k=pver
-             !               source(  pver  )= nact(  pver,  m)*(raercol(  pver,mm,nsav))
+
+             ! new formulation for k=pver
              tmpa = raercol(pver,mm,nsav)*nact(pver,m) &
                   + raercol_cw(pver,mm,nsav)*(nact(pver,m) - taumix_internal_pver_inv)
              source(pver) = max(0.0_r8, tmpa)
-             flxconv = 0._r8
 
-             call explmix_oslo( raercol_cw(:,mm,nnew), source, ekkp, ekkm, overlapp, &
-                  overlapm, raercol_cw(:,mm,nsav), zero, zero, pver, dtmix, .false.)
+             ! explicit integration of droplet/aerosol mixing with source due to activation/nucleation
+             do k=top_lev,pver
+                kp1 = min(k+1,pver)
+                km1 = max(k-1,top_lev)
 
-             call explmix_oslo( raercol(:,mm,nnew), source, ekkp, ekkm, overlapp,  &
-                  overlapm, raercol(:,mm,nsav), zero, flxconv, pver, dtmix, .true., raercol_cw(:,mm,nsav))
+                raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
+                     + ekkp(k)*(overlapp(k)*raercol_cw(kp1,mm,nsav)-raercol_cw(k,mm,nsav))&
+                     + ekkm(k)*(overlapm(k)*raercol_cw(km1,mm,nsav)-raercol_cw(k,mm,nsav)) )
+                ! force to non-negative if (raercol_cw(k,mm,nnew)<-1.e-30) then
+                raercol_cw(k,mm,nnew) = max(raercol_cw(k,mm,nnew),0._r8)
+
+                ! the qactold*(1-overlap) terms are resuspension of activated material
+                raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
+                     + ekkp(k)*(raercol(kp1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(kp1,mm,nsav)*(1.0_r8-overlapp(k)))  &
+                     + ekkm(k)*(raercol(km1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(km1,mm,nsav)*(1.0_r8-overlapm(k))) )
+                ! force to non-negative if (raercol(k,mm,nnew)<-1.e-30) then
+                raercol(k,mm,nnew) = max(raercol(k,mm,nnew),0._r8)
+             end do
           end do
           call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
 
           call t_startf('ndrop_calc_VertMix_aerotracker')
           do lptr2=1,n_aerosol_tracers
-             source(top_lev:pver-1) = mact_tracer(top_lev:pver-1,lptr2) &
-                  *(raercol_tracer(top_lev+1:pver,lptr2,nsav))
+             source(top_lev:pver-1) = mact_tracer(top_lev:pver-1,lptr2)*(raercol_tracer(top_lev+1:pver,lptr2,nsav))
 
              tmpa = raercol_tracer(pver,lptr2,nsav)*mact_tracer(pver,lptr2) &
                   + raercol_cw_tracer(pver,lptr2,nsav)*(mact_tracer(pver,lptr2) - taumix_internal_pver_inv)
 
              source(pver) = max(0.0_r8, tmpa)
-             flxconv = 0.0_r8
 
-             call explmix_oslo(raercol_cw_tracer(:,lptr2,nnew), source, ekkp, ekkm, overlapp, &
-                  overlapm, raercol_cw_tracer(:,lptr2,nsav), zero, zero, pver,  dtmix, .false.)
+             do k=top_lev,pver
+                kp1 = min(k+1,pver)
+                km1 = max(k-1,top_lev)
+                raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
+                     + ekkp(k)*(overlapp(k)*raercol_cw_tracer(kp1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav))&
+                     + ekkm(k)*(overlapm(k)*raercol_cw_tracer(km1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)) )
+                ! force to non-negative if (raercol_cw_tracer(k,lptr2,nnew)<-1.e-30) then
+                raercol_cw_tracer(k,lptr2,nnew) = max(raercol_cw_tracer(k,lptr2,nnew),0._r8)
 
-             call explmix_oslo(raercol_tracer(:,lptr2,nnew), source, ekkp, ekkm, overlapp,  &
-                  overlapm, raercol_tracer(:,lptr2,nsav), zero, flxconv, pver, dtmix, .true., &
-                  raercol_cw_tracer(:,lptr2,nsav))
+                raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
+                     + ekkp(k)*(raercol_tracer(kp1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
+                               +raercol_cw_tracer(kp1,lptr2,nsav)*(1.0_r8-overlapp(k)))  &
+                     + ekkm(k)*(raercol_tracer(km1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
+                               +raercol_cw_tracer(km1,lptr2,nsav)*(1.0_r8-overlapm(k))) )
+                ! force to non-negative if (raercol_tracer(k,lptr2,nnew)<-1.e-30) then
+                raercol_tracer(k,lptr2,nnew) = max(raercol_tracer(k,lptr2,nnew),0._r8)
+
+             end do
 
           end do !Number of aerosol tracers
           call t_stopf('ndrop_calc_VertMix_aerotracker')
@@ -1496,62 +1560,6 @@ contains
     deallocate(mfullact_tracer)
 
   end subroutine dropmixnuc_oslo
-
-  !===============================================================================
-
-  subroutine explmix_oslo( q, src, ekkp, ekkm, overlapp, overlapm, &
-       qold, surfrate, flxconv, pver, dt, is_unact, qactold )
-
-    ! explicit integration of droplet/aerosol mixing with source due to activation/nucleation
-
-    integer,  intent(in) :: pver           ! number of levels
-    real(r8), intent(out):: q(pver)        ! mixing ratio to be updated
-    real(r8), intent(in) :: qold(pver)     ! mixing ratio from previous time step
-    real(r8), intent(in) :: src(pver)      ! source due to activation/nucleation (/s)
-    real(r8), intent(in) :: ekkp(pver)     ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
-                                           ! below layer k  (k,k+1 interface)
-    real(r8), intent(in) :: ekkm(pver)     ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
-                                           ! above layer k  (k,k+1 interface)
-    real(r8), intent(in) :: overlapp(pver) ! cloud overlap below
-    real(r8), intent(in) :: overlapm(pver) ! cloud overlap above
-    real(r8), intent(in) :: surfrate       ! surface exchange rate (/s)
-    real(r8), intent(in) :: flxconv        ! convergence of flux from surface
-    real(r8), intent(in) :: dt             ! time step (s)
-    logical,  intent(in) :: is_unact       ! true if this is an unactivated species
-    real(r8), intent(in),optional :: qactold(pver) ! mixing ratio of ACTIVATED species from previous step
-                                                   ! *** this should only be present if the current species
-                                                   ! is unactivated number/sfc/mass
-
-    integer k,kp1,km1
-
-    if ( is_unact ) then
-       ! the qactold*(1-overlap) terms are resuspension of activated material
-       do k=top_lev,pver
-          kp1=min(k+1,pver)
-          km1=max(k-1,top_lev)
-          q(k) = qold(k) + dt*( - src(k) + ekkp(k)*(qold(kp1) - qold(k) +       &
-               qactold(kp1)*(1.0_r8-overlapp(k)))               &
-               + ekkm(k)*(qold(km1) - qold(k) +     &
-               qactold(km1)*(1.0_r8-overlapm(k))) )
-          q(k)=max(q(k),0._r8)
-       end do
-
-       ! diffusion loss at base of lowest layer
-       q(pver)=q(pver)-surfrate*qold(pver)*dt+flxconv*dt
-       q(pver)=max(q(pver),0._r8)
-    else
-       do k=top_lev,pver
-          kp1=min(k+1,pver)
-          km1=max(k-1,top_lev)
-          q(k) = qold(k) + dt*(src(k) + ekkp(k)*(overlapp(k)*qold(kp1)-qold(k)) +      &
-               ekkm(k)*(overlapm(k)*qold(km1)-qold(k)) )
-          q(k) = max(q(k),0._r8) ! force to non-negative if (q(k)<-1.e-30) then
-       end do
-       q(pver)=q(pver)-surfrate*qold(pver)*dt+flxconv*dt ! diffusion loss at base of lowest layer
-       q(pver)=max(q(pver),0._r8) ! force to non-negative if(q(pver)<-1.e-30)then
-    end if
-
-  end subroutine explmix_oslo
 
   !===============================================================================
 
