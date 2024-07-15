@@ -388,25 +388,25 @@ contains
                 exit
              endif
           end do
- 	  do ic=1,6
+          do ic=1,6
              if(abs((catot-cat(kcomp,ic))/cat(kcomp,ic))<eps2) then
                 ictot=ic
                 exit
              endif
           end do
- 	  do ic=1,6
+          do ic=1,6
              if(abs(frac-fac(ic))<eps4) then
                 ifac=ic
                 exit
              endif
           end do
- 	  do ic=1,6
+          do ic=1,6
              if(abs((fabc-fbc(ic))/fbc(ic))<eps2) then
                 ifbc=ic
                 exit
              endif
           end do
-	  do ic=1,6
+          do ic=1,6
              if(abs(fraq-faq(ic))<eps4) then
                 ifaq=ic
                 exit
@@ -1527,8 +1527,8 @@ contains
 
        ! write(*,*) 'Before init-loop', kc10
        do i=1,nbands
-          do icol=1,ncol
-             do k=1,pver
+          do k=1,pver
+             do icol=1,ncol
                 omega(icol,k,kc10,i)=0.0_r8
                 gass(icol,k,kc10,i)=0.0_r8
                 bex(icol,k,kc10,i)=0.0_r8
@@ -1537,8 +1537,8 @@ contains
           end do
        end do
        do i=1,nlwbands
-          do icol=1,ncol
-             do k=1,pver
+          do k=1,pver
+             do icol=1,ncol
                 kabs(icol,k,kc10,i)=0.0_r8
              end do
           end do
@@ -1721,10 +1721,8 @@ contains
                    bex2=max(bex2,1.e-30_r8)
 
                    ! finally, interpolation in the rh dimension
-                   ! write(*,*) 'Before bex'
                    if(t_xrh <= 0.37_r8) then
-                      bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2) &
-                           /(t_rh2-t_rh1)
+                      bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                    else
                       a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
@@ -1949,8 +1947,8 @@ contains
 
     do kcomp=5,10
        do i=1,nbands
-          do icol=1,ncol
-             do k=1,pver
+          do k=1,pver
+             do icol=1,ncol
                 omega(icol,k,kcomp,i)=0.0_r8
                 gass(icol,k,kcomp,i)=0.0_r8
                 bex(icol,k,kcomp,i)=0.0_r8
@@ -1959,8 +1957,8 @@ contains
           end do
        end do
        do i=1,nlwbands
-          do icol=1,ncol
-             do k=1,pver
+          do k=1,pver
+             do icol=1,ncol
                 kabs(icol,k,kcomp,i)=0.0_r8
              end do
           end do
@@ -2197,10 +2195,8 @@ contains
                 bex2=max(bex2,1.e-30_r8)
 
                 ! finally, interpolation in the rh dimension
-                ! write(*,*) 'Before bex'
                 if(t_xrh <= 0.37_r8) then
-                   bex(icol,k,kcomp,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2) &
-                        /(t_rh2-t_rh1)
+                   bex(icol,k,kcomp,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                 else
                    a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
@@ -2254,8 +2250,7 @@ contains
                 ! finally, interpolation in the rh dimension
                 ! write(*,*) 'Before ske'
                 if(t_xrh <= 0.37_r8) then
-                   ske(icol,k,kcomp,i)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2) &
-                        /(t_rh2-t_rh1)
+                   ske(icol,k,kcomp,i)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
                 else
                    a=(log(ske2)-log(ske1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(ske1)-t_rh1*log(ske2))/(t_rh2-t_rh1)
@@ -2306,10 +2301,8 @@ contains
                    kabs1=max(kabs1,1.e-30_r8)
                    kabs2=max(kabs2,1.e-30_r8)
 
-                   ! write(*,*) 'Before kabs'
                    if(t_xrh <= 0.37_r8) then
-                      kabs(icol,k,kcomp,i)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2) &
-                           /(t_rh2-t_rh1)
+                      kabs(icol,k,kcomp,i)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2)/(t_rh2-t_rh1)
                    else
                       a=(log(kabs2)-log(kabs1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(kabs1)-t_rh1*log(kabs2))/(t_rh2-t_rh1)

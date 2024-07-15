@@ -23,7 +23,7 @@ module oslo_aero_depos
   use cam_history,             only: outfld, fieldname_len, addfld, add_default, horiz_only
   use ref_pres,                only: top_lev => clim_modal_aero_top_lev
   !
-  use oslo_aero_share,         only: nmodes
+  use oslo_aero_share,         only: nmodes, max_tracers_per_mode
   use oslo_aero_share,         only: numberOfProcessModeTracers, getNumberOfTracersInMode, getTracerIndex
   use oslo_aero_share,         only: is_process_mode, processModeMap, processModeSigma, lifeCycleSigma
   use oslo_aero_share,         only: belowCloudScavengingCoefficientProcessModes, belowCloudScavengingCoefficient
@@ -92,6 +92,9 @@ module oslo_aero_depos
   integer :: nevapr_dpcu_idx = 0
   integer :: ixcldice, ixcldliq
 
+  integer :: tracer_index(0:nmodes, max_tracers_per_mode)
+  integer :: num_tracers_in_mode(0:nmodes)
+
 !===============================================================================
 contains
 !===============================================================================
@@ -125,11 +128,20 @@ contains
     drydep_lq(:) =.false.
     wetdep_lq(:) =.false.
 
+    do m = 0,nmodes
+       num_tracers_in_mode(m) = getNumberOfTracersInMode(m)
+    end do
+    do m = 0,nmodes
+      do l = 1,num_tracers_in_mode(m)
+        tracer_index(m,l) = getTracerIndex(m,l,.false.)
+      end do
+    end do
+
     ! Mode 0 is not subject to wet deposition? (check noresm1 code..)
     do m=0,nmodes
-       do l=1,getNumberOfTracersInMode(m)
+       do l=1,num_tracers_in_mode(m)
 
-          tracerIndex = getTracerIndex(m,l,.false.)
+          tracerIndex = tracer_index(m,l)
           drydep_lq(tracerIndex)=.true.
           wetdep_lq(tracerIndex)=.true.
 
@@ -382,9 +394,9 @@ contains
                   rad_aer(:,:), dens_aer(:,:), sg_aer(:,:), 3, lchnk)
           end if
 
-          do lspec = 1, getNumberOfTracersInMode(m)   ! loop over number + constituents
+          do lspec = 1, num_tracers_in_mode(m)   ! loop over number + constituents
 
-             mm = getTracerIndex(m,lspec,.false.)
+             mm = tracer_index(m,lspec)
              if(is_done(mm,lphase)) then
                 cycle
              endif
@@ -415,7 +427,7 @@ contains
 
              if (mm <= 0) cycle
 
-             if ((lphase == 1) .and. (lspec <= getNumberOfTracersInMode(m))) then
+             if ((lphase == 1) .and. (lspec <= num_tracers_in_mode(m))) then
                 ptend%lq(mm) = .TRUE.
 
                 ! use pvprogseasalts instead (means making the top level 0)
@@ -697,8 +709,8 @@ contains
              sol_factic = 0.0_r8
           endif
 
-          do lspec = 1,getNumberOfTracersInMode(m)   ! loop over number + chem constituents + water
-             mm = getTracerIndex(m,lspec,.false.)
+          do lspec = 1,num_tracers_in_mode(m)   ! loop over number + chem constituents + water
+             mm = tracer_index(m,lspec)
              if(is_done(mm,lphase)) then
                 cycle
              endif
@@ -717,7 +729,7 @@ contains
                 jnv = 0  !==> below cloud scavenging coefficients are zero (see above)
              endif
 
-             if ((lphase == 1) .and. (lspec <= getNumberOfTracersInMode(m))) then
+             if ((lphase == 1) .and. (lspec <= num_tracers_in_mode(m))) then
                 ptend%lq(mm) = .TRUE.
                 dqdt_tmp(:,:) = 0.0_r8
                 ! q_tmp reflects changes from modal_aero_calcsize and is the "most current" q

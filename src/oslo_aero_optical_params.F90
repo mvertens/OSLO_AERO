@@ -259,28 +259,38 @@ contains
     lw_on = .true.  ! No LW optics needed for RH=0 (interpol returns 0-values)
 
     ! BC(ax) mode (dry only):
+    call t_startf('oslo_aero_interpol0')
     call interpol0 (ncol, daylight, Nnatk, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol0')
 
     mplus10=0
     ! SO4/SOA(Ait) mode:
+    call t_startf('oslo_aero_interpol1')
     call interpol1 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xfombg, ifombg1, xct, ict1,    &
          xfac, ifac1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol1')
 
     ! BC(Ait) and OC(Ait) modes:
+    call t_startf('oslo_aero_interpol2to3')
     call interpol2to3 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xct, ict1, xfac, ifac1, &
          ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol2to3')
 
     ! BC&OC(Ait) mode:   ------ fcm invalid here (=0). Using faitbc instead
+    call t_startf('oslo_aero_interpol4')
     call interpol4 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xfbcbg, ifbcbg1, xct, ict1,    &
          xfac, ifac1, xfaq, ifaq1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol4')
 
     ! SO4(Ait75) (5), Mineral (6-7) and Sea-salt (8-10) modes:
+    call t_startf('oslo_aero_interpol5to10')
     call interpol5to10 (ncol, daylight, xrh, irh1, &
          Nnatk, xct, ict1, xfac, ifac1, &
          xfbc, ifbc1, xfaq, ifaq1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol5to10')
 
     ! total aerosol number concentrations
     do i=0,nmodes    ! mode 0 to 14
@@ -294,15 +304,19 @@ contains
 
     ! BC(Ait) and OC(Ait) modes:
     mplus10=1
+    call t_startf('oslo_aero_interpol2to3')
     call interpol2to3 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xct, ict1, xfac, ifac1, &
          ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol2to3')
 
     ! BC&OC(n) mode:    ------ fcm not valid here (=0). Use fnbc instead
     mplus10=1
+    call t_startf('oslo_aero_interpol4')
     call interpol4 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xfbcbgn, ifbcbgn1, xct, ict1,  &
          xfac, ifac1, xfaq, ifaq1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol4')
 
     call t_stopf('oslo_aero_interpol')
 

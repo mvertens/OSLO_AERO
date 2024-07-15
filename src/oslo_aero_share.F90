@@ -32,7 +32,6 @@ module oslo_aero_share
   public :: chemistryIndex
   public :: physicsIndex
   public :: getDryDensity
-  public :: getConstituentFraction
   public :: isTracerInMode
   public :: fillAerosolTracerList
   public :: getNumberOfAerosolTracers
@@ -679,112 +678,18 @@ contains
   function isTracerInMode(modeIndex, constituentIndex)RESULT(answer)
     integer, intent(in) :: modeIndex
     integer, intent(in) :: constituentIndex
+
     integer             :: i
     logical             :: answer
+
     answer = .FALSE.
     do i=1,n_tracers_in_mode(modeIndex)
        if(tracer_in_mode(modeIndex,i) == constituentIndex)then
           answer = .TRUE.
+          exit
        endif
     enddo
   end function isTracerInMode
-
-  !===============================================================================
-  function getConstituentFraction(CProcessModes, f_c, f_bc, f_aq, f_so4_cond, f_soa &
-       ,Cam, f_acm, f_bcm, f_aqm, f_so4_condm,f_soam, constituentIndex,debugPrint ) RESULT(fraction)   ! mass fraction
-
-    real(r8), intent(in) :: CProcessModes
-    real(r8), intent(in) :: f_c
-    real(r8), intent(in) :: f_bc
-    real(r8), intent(in) :: f_aq
-    real(r8), intent(in) :: f_so4_cond
-    real(r8), intent(in) :: f_soa
-    real(r8), intent(in) :: cam
-    real(r8), intent(in) :: f_aqm
-    real(r8), intent(in) :: f_bcm
-    real(r8), intent(in) :: f_acm
-    real(r8), intent(in) :: f_so4_condm
-    real(r8), intent(in) :: f_soam
-    integer, intent(in)  :: constituentIndex
-    logical, optional, intent(in) :: debugPrint
-
-    logical  :: doPrint = .false.
-    real(r8) :: fraction
-
-    if(present(debugPrint))then
-       if(debugPrint) then
-          doPrint=.true.
-       endif
-    endif
-
-    fraction = 1.0_r8              ! fraction = 1 for all tracers, except special cases (process modes) below
-
-    !This fraction is the mass of a certain tracer in a specific size-mode divided by the total
-    !mass of the same tracer for (i.e. summed up over) all size-modes. This total mass is what
-    !is transported in the model, in the life cycle scheme. The word size-mode is here used for a mode in the
-    !aerosol size-distribution, which is assumed to be log-normal prior to growth.
-    if((l_so4_a1 .eq. constituentIndex))then !so4 condensation
-       fraction= (cam       &
-            *(1.0_r8-f_acm) & !sulfate fraction
-            *(1.0_r8-f_aqm) & !fraction not from aq phase
-            *(f_so4_condm)  & !fraction being condensate
-            )               &
-            /               &
-            (CProcessModes*(1.0_r8-f_c)*(1.0_r8-f_aq)*f_so4_cond+smallConcentration) !total so4 condensate
-
-       if (doPrint) then
-          print*, " "
-          print*, "conc     ==>", CProcessmodes, cam
-          print*, "modefrc  ==>", f_acm, f_aqm, f_so4_condm
-          print*, "totfrc   ==>", f_c, f_aq, f_so4_cond
-          print*, "fraction ==>", cam/(CProcessModes+smallConcentration)*100.0, fraction*100 , "%"
-       endif
-
-    else if(l_so4_ac .eq. constituentIndex) then ! so4 coagulation
-       fraction = (cam                   &
-                * (1.0_r8 - f_acm)       & !sulfate fraction
-                * (1.0_r8 - f_aqm)       & !fraction not from aq phase
-                * (1.0_r8 - f_so4_condm) & !fraction not being condensate
-                )                        &
-                /                        &
-                (CProcessModes*(1.0_r8-f_c)*(1.0_r8-f_aq)*(1.0_r8-f_so4_cond) & !total non-aq sulf
-                + smallConcentration)
-
-    else if(l_so4_a2 .eq. constituentIndex) then  !so4 wet phase
-       fraction = (cam            &
-            *(1.0_r8-f_acm)     & !sulfate fraction
-            *f_aqm)             & !aq phase fraction of sulfate
-            /                                   &
-            (CProcessModes*(1.0_r8-f_c)*(f_aq)+smallConcentration)
-
-    else if(l_bc_ac .eq. constituentIndex)then  !bc coagulated
-       fraction = (cam              &
-            *f_acm           & ! carbonaceous fraction
-            *f_bcm)          & ! bc fraction of carbonaceous
-            /                                &
-            (CProcessModes*f_c*f_bc+smallConcentration)
-
-    else if(l_om_ac .eq. constituentIndex ) then  !oc coagulated
-       fraction =  (cam          &
-            *f_acm           &       ! carbonaceous fraction
-            *(1.0_r8-f_bcm)  &       ! oc fraction of carbonaceous
-            *(1.0_r8-f_soam))&       ! oc fraction which is soa
-            /                                &
-            (CProcessModes*f_c*(1.0_r8-f_bc)*(1.0_r8-f_soa)+smallConcentration)
-
-    else if (l_soa_a1 .eq. constituentIndex) then !SOA condensate
-       fraction = cam              &
-            *f_acm             &  !carbonaceous fraction
-            *(1.0_r8 -f_bcm)   &  !om fraction
-            *(f_soam)          &  !fraction of OM is SOA
-            /                  &
-            (CProcessModes * f_c* (1.0_r8 -f_bc)*f_soa + smallConcentration)
-    end if
-
-    if (fraction .gt. 1.0_r8)then
-       fraction = 1.0_r8
-    endif
-  end function getConstituentFraction
 
   !===============================================================================
   subroutine inittabrh()
