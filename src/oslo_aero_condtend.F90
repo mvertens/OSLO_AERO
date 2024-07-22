@@ -20,6 +20,7 @@ module oslo_aero_condtend
   use m_spc_id,        only: id_H2SO4, id_soa_lv
   !
   use oslo_aero_share, only: nmodes, nBinsTab
+  use oslo_aero_share, only: max_tracers_per_mode, n_tracers_in_mode, n_background_tracers_in_mode
   use oslo_aero_share, only: MODE_IDX_SO4SOA_AIT, MODE_IDX_BC_EXT_AC, MODE_IDX_BC_AIT
   use oslo_aero_share, only: MODE_IDX_OMBC_INTMIX_COAT_AIT, MODE_IDX_DST_A2, MODE_IDX_DST_A3
   use oslo_aero_share, only: MODE_IDX_BC_NUC, MODE_IDX_OMBC_INTMIX_AIT
@@ -29,8 +30,8 @@ module oslo_aero_condtend
   use oslo_aero_coag,  only: normalizedCoagulationSink, receiverMode,numberOfCoagulationReceivers
   use oslo_aero_coag,  only: numberOfAddCoagReceivers,addReceiverMode,normCoagSinkAdd
   use oslo_aero_share, only: originalNumberMedianRadius, rhopart, invrhopart, volumeToNumber
-  use oslo_aero_share, only: chemistryIndex, physicsIndex, getNumberOfBackgroundTracersInMode
-  use oslo_aero_share, only: externallyMixedMode, rBinMidpoint, getTracerIndex, getNumberOfTracersInMode, normnk
+  use oslo_aero_share, only: chemistryIndex, physicsIndex
+  use oslo_aero_share, only: externallyMixedMode, rBinMidpoint, getTracerIndex, normnk
   use oslo_aero_share, only: numberToSurface, volumeToNumber, numberOfExternallyMixedModes
 
   implicit none
@@ -61,6 +62,8 @@ module oslo_aero_condtend
   ! thickness of the so4 monolayers (m)
   ! for so4(+nh4), use bi-sulfate mw and 1.77 g/cm3 as in MAM
   real(r8), parameter, public :: dr_so4_monolayers_age = n_so4_monolayers_age * 4.76e-10_r8
+
+  integer :: tracer_index(0:nmodes,max_tracers_per_mode)  ! tracer index
 
 !===============================================================================
 contains
@@ -108,6 +111,7 @@ contains
     real(r8) :: radmol           ![m] radius molecule
     integer  :: iDonor
     integer  :: l_donor
+    integer  :: m, l
     !--------------------------------------------------
 
     !These are the lifecycle-species which receive mass when
@@ -247,6 +251,13 @@ contains
        call add_default( fieldname_receiver, 1, ' ' )
     end if
 
+    ! initialize module variable for performance
+    do m = 0,nmodes
+       do l=1,n_tracers_in_mode(m)
+          tracer_index(m,l) = getTracerIndex(m,l,.true.)
+       end do
+    end do
+
   end subroutine initializeCondensation
 
   !===============================================================================
@@ -339,10 +350,10 @@ contains
           do mode_index_receiver = 0, nmodes
 
              !Go through all core species in that mode
-             do tracerIndex = 1, getNumberOfBackgroundTracersInMode(mode_index_receiver)
+             do tracerIndex = 1, n_background_tracers_in_mode(mode_index_receiver)
 
                 !Find the lifecycle-specie receiving the condensation
-                l_receiver = getTracerIndex(mode_index_receiver, tracerIndex, .true.)
+                l_receiver = tracer_index(mode_index_receiver, tracerIndex)
 
                 !Add up the number concentration of the receiving mode [#/m3]
                 numberConcentration(mode_index_receiver) = numberConcentration(mode_index_receiver) &  !previous value
@@ -492,7 +503,7 @@ contains
              !Find the mode in question
              mode_index_donor    = externallyMixedMode(iDonor)
 
-             if(getNumberOfTracersInMode(mode_index_donor) .eq. 0)then
+             if (n_tracers_in_mode(mode_index_donor) .eq. 0)then
                 cycle
              end if
 
@@ -516,10 +527,10 @@ contains
              !The "donor" is the externally mixed mode which will soon
              !become internally mixed. The externally mixed is donating mass
              !and the internally mixed is receiving...
-             do tracerIndex = 1, getNumberOfTracersInMode(mode_index_donor)
+             do tracerIndex = 1, n_tracers_in_mode(mode_index_donor)
 
                 !Indexes here are in "chemistry space"
-                l_donor    = getTracerIndex(mode_index_donor, tracerIndex,.true.)
+                l_donor    = tracer_index(mode_index_donor, tracerIndex)
                 l_receiver = lifeCycleReceiver(l_donor)
 
                 if( l_receiver .le. 0)then

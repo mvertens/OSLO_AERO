@@ -15,7 +15,8 @@ module oslo_aero_coag
   use cam_history,    only: addfld, add_default, fieldname_len, horiz_only, outfld
   use cam_logfile,    only: iulog
   !
-  use oslo_aero_share, only: nmodes
+  use oslo_aero_share, only: nmodes, max_tracers_per_mode
+  use oslo_aero_share, only: n_tracers_in_mode, n_background_tracers_in_mode
   use oslo_aero_share, only: normnk, rBinMidpoint, nBinsTab, VolumeToNumber, rhopart
   use oslo_aero_share, only: MODE_IDX_BC_EXT_AC, MODE_IDX_SO4_AC, MODE_IDX_BC_AIT
   use oslo_aero_share, only: MODE_IDX_OMBC_INTMIX_COAT_AIT, MODE_IDX_BC_NUC, MODE_IDX_OMBC_INTMIX_AIT
@@ -27,7 +28,7 @@ module oslo_aero_coag
   use oslo_aero_share, only: l_om_ai, l_om_ac, l_om_ni, l_bc_n, l_bc_ni
   use oslo_aero_share, only: l_so4_a1, l_soa_na, l_soa_a1, l_so4_a2
   use oslo_aero_share, only: chemistryindex, physicsindex, is_process_mode
-  use oslo_aero_share, only: getNumberOfTracersInMode, getTracerIndex, qqcw_get_field
+  use oslo_aero_share, only: getTracerIndex, qqcw_get_field
 
   implicit none
   private
@@ -101,6 +102,9 @@ module oslo_aero_coag
   real(r8), parameter :: viscosityAir = 1.983e-5_r8          ![Pa s] viscosity of air
   real(r8), parameter :: rhoh2o = 1000._r8                   !Density of water
 
+  integer :: tracer_index(0:nmodes,max_tracers_per_mode)  ! tracer index
+  logical :: in_process_mode((nmodes+1)*max_tracers_per_mode)
+
 !================================================================
 contains
 !================================================================
@@ -131,6 +135,7 @@ contains
     character(8)                   :: unit
     logical                        :: history_aerosol
     logical                        :: isAlreadyOnList(gas_pcnst)
+    integer                        :: m,l
 
     !-------------------------------------
     ! Initialize coagulation receivers
@@ -246,7 +251,7 @@ contains
 
              !Sum up coagulation sink for this coagulating species (for all receiving modes)
              normalizedCoagulationSink(modeIndexReceiver, modeIndexCoagulator)      =   & ![m3/#/s]
-                  normalizedCoagulationSink(modeIndexReceiver, modeIndexCoagulator)    &  ![m3/#/s] Previous value
+                  normalizedCoagulationSink(modeIndexReceiver, modeIndexCoagulator)     & ![m3/#/s] Previous value
                   + normnk(modeIndexReceiver, nsiz)          &                            !Normalized size distribution for receiver mode
                   * K12(iReceiverMode, iCoagulatingMode, nsiz)                            !Coagulation coefficient (m3/#/s)
 
@@ -336,6 +341,17 @@ contains
        end if
     end do
 
+    !-------------------------------------
+    ! Initialize module variables for performance
+    !-------------------------------------
+
+    do m = 0,nmodes
+       do l=1,n_tracers_in_mode(m)
+          tracer_index(m,l) = getTracerIndex(m,l,.true.)
+          in_process_mode(tracer_index(m,l)) = is_process_mode(tracer_index(m,l), .true.)
+       end do
+    end do
+
   end subroutine initializeCoagulation
 
   !================================================================
@@ -386,6 +402,7 @@ contains
             +(4.0_r8/c12)*(diff1+diff2)/(modeRadius+rBinMidPoint(i)))
 
     enddo
+
   end subroutine calculateCoagulationCoefficient
 
   !================================================================
@@ -443,13 +460,13 @@ contains
           do ireceiver = 1,numberOfCoagulationReceivers
 
              !Go through all core species in that mode
-             do iSpecie = 1,getNumberOfTracersInMode(receiverMode(ireceiver))
+             do iSpecie = 1,n_tracers_in_mode(receiverMode(ireceiver))
 
                 !Find the lifecycle-specie receiving the coagulation
-                l_index_receiver = getTracerIndex(receiverMode(ireceiver) , iSpecie , .true.)
+                l_index_receiver = tracer_index(receiverMode(ireceiver), iSpecie)
                 long_name = solsym(l_index_receiver) !For testing
 
-                if(.NOT. is_process_mode(l_index_receiver,.true.)) then
+                if (.NOT. in_process_mode(l_index_receiver)) then
                    !Add up the number concentration of the receiving mode
                    numberConcentration(iReceiver) = numberConcentration(iReceiver) & !previous value
                         + q(i,k,l_index_receiver)                                  & !kg/kg
@@ -485,18 +502,17 @@ contains
              !IN COAGULATION (THEY GO FROM EXTERNALLY MIXED TO INTERNALLY MIXED MODES)
 
              !Each coagulating mode can contain several species
-             do ispecie = 1, getNumberOfTracersInMode(modeIndexCoagulator)
+             do ispecie = 1, n_tracers_in_mode(modeIndexCoagulator)
 
                 !Get the lifecycle specie which is lost
-                l_index_donor = getTracerIndex(modeIndexCoagulator , ispecie,.true. )
+                l_index_donor = tracer_index(modeIndexCoagulator,ispecie)
 
                 !Move lifecycle species to new lifecycle species due to coagulation
 
                 !process modes don't change mode except so4 condensate which becomes coagulate instead
                 !assumed to have same sink as MODE_IDX_OMBC_INTMIX_AIT
-                if( .NOT. is_process_mode(l_index_donor,.true.) .or. &
-                     ( (l_index_donor == chemistryIndex(l_so4_a1)) .and. &
-                        modeIndexCoagulator == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
+                if( .NOT. in_process_mode(l_index_donor) .or. ((l_index_donor == chemistryIndex(l_so4_a1)) .and. &
+                     modeIndexCoagulator == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
 
                    !Done summing total loss of this coagulating specie
                    totalLoss(i,k,l_index_donor) = coagulationSink & !loss rate for a mode in [1/s] summed over all receivers
@@ -516,23 +532,22 @@ contains
 
     ! UPDATE THE TRACERS AND DO DIAGNOSTICS
     do iCoagulator = 1, numberOfCoagulatingModes
-       do ispecie = 1, getNumberOfTracersInMode(coagulatingMode(iCoagulator))
+       do ispecie = 1, n_tracers_in_mode(coagulatingMode(iCoagulator))
 
-          l_index_donor = getTracerIndex(coagulatingMode(iCoagulator) , ispecie ,.true.)
+          l_index_donor = tracer_index(coagulatingMode(iCoagulator), ispecie)
 
           !so4_a1 is a process mode (condensate), but is still lost in coagulation
-          if( .NOT. is_process_mode(l_index_donor, .true.) .or. &
-               ( (l_index_donor == chemistryIndex(l_so4_a1)) .and. &
-                  coagulatingMode(iCoagulator) == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
+          if( .NOT. in_process_mode(l_index_donor) .or. ((l_index_donor == chemistryIndex(l_so4_a1)) .and. &
+               coagulatingMode(iCoagulator) == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
 
-             l_index_donor = getTracerIndex(coagulatingMode(iCoagulator) , ispecie,.true. )
+             l_index_donor = tracer_index(coagulatingMode(iCoagulator), ispecie)
 
              !index of mode gaining mass (l_so4_ac, l_om_ac, l_bc_ac), coagulate
              l_index_receiver = lifeCycleReceiver(l_index_donor)
 
              do k=1,pver
                 !Loose mass from tracer in donor mode
-                q(:ncol,k,l_index_donor)    = q(:ncol,k,l_index_donor) - totalLoss(:ncol,k,l_index_donor)
+                q(:ncol,k,l_index_donor) = q(:ncol,k,l_index_donor) - totalLoss(:ncol,k,l_index_donor)
 
                 !Give mass to tracer in receiver mode
                 q(:ncol,k,l_index_receiver) = q(:ncol,k,l_index_receiver) + totalLoss(:ncol,k,l_index_donor)
@@ -629,18 +644,17 @@ contains
                      * (rhoair*cldnum(i,k)/cldfrc(i,k))             ![kg/m3*#/kg
 
                 !Each coagulating mode can contain several species
-                do ispecie = 1, getNumberOfTracersInMode(modeIndexCoagulator)
+                do ispecie = 1, n_tracers_in_mode(modeIndexCoagulator)
 
                    !Get the lifecycle specie which is lost
-                   l_index_donor = getTracerIndex(modeIndexCoagulator , ispecie,.true. )
+                   l_index_donor = tracer_index(modeIndexCoagulator, ispecie)
 
                    !Move lifecycle species to new lifecycle species due to coagulation
 
                    !process modes don't change mode except so4 condensate which becomes coagulate instead
                    !assumed to have same sink as MODE_IDX_OMBC_INTMIX_AIT
-                   if( .NOT. is_process_mode(l_index_donor,.true.) .or.  &
-                        ( (l_index_donor == chemistryIndex(l_so4_a1)) .and. &
-                           modeIndexCoagulator == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
+                   if ( .NOT. in_process_mode(l_index_donor) .or. ((l_index_donor == chemistryIndex(l_so4_a1)) .and. &
+                        modeIndexCoagulator == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
 
                       !Done summing total loss of this coagulating specie
                       cloudLoss(i,k,l_index_donor) = coagulationSink & !loss rate for a mode in [1/s] summed over all receivers
@@ -661,15 +675,14 @@ contains
 
     ! UPDATE THE TRACERS AND DO DIAGNOSTICS
     do iCoagulator = 1, numberOfCoagulatingModes
-       do ispecie = 1, getNumberOfTracersInMode(coagulatingMode(iCoagulator))
-          l_index_donor = getTracerIndex(coagulatingMode(iCoagulator) , ispecie ,.true.)
+       do ispecie = 1, n_tracers_in_mode(coagulatingMode(iCoagulator))
+          l_index_donor = tracer_index(coagulatingMode(iCoagulator), ispecie)
 
           !so4_a1 is a process mode (condensate), but is still lost in coagulation
-          if( .NOT. is_process_mode(l_index_donor, .true.) .or. &
-               ( (l_index_donor == chemistryIndex(l_so4_a1)) .and. &
-                  coagulatingMode(iCoagulator) == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
+          if ( .NOT. in_process_mode(l_index_donor) .or. ((l_index_donor == chemistryIndex(l_so4_a1)) .and. &
+               coagulatingMode(iCoagulator) == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
 
-             l_index_donor = getTracerIndex(coagulatingMode(iCoagulator), ispecie, .true.)
+             l_index_donor = tracer_index(coagulatingMode(iCoagulator), ispecie)
 
              !index of mode gaining mass (l_so4_a2, l_om_ac, l_bc_ac), coagulate
              l_index_receiver = CloudAerReceiver(l_index_donor)
@@ -677,10 +690,10 @@ contains
 
              do k=1,pver
                 !Loose mass from tracer in donor mode
-                q(:ncol,k,l_index_donor)    = q(:ncol,k,l_index_donor) - cloudLoss(:ncol,k,l_index_donor)
+                q(:ncol,k,l_index_donor) = q(:ncol,k,l_index_donor) - cloudLoss(:ncol,k,l_index_donor)
 
                 !Give mass to tracer in receiver mode
-                if(associated(fldcw)) then
+                if (associated(fldcw)) then
                    fldcw(:ncol,k) = fldcw(:ncol,k) + cloudLoss(:ncol,k,l_index_donor)
                 end if
              end do !k
@@ -695,8 +708,7 @@ contains
           !Check if species contributes to coagulation
           if(CloudAerReceiver(i) .gt. 0)then
              !Loss from the donor specie
-             tracer_coltend(:ncol) = sum(cloudLoss(:ncol, :,i)*pdel(:ncol,:),2)/gravit*delt_inverse
-
+             tracer_coltend(:ncol) = sum(cloudLoss(:ncol,:,i)*pdel(:ncol,:),2)/gravit*delt_inverse
              coltend(:ncol,i) = coltend(:ncol,i) - tracer_coltend(:ncol) !negative, loss for donor
              coltend(:ncol,CloudAerReceiver(i)) = coltend(:ncol,CloudAerReceiver(i)) + tracer_coltend(:ncol)
           endif
