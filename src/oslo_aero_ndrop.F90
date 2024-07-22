@@ -871,7 +871,7 @@ contains
              naermod(:) = 0.0_r8
              vaerosol(:) = 0.0_r8
              hygro(:) = 0.0_r8
-             lnsigman(:) = log(2.0_r8)
+             lnsigman(:) = alog2
 
              m = 0
              do kcomp = 1,nmodes
@@ -1006,7 +1006,7 @@ contains
                 naermod(:) = 0.0_r8
                 vaerosol(:) = 0.0_r8
                 hygro(:) = 0.0_r8
-                lnsigman(:) = log(2.0_r8)
+                lnsigman(:) = alog2
 
                 m=0
                 do kcomp = 1,nmodes
@@ -1445,7 +1445,7 @@ contains
        !Need to initialize first because process modes arrive several times
        tendencyCounted(:) = .FALSE.
        do m=1,ntot_amode
-         do l = 1,getNumberOfTracersInMode(m)
+         do l = 1,nspec_amode(m)
            lptr = tracer_index(m,l)
            mm = mam_idx(m,l)
 
