@@ -583,8 +583,7 @@ contains
     do k=top_lev,pver
        mm = k - top_lev + 1
        do m=1,nmodes
-          if(.NOT. alert .and. &
-               ANY(numberConcentration(:ncol,k,m) .lt. 0.0_r8 ))then
+          if(.NOT. alert .and. ANY(numberConcentration(:ncol,k,m) .lt. 0.0_r8 ))then
              alert = .TRUE.
              lptr = k
              print*,"STRANGE numberconc", m, minval(numberConcentration(:ncol,:,:))*1.e-6_r8, "#/cm3", k, mm
@@ -1231,8 +1230,8 @@ contains
        !       from kp1 to k which = ekkp(k)*raercol(kp1,lmass)
        !    however it might if things are not "just right" in subr activate
        !    the following is a safety measure to avoid negatives in explmix
-       do k = top_lev, pver-1
-          do m = 1, ntot_amode
+       do m = 1, ntot_amode
+          do k = top_lev, pver-1
              nact(k,m) = min( nact(k,m), ekkp(k) )
              mact(k,m) = min( mact(k,m), ekkp(k) )
           end do
@@ -1250,15 +1249,12 @@ contains
              lptr = tracer_index(m,l)  !which tracer are we talking about
              lptr2  = inverseAerosolTracerList(lptr)    !which index is this in the list of aerosol-tracers
              mm = mam_idx(m,l)
-             raercol_tracer(:,lptr2,nnew) = raercol_tracer(:,lptr2,nnew) &
-                  + raercol(:,mm,nnew)
-
-             raercol_cw_tracer(:,lptr2,nnew) = raercol_cw_tracer(:,lptr2,nnew)&
-                  + raercol_cw(:,mm,nnew)
-
-             mact_tracer(:,lptr2) = mact_tracer(:,lptr2) + mact(:,m)*raercol(:,mm,nnew)
-             mfullact_tracer(:,lptr2) = mfullact_tracer(:,lptr2) + raercol(:,mm,nnew)
-
+             do k = top_lev,pver
+                raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nnew) + raercol(k,mm,nnew)
+                raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nnew) + raercol_cw(k,mm,nnew)
+                mact_tracer(k,lptr2) = mact_tracer(k,lptr2) + mact(k,m)*raercol(k,mm,nnew)
+                mfullact_tracer(k,lptr2) = mfullact_tracer(k,lptr2) + raercol(k,mm,nnew)
+             end do
           end do !l
        end do    !m
 
@@ -1270,73 +1266,89 @@ contains
        ! old_cloud_nsubmix_loop
        call t_startf('ndrop_oldcloud_nsubmix')
        do n = 1, nsubmix
+
           qncld(:) = qcld(:)
+
           ! switch nsav, nnew so that nsav is the updated aerosol
           ntemp   = nsav
           nsav    = nnew
           nnew    = ntemp
-          srcn(:) = 0.0_r8
-          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
+
           !First mix cloud droplet number concentration
+          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
+          srcn(:) = 0.0_r8
           do m = 1, ntot_amode
              mm = mam_idx(m,0)
-
-             ! update droplet source
-             ! rce-comment- activation source in layer k involves particles from k+1
-             !	       srcn(:)=srcn(:)+nact(:,m)*(raercol(:,mm,nsav))
-             srcn(top_lev:pver-1) = srcn(top_lev:pver-1) + nact(top_lev:pver-1,m)*(raercol(top_lev+1:pver,mm,nsav))
-
-             ! rce-comment- new formulation for k=pver
-             !              srcn(  pver  )=srcn(  pver  )+nact(  pver  ,m)*(raercol(  pver,mm,nsav))
-             tmpa = raercol(pver,mm,nsav)*nact(pver,m) &
-                  + raercol_cw(pver,mm,nsav)*(nact(pver,m) - taumix_internal_pver_inv)
-             srcn(pver) = srcn(pver) + max(0.0_r8,tmpa)
+             do k = top_lev,pver
+                if (k < pver) then
+                   ! update droplet source - activation source in layer k involves particles from k+1
+                   srcn(k) = srcn(k) + nact(k,m)*(raercol(k+1,mm,nsav))
+                else
+                   ! new formulation for k=pver
+                   tmpa = raercol(k,mm,nsav)*nact(k,m) + raercol_cw(k,mm,nsav)*(nact(k,m)-taumix_internal_pver_inv)
+                   srcn(k) = srcn(k) + max(0.0_r8,tmpa)
+                end if
+             end do
           end do
           call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
 
-          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
-
           ! mixing of cloud droplets
+          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
           do k=top_lev,pver
-             kp1 = min(k+1,pver)
-             km1 = max(k-1,top_lev)
-             qcld(k) = qncld(k) + dtmix*(srcn(k) &
-               + ekkp(k)*(overlapp(k)*qncld(kp1)-qncld(k))&
-               + ekkm(k)*(overlapm(k)*qncld(km1)-qncld(k)) )
-             qcld(k) = max(qcld(k),0._r8) ! force to non-negative if (q(k)<-1.e-30) then
+             ! force to non-negative if (q(k)<-1.e-30) then
+             if (k == top_lev) then
+                qcld(k) = qncld(k) + dtmix*(srcn(k) &
+                     + ekkp(k)*(overlapp(k)*qncld(k+1)-qncld(k)))
+                qcld(k) = max(qcld(k),0._r8)
+             else if (k == pver) then
+                qcld(k) = qncld(k) + dtmix*(srcn(k) &
+                     + ekkm(k)*(overlapm(k)*qncld(k-1)-qncld(k)) )
+                qcld(k) = max(qcld(k),0._r8)
+             else
+                qcld(k) = qncld(k) + dtmix*(srcn(k) &
+                     + ekkp(k)*(overlapp(k)*qncld(k+1)-qncld(k))&
+                     + ekkm(k)*(overlapm(k)*qncld(k-1)-qncld(k)) )
+                qcld(k) = max(qcld(k),0._r8)
+             end if
           end do
-
-          ! call explmix_oslo(qcld, srcn, ekkp, ekkm, overlapp, overlapm, &
-          !      qncld, zero, zero, pver, dtmix, .false.)
 
           ! Mix number concentrations consistently!!
           do m = 1, ntot_amode
              mm = mam_idx(m,0)
-
-             ! activation source in layer k involves particles from k+1
-             source(top_lev:pver-1) = nact(top_lev:pver-1,m)*(raercol(top_lev+1:pver,mm,nsav))
-
-             ! new formulation for k=pver
-             tmpa = raercol(pver,mm,nsav)*nact(pver,m) &
-                  + raercol_cw(pver,mm,nsav)*(nact(pver,m) - taumix_internal_pver_inv)
-             source(pver) = max(0.0_r8, tmpa)
-
-             ! explicit integration of droplet/aerosol mixing with source due to activation/nucleation
              do k=top_lev,pver
-                kp1 = min(k+1,pver)
-                km1 = max(k-1,top_lev)
+                if (k < pver) then
+                   ! activation source in layer k involves particles from k+1
+                   source(k) = nact(k,m)*(raercol(k+1,mm,nsav))
+                else
+                   ! new formulation for k=pver
+                   tmpa = raercol(k,mm,nsav)*nact(k,m) + raercol_cw(k,mm,nsav)*(nact(k,m)-taumix_internal_pver_inv)
+                   source(k) = max(0.0_r8, tmpa)
+                end if
 
-                raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
-                     + ekkp(k)*(overlapp(k)*raercol_cw(kp1,mm,nsav)-raercol_cw(k,mm,nsav))&
-                     + ekkm(k)*(overlapm(k)*raercol_cw(km1,mm,nsav)-raercol_cw(k,mm,nsav)) )
+                ! explicit integration of droplet/aerosol mixing with source due to activation/nucleation
                 ! force to non-negative if (raercol_cw(k,mm,nnew)<-1.e-30) then
-                raercol_cw(k,mm,nnew) = max(raercol_cw(k,mm,nnew),0._r8)
-
                 ! the qactold*(1-overlap) terms are resuspension of activated material
-                raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
-                     + ekkp(k)*(raercol(kp1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(kp1,mm,nsav)*(1.0_r8-overlapp(k)))  &
-                     + ekkm(k)*(raercol(km1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(km1,mm,nsav)*(1.0_r8-overlapm(k))) )
-                ! force to non-negative if (raercol(k,mm,nnew)<-1.e-30) then
+                if (k == top_lev) then
+                   raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
+                        + ekkp(k)*(overlapp(k)*raercol_cw(k+1,mm,nsav)-raercol_cw(k,mm,nsav)))
+                   raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
+                        + ekkp(k)*(raercol(k+1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k+1,mm,nsav)*(1.0_r8-overlapp(k))))
+
+                else if (k == pver) then
+                   raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
+                        + ekkm(k)*(overlapm(k)*raercol_cw(k-1,mm,nsav)-raercol_cw(k,mm,nsav)) )
+                   raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
+                        + ekkm(k)*(raercol(k-1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k-1,mm,nsav)*(1.0_r8-overlapm(k))) )
+
+                else
+                   raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
+                        + ekkp(k)*(overlapp(k)*raercol_cw(k+1,mm,nsav)-raercol_cw(k,mm,nsav))&
+                        + ekkm(k)*(overlapm(k)*raercol_cw(k-1,mm,nsav)-raercol_cw(k,mm,nsav)) )
+                   raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
+                        + ekkp(k)*(raercol(k+1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k+1,mm,nsav)*(1.0_r8-overlapp(k)))  &
+                        + ekkm(k)*(raercol(k-1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k-1,mm,nsav)*(1.0_r8-overlapm(k))) )
+                end if
+                raercol_cw(k,mm,nnew) = max(raercol_cw(k,mm,nnew),0._r8)
                 raercol(k,mm,nnew) = max(raercol(k,mm,nnew),0._r8)
              end do
           end do
@@ -1344,32 +1356,44 @@ contains
 
           call t_startf('ndrop_calc_VertMix_aerotracker')
           do lptr2=1,n_aerosol_tracers
-             source(top_lev:pver-1) = mact_tracer(top_lev:pver-1,lptr2)*(raercol_tracer(top_lev+1:pver,lptr2,nsav))
-
-             tmpa = raercol_tracer(pver,lptr2,nsav)*mact_tracer(pver,lptr2) &
-                  + raercol_cw_tracer(pver,lptr2,nsav)*(mact_tracer(pver,lptr2) - taumix_internal_pver_inv)
-
-             source(pver) = max(0.0_r8, tmpa)
-
              do k=top_lev,pver
-                kp1 = min(k+1,pver)
-                km1 = max(k-1,top_lev)
-                raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
-                     + ekkp(k)*(overlapp(k)*raercol_cw_tracer(kp1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav))&
-                     + ekkm(k)*(overlapm(k)*raercol_cw_tracer(km1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)) )
+                if (k < pver) then
+                   source(k) = mact_tracer(k,lptr2)*(raercol_tracer(k+1,lptr2,nsav))
+                else
+                   tmpa = raercol_tracer(k,lptr2,nsav)*mact_tracer(k,lptr2) &
+                        + raercol_cw_tracer(k,lptr2,nsav)*(mact_tracer(k,lptr2) - taumix_internal_pver_inv)
+                   source(k) = max(0.0_r8, tmpa)
+                end if
+                if (k == top_lev) then
+                   raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
+                        + ekkp(k)*(overlapp(k)*raercol_cw_tracer(k+1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)))
+                   raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
+                        + ekkp(k)*(raercol_tracer(k+1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
+                        +raercol_cw_tracer(k+1,lptr2,nsav)*(1.0_r8-overlapp(k))))
+
+                else if (k == pver) then
+                   raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
+                        + ekkm(k)*(overlapm(k)*raercol_cw_tracer(k-1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)) )
+                   raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
+                        + ekkm(k)*(raercol_tracer(k-1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav) &
+                        +raercol_cw_tracer(k-1,lptr2,nsav)*(1.0_r8-overlapm(k))) )
+
+                else
+                   raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
+                        + ekkp(k)*(overlapp(k)*raercol_cw_tracer(k+1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav))&
+                        + ekkm(k)*(overlapm(k)*raercol_cw_tracer(k-1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)) )
+                   raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
+                        + ekkp(k)*(raercol_tracer(k+1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
+                        +raercol_cw_tracer(k+1,lptr2,nsav)*(1.0_r8-overlapp(k)))  &
+                        + ekkm(k)*(raercol_tracer(k-1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
+                        +raercol_cw_tracer(k-1,lptr2,nsav)*(1.0_r8-overlapm(k))) )
+                end if
+
                 ! force to non-negative if (raercol_cw_tracer(k,lptr2,nnew)<-1.e-30) then
-                raercol_cw_tracer(k,lptr2,nnew) = max(raercol_cw_tracer(k,lptr2,nnew),0._r8)
-
-                raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
-                     + ekkp(k)*(raercol_tracer(kp1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
-                               +raercol_cw_tracer(kp1,lptr2,nsav)*(1.0_r8-overlapp(k)))  &
-                     + ekkm(k)*(raercol_tracer(km1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
-                               +raercol_cw_tracer(km1,lptr2,nsav)*(1.0_r8-overlapm(k))) )
                 ! force to non-negative if (raercol_tracer(k,lptr2,nnew)<-1.e-30) then
+                raercol_cw_tracer(k,lptr2,nnew) = max(raercol_cw_tracer(k,lptr2,nnew),0._r8)
                 raercol_tracer(k,lptr2,nnew) = max(raercol_tracer(k,lptr2,nnew),0._r8)
-
              end do
-
           end do !Number of aerosol tracers
           call t_stopf('ndrop_calc_VertMix_aerotracker')
 
