@@ -55,7 +55,7 @@ subroutine neu_wetdep_init
 !
   use constituents, only : cnst_get_ind,cnst_mw
   use cam_history,  only : addfld, add_default, horiz_only
-  use phys_control, only : phys_getopts
+  use phys_control, only : phys_getopts, cam_chempkg_is
 !
   integer :: m,l
   character*20 :: test_name
@@ -89,6 +89,9 @@ subroutine neu_wetdep_init
 ! mapping based on the MOZART4 wet removal subroutine;
 ! this might need to be redone (JFL: Sep 2010)
 !
+! Skip mapping if using GEOS-Chem; all GEOS-Chem species are in dep_data_file
+! (heff table) specified in namelist drv_flds_in (EWL: Dec 2022)
+  if ( .not. cam_chempkg_is('geoschem_mam4') ) then
     select case( trim(test_name) )
 !
 ! CCMI: added SO2t and NH_50W
@@ -112,6 +115,7 @@ subroutine neu_wetdep_init
       case(  'SOAGbb4' )
          test_name = 'SOAGff4'
     end select
+  endif
 !
     do l = 1,n_species_table
 !

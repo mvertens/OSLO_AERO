@@ -132,14 +132,20 @@ integer              :: dragblj_idx  = -1
 integer              :: taubljx_idx  = -1
 integer              :: taubljy_idx  = -1
 
+! pbuf field for clubb top above which HB (Holtslag Boville) scheme may be enabled
+integer              :: clubbtop_idx = -1
+
 logical              :: diff_cnsrv_mass_check        ! do mass conservation check
 logical              :: do_iss                       ! switch for implicit turbulent surface stress
-logical              :: prog_modal_aero = .false.    ! set true if prognostic modal aerosols are present
+logical              :: prog_modal_aero = .true.     ! set true if prognostic modal aerosols are present
 integer              :: pmam_ncnst = 0               ! number of prognostic modal aerosol constituents
 integer, allocatable :: pmam_cnst_idx(:)             ! constituent indices of prognostic modal aerosols
 
 logical              :: do_pbl_diags = .false.
 logical              :: waccmx_mode = .false.
+logical              :: do_hb_above_clubb = .false.
+
+real(r8),allocatable :: kvm_sponge(:)
 
 contains
 
@@ -280,6 +286,7 @@ subroutine vertical_diffusion_init(pbuf2d)
   use beljaars_drag_cam, only : beljaars_drag_init
   use upper_bc,          only : ubc_init
   use phys_control,      only : waccmx_is, fv_am_correction
+  use ref_pres,          only : ptop_ref
 
   type(physics_buffer_desc), pointer :: pbuf2d(:,:)
   character(128) :: errstring   ! Error status for init_vdiff
@@ -287,9 +294,9 @@ subroutine vertical_diffusion_init(pbuf2d)
   integer        :: nbot_eddy   ! Bottom interface level to which eddy vertical diffusion is applied ( = pver )
   integer        :: k           ! Vertical loop index
 
-  real(r8), parameter :: ntop_eddy_pres = 1.e-5_r8 ! Pressure below which eddy diffusion is not done in WACCM-X. (Pa)
+  real(r8), parameter :: ntop_eddy_pres = 1.e-7_r8 ! Pressure below which eddy diffusion is not done in WACCM-X. (Pa)
 
-  integer :: im, l, m, nmodes, nspec
+  integer :: im, l, m, nmodes, nspec, ierr
 
   logical :: history_amwg                 ! output the variables used by the AMWG diag package
   logical :: history_eddy                 ! output the eddy variables
@@ -297,10 +304,48 @@ subroutine vertical_diffusion_init(pbuf2d)
   integer :: history_budget_histfile_num  ! output history file number for budget fields
   logical :: history_waccm                ! output variables of interest for WACCM runs
 
-  ! ----------------------------------------------------------------- !
+  !
+  ! add sponge layer vertical diffusion
+  !
+  if (ptop_ref>1e-1_r8.and.ptop_ref<100.0_r8) then
+     !
+     ! CAM7 FMT (but not CAM6 top (~225 Pa) or CAM7 low top or lower)
+     !
+     allocate(kvm_sponge(4), stat=ierr)
+     if( ierr /= 0 ) then
+        write(iulog,*) 'vertical_diffusion_init:  kvm_sponge allocation error = ',ierr
+        call endrun('vertical_diffusion_init: failed to allocate kvm_sponge array')
+     end if
+     kvm_sponge(1) = 2E6_r8
+     kvm_sponge(2) = 2E6_r8
+     kvm_sponge(3) = 0.5E6_r8
+     kvm_sponge(4) = 0.1E6_r8
+  else if (ptop_ref>1e-4_r8) then
+     !
+     ! WACCM and WACCM-x
+     !
+     allocate(kvm_sponge(6), stat=ierr)
+     if( ierr /= 0 ) then
+        write(iulog,*) 'vertical_diffusion_init:  kvm_sponge allocation error = ',ierr
+        call endrun('vertical_diffusion_init: failed to allocate kvm_sponge array')
+     end if
+     kvm_sponge(1) = 2E6_r8
+     kvm_sponge(2) = 2E6_r8
+     kvm_sponge(3) = 1.5E6_r8
+     kvm_sponge(4) = 1.0E6_r8
+     kvm_sponge(5) = 0.5E6_r8
+     kvm_sponge(6) = 0.1E6_r8
+  end if
 
   if (masterproc) then
      write(iulog,*)'Initializing vertical diffusion (vertical_diffusion_init)'
+     if (allocated(kvm_sponge)) then
+        write(iulog,*)'Artificial sponge layer vertical diffusion added:'
+        do k=1,size(kvm_sponge(:),1)
+           write(iulog,'(a44,i2,a17,e7.2,a8)') 'vertical diffusion coefficient at interface',k,' is increased by ', &
+                                                kvm_sponge(k),' m2 s-2'
+        end do
+     end if !allocated
   end if
 
   ! Check to see if WACCM-X is on (currently we don't care whether the
@@ -319,12 +364,12 @@ subroutine vertical_diffusion_init(pbuf2d)
   call cnst_get_ind( 'NUMLIQ', ixnumliq, abort=.false. )
   call cnst_get_ind( 'NUMICE', ixnumice, abort=.false. )
 
-  ! Set prog_modal_aero determines whether prognostic modal aerosols are present in the run.
+  ! OSLO_AERO begin
+  ! prog_modal_aero determines whether prognostic modal aerosols are present in the run.
   ! Get the constituent indices of the number and mass mixing ratios of the modal
   ! aerosols.
   ! N.B. - This implementation assumes that the prognostic modal aerosols are
   !        impacting the climate calculation (i.e., can get info from list 0).
-  ! OSLO_AERO begin
   prog_modal_aero = .true.
   pmam_ncnst = getNumberOfAerosolTracers()
   allocate(pmam_cnst_idx(pmam_ncnst))
@@ -371,6 +416,8 @@ subroutine vertical_diffusion_init(pbuf2d)
 
   if (masterproc) write(iulog, fmt='(a,i3,5x,a,i3)') 'NTOP_EDDY  =', ntop_eddy, 'NBOT_EDDY  =', nbot_eddy
 
+  call phys_getopts(do_hb_above_clubb_out=do_hb_above_clubb)
+
   select case ( eddy_scheme )
   case ( 'diag_TKE', 'SPCAM_m2005' )
      if( masterproc ) write(iulog,*) &
@@ -383,6 +430,18 @@ subroutine vertical_diffusion_init(pbuf2d)
      call addfld('HB_ri',      (/ 'lev' /),  'A', 'no',  'Richardson Number (HB Scheme), I' )
   case ( 'CLUBB_SGS' )
      do_pbl_diags = .true.
+     call init_hb_diff(gravit, cpair, ntop_eddy, nbot_eddy, pref_mid, karman, eddy_scheme)
+     !
+     ! run HB scheme where CLUBB is not active when running cam_dev or cam6 physics
+     ! else init_hb_diff is called just for diagnostic purposes
+     !
+     if (do_hb_above_clubb) then
+       if( masterproc ) then
+         write(iulog,*) 'vertical_diffusion_init: '
+         write(iulog,*) 'eddy_diffusivity scheme where CLUBB is not active:  Holtslag and Boville'
+       end if
+       call addfld('HB_ri',      (/ 'lev' /),  'A', 'no',  'Richardson Number (HB Scheme), I' )
+     end if
   end select
 
   ! ------------------------------------------- !
@@ -562,6 +621,7 @@ subroutine vertical_diffusion_init(pbuf2d)
         call add_default( 'DTV'       , history_budget_histfile_num, ' ' )
      end if
   end if
+
   if ( history_waccm ) then
      if (do_molec_diff) then
         call add_default ( 'TTPXMLC', 1, ' ' )
@@ -584,6 +644,11 @@ subroutine vertical_diffusion_init(pbuf2d)
      kvh_idx = pbuf_get_index('kvh')
   end if
 
+  if (do_hb_above_clubb) then
+     ! pbuf field denoting top of clubb
+     clubbtop_idx = pbuf_get_index('clubbtop')
+  end if
+
   ! Initialization of some pbuf fields
   if (is_first_step()) then
      ! Initialization of pbuf fields tke, kvh, kvm are done in phys_inidat
@@ -596,7 +661,6 @@ subroutine vertical_diffusion_init(pbuf2d)
         call pbuf_set_field(pbuf2d, qti_flx_idx,  0.0_r8)
      end if
   end if
-
 end subroutine vertical_diffusion_init
 
 ! =============================================================================== !
@@ -643,7 +707,7 @@ subroutine vertical_diffusion_tend( &
   use trb_mtn_stress_cam, only : trb_mtn_stress_tend
   use beljaars_drag_cam,  only : beljaars_drag_tend
   use eddy_diff_cam,      only : eddy_diff_tend
-  use hb_diff,            only : compute_hb_diff
+  use hb_diff,            only : compute_hb_diff, compute_hb_free_atm_diff
   use wv_saturation,      only : qsat
   use molec_diff,         only : compute_molec_diff, vd_lu_qdecomp
   use constituents,       only : qmincg, qmin, cnst_type
@@ -658,6 +722,7 @@ subroutine vertical_diffusion_tend( &
   use upper_bc,           only : ubc_get_flxs
   use coords_1d,          only : Coords1D
   use phys_control,       only : cam_physpkg_is
+  use ref_pres,           only : ptop_ref
 
   ! --------------- !
   ! Input Arguments !
@@ -824,6 +889,7 @@ subroutine vertical_diffusion_tend( &
   real(r8) :: tauy(pcols)
   real(r8) :: shflux(pcols)
   real(r8) :: cflux(pcols,pcnst)
+  integer,  pointer :: clubbtop(:)   ! (pcols)
 
   logical  :: lq(pcnst)
 
@@ -964,46 +1030,79 @@ subroutine vertical_diffusion_tend( &
      ! Modification : We may need to use 'taux' instead of 'tautotx' here, for
      !                consistency with the previous HB scheme.
 
-     call compute_hb_diff( lchnk     , ncol     ,                                &
-          th        , state%t  , state%q , state%zm , state%zi, &
-          state%pmid, state%u  , state%v , tautotx  , tautoty , &
-          cam_in%shf, cam_in%cflx(:,1), obklen  , ustar    , pblh    , &
-          kvm       , kvh      , kvq     , cgh      , cgs     , &
-          tpert     , qpert    , cldn    , cam_in%ocnfrac  , tke     , &
+
+     call compute_hb_diff(ncol                                    , &
+          th        , state%t  , state%q , state%zm , state%zi    , &
+          state%pmid, state%u  , state%v , tautotx  , tautoty     , &
+          cam_in%shf, cam_in%cflx(:,1), obklen  , ustar    , pblh , &
+          kvm       , kvh      , kvq     , cgh      , cgs         , &
+          tpert     , qpert    , cldn    , cam_in%ocnfrac  , tke  , &
           ri        , &
-          eddy_scheme )
+          eddy_scheme)
 
      call outfld( 'HB_ri',          ri,         pcols,   lchnk )
 
   case ( 'CLUBB_SGS' )
+    !
+    ! run HB scheme where CLUBB is not active when running cam_dev
+    !
+    if (do_hb_above_clubb) then
+      call compute_hb_free_atm_diff( ncol          , &
+           th        , state%t  , state%q , state%zm           , &
+           state%pmid, state%u  , state%v , tautotx  , tautoty , &
+           cam_in%shf, cam_in%cflx(:,1), obklen  , ustar       , &
+           kvm       , kvh      , kvq     , cgh      , cgs     , &
+           ri        )
 
-     ! CLUBB has only a bare-bones placeholder here. If using CLUBB, the
-     ! PBL diffusion will happen before coupling, so vertical_diffusion
-     ! is only handling other things, e.g. some boundary conditions, tms,
-     ! and molecular diffusion.
+      call pbuf_get_field(pbuf, clubbtop_idx, clubbtop)
+      !
+      ! zero out HB where CLUBB is active
+      !
+      do i=1,ncol
+        do k=clubbtop(i),pverp
+          kvm(i,k) = 0.0_r8
+          kvh(i,k) = 0.0_r8
+          kvq(i,k) = 0.0_r8
+          cgs(i,k) = 0.0_r8
+          cgh(i,k) = 0.0_r8
+        end do
+      end do
 
-     call virtem(ncol, th(:ncol,pver),state%q(:ncol,pver,1), thvs(:ncol))
+      call outfld( 'HB_ri',          ri,         pcols,   lchnk )
+    else
+      ! CLUBB has only a bare-bones placeholder here. If using CLUBB, the
+      ! PBL diffusion will happen before coupling, so vertical_diffusion
+      ! is only handling other things, e.g. some boundary conditions, tms,
+      ! and molecular diffusion.
 
-     call calc_ustar( ncol, state%t(:ncol,pver), state%pmid(:ncol,pver), &
-          cam_in%wsx(:ncol), cam_in%wsy(:ncol), rrho(:ncol), ustar(:ncol))
-     ! Use actual qflux, not lhf/latvap as was done previously
-     call calc_obklen( ncol, th(:ncol,pver), thvs(:ncol), cam_in%cflx(:ncol,1), &
-          cam_in%shf(:ncol), rrho(:ncol), ustar(:ncol),  &
-          khfs(:ncol), kqfs(:ncol), kbfs(:ncol), obklen(:ncol))
+      call virtem(ncol, th(:ncol,pver),state%q(:ncol,pver,1), thvs(:ncol))
 
-     ! These tendencies all applied elsewhere.
-     kvm = 0._r8
-     kvh = 0._r8
-     kvq = 0._r8
-
-     ! Not defined since PBL is not actually running here.
-     cgh = 0._r8
-     cgs = 0._r8
-
+      call calc_ustar( ncol, state%t(:ncol,pver), state%pmid(:ncol,pver), &
+           cam_in%wsx(:ncol), cam_in%wsy(:ncol), rrho(:ncol), ustar(:ncol))
+      ! Use actual qflux, not lhf/latvap as was done previously
+      call calc_obklen( ncol, th(:ncol,pver), thvs(:ncol), cam_in%cflx(:ncol,1), &
+           cam_in%shf(:ncol), rrho(:ncol), ustar(:ncol),  &
+           khfs(:ncol), kqfs(:ncol), kbfs(:ncol), obklen(:ncol))
+      ! These tendencies all applied elsewhere.
+      kvm = 0._r8
+      kvh = 0._r8
+      kvq = 0._r8
+      ! Not defined since PBL is not actually running here.
+      cgh = 0._r8
+      cgs = 0._r8
+    end if
   end select
 
   call outfld( 'ustar',   ustar(:), pcols, lchnk )
   call outfld( 'obklen', obklen(:), pcols, lchnk )
+  !
+  ! add sponge layer vertical diffusion
+  !
+  if (allocated(kvm_sponge)) then
+     do k=1,size(kvm_sponge(:),1)
+        kvm(:ncol,1) = kvm(:ncol,1)+kvm_sponge(k)
+     end do
+  end if
 
   ! kvh (in pbuf) is used by other physics parameterizations, and as an initial guess in compute_eddy_diff
   ! on the next timestep.  It is not updated by the compute_vdiff call below.
@@ -1401,8 +1500,8 @@ subroutine vertical_diffusion_tend( &
      call outfld( 'vflx_cg_PBL'  , vflx_cg,                   pcols, lchnk )
      call outfld( 'slten_PBL'    , slten,                     pcols, lchnk )
      call outfld( 'qtten_PBL'    , qtten,                     pcols, lchnk )
-     call outfld( 'uten_PBL'     , ptend%u(:,:),              pcols, lchnk )
-     call outfld( 'vten_PBL'     , ptend%v(:,:),              pcols, lchnk )
+     call outfld( 'uten_PBL'     , ptend%u,                   pcols, lchnk )
+     call outfld( 'vten_PBL'     , ptend%v,                   pcols, lchnk )
      call outfld( 'qvten_PBL'    , ptend%q(:,:,1),            pcols, lchnk )
      call outfld( 'qlten_PBL'    , ptend%q(:,:,ixcldliq),     pcols, lchnk )
      call outfld( 'qiten_PBL'    , ptend%q(:,:,ixcldice),     pcols, lchnk )
@@ -1441,7 +1540,7 @@ subroutine vertical_diffusion_tend( &
   call outfld( 'DUV'          , ptend%u,                   pcols, lchnk )
   call outfld( 'DVV'          , ptend%v,                   pcols, lchnk )
   do m = 1, pcnst
-     call outfld( vdiffnam(m) , ptend%q(:,:,m),            pcols, lchnk )
+     call outfld( vdiffnam(m) , ptend%q(1,1,m),            pcols, lchnk )
   end do
   if( do_molec_diff ) then
      call outfld( 'TTPXMLC'  , topflx,                    pcols, lchnk )

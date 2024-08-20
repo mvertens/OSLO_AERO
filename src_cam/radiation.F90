@@ -17,7 +17,7 @@ use physconst,           only: cappa, cpair
 use time_manager,        only: get_nstep, is_first_restart_step, &
                                get_curr_calday, get_step_size
 
-use rad_constituents,    only: N_DIAG, rad_cnst_get_call_list, rad_cnst_get_info, &
+use rad_constituents,    only: N_DIAG, rad_cnst_get_call_list, &
                                rad_cnst_get_gas, rad_cnst_out, oldcldoptics, &
                                liqcldoptics, icecldoptics
 
@@ -371,7 +371,6 @@ subroutine radiation_init(pbuf2d)
    use rad_solar_var,   only: rad_solar_var_init
    use radiation_data,  only: rad_data_init
    use cloud_rad_props, only: cloud_rad_props_init
-   use modal_aer_opt,   only: modal_aer_opt_init
    use rrtmg_state,     only: rrtmg_state_init
    use time_manager,    only: is_first_step
 
@@ -380,7 +379,7 @@ subroutine radiation_init(pbuf2d)
    type(physics_buffer_desc), pointer :: pbuf2d(:,:)
 
    ! local variables
-   integer :: icall, nmodes
+   integer :: icall
    logical :: active_calls(0:N_DIAG)
    integer :: nstep                       ! current timestep number
    logical :: history_amwg                ! output the variables used by the AMWG diag package
@@ -424,11 +423,6 @@ subroutine radiation_init(pbuf2d)
                      history_vdiag_out  = history_vdiag,   &
                      history_budget_out = history_budget,  &
                      history_budget_histfile_num_out = history_budget_histfile_num)
-
-   ! Determine whether modal aerosols are affecting the climate, and if so
-   ! then initialize the modal aerosol optics module
-   call rad_cnst_get_info(0, nmodes=nmodes)
-   if (nmodes > 0) call modal_aer_opt_init()
 
    ! "irad_always" is number of time steps to execute radiation continuously from start of
    ! initial OR restart run
@@ -548,6 +542,7 @@ subroutine radiation_init(pbuf2d)
 
       end if
    end do
+
    ! OSLO_AERO begin
    call addfld('FDSCDRF', (/ 'ilev' /), 'A', 'W/m2', 'Shortwave clear-sky downward flux')
    call addfld('FUSCDRF', (/ 'ilev' /), 'A', 'W/m2', 'Shortwave clear-sky upward flux')
@@ -740,12 +735,14 @@ subroutine radiation_tend( &
    use cam_control_mod,    only: eccen, mvelpp, lambm0, obliqr
    use shr_orb_mod,        only: shr_orb_decl, shr_orb_cosz
 
+   use aer_rad_props,      only: aer_rad_props_sw, aer_rad_props_lw
+
    use cloud_rad_props,    only: get_ice_optics_sw, get_liquid_optics_sw, liquid_cloud_get_rad_props_lw, &
                                  ice_cloud_get_rad_props_lw, cloud_rad_props_get_lw, &
                                  grau_cloud_get_rad_props_lw, get_grau_optics_sw, &
                                  snow_cloud_get_rad_props_lw, get_snow_optics_sw
-   use slingo,             only: slingo_liq_get_rad_props_lw, slingo_liq_optics_sw
-   use ebert_curry,        only: ec_ice_optics_sw, ec_ice_get_rad_props_lw
+   use slingo_liq_optics,  only: slingo_liq_get_rad_props_lw, slingo_liq_optics_sw
+   use ebert_curry_ice_optics, only: ec_ice_optics_sw, ec_ice_get_rad_props_lw
 
    use rad_solar_var,      only: get_variability
    use radsw,              only: rad_rrtmg_sw
@@ -777,9 +774,12 @@ subroutine radiation_tend( &
 
    type(rad_out_t), target, optional, intent(out) :: rd_out
 
+
    ! Local variables
+   ! OSLO_AERO begin
    integer                  :: band
    logical                  :: idrf
+   ! OSLO_AERO end
    type(rad_out_t), pointer :: rd  ! allow rd_out to be optional by allocating a local object
                                    ! if the argument is not present
    logical  :: write_output
@@ -828,28 +828,28 @@ subroutine radiation_tend( &
    ! cloud radiative parameters are "in cloud" not "in cell"
    real(r8) :: ice_tau    (nswbands,pcols,pver) ! ice extinction optical depth
    real(r8) :: ice_tau_w  (nswbands,pcols,pver) ! ice single scattering albedo * tau
-   real(r8) :: ice_tau_w_g(nswbands,pcols,pver) ! ice assymetry parameter * tau * w
+   real(r8) :: ice_tau_w_g(nswbands,pcols,pver) ! ice asymmetry parameter * tau * w
    real(r8) :: ice_tau_w_f(nswbands,pcols,pver) ! ice forward scattered fraction * tau * w
    real(r8) :: ice_lw_abs (nlwbands,pcols,pver)   ! ice absorption optics depth (LW)
 
    ! cloud radiative parameters are "in cloud" not "in cell"
    real(r8) :: liq_tau    (nswbands,pcols,pver) ! liquid extinction optical depth
    real(r8) :: liq_tau_w  (nswbands,pcols,pver) ! liquid single scattering albedo * tau
-   real(r8) :: liq_tau_w_g(nswbands,pcols,pver) ! liquid assymetry parameter * tau * w
+   real(r8) :: liq_tau_w_g(nswbands,pcols,pver) ! liquid asymmetry parameter * tau * w
    real(r8) :: liq_tau_w_f(nswbands,pcols,pver) ! liquid forward scattered fraction * tau * w
    real(r8) :: liq_lw_abs (nlwbands,pcols,pver) ! liquid absorption optics depth (LW)
 
    ! cloud radiative parameters are "in cloud" not "in cell"
    real(r8) :: cld_tau    (nswbands,pcols,pver) ! cloud extinction optical depth
    real(r8) :: cld_tau_w  (nswbands,pcols,pver) ! cloud single scattering albedo * tau
-   real(r8) :: cld_tau_w_g(nswbands,pcols,pver) ! cloud assymetry parameter * w * tau
+   real(r8) :: cld_tau_w_g(nswbands,pcols,pver) ! cloud asymmetry parameter * w * tau
    real(r8) :: cld_tau_w_f(nswbands,pcols,pver) ! cloud forward scattered fraction * w * tau
    real(r8) :: cld_lw_abs (nlwbands,pcols,pver) ! cloud absorption optics depth (LW)
 
    ! cloud radiative parameters are "in cloud" not "in cell"
    real(r8) :: snow_tau    (nswbands,pcols,pver) ! snow extinction optical depth
    real(r8) :: snow_tau_w  (nswbands,pcols,pver) ! snow single scattering albedo * tau
-   real(r8) :: snow_tau_w_g(nswbands,pcols,pver) ! snow assymetry parameter * tau * w
+   real(r8) :: snow_tau_w_g(nswbands,pcols,pver) ! snow asymmetry parameter * tau * w
    real(r8) :: snow_tau_w_f(nswbands,pcols,pver) ! snow forward scattered fraction * tau * w
    real(r8) :: snow_lw_abs (nlwbands,pcols,pver)! snow absorption optics depth (LW)
 
@@ -857,7 +857,7 @@ subroutine radiation_tend( &
    ! cloud radiative parameters are "in cloud" not "in cell"
    real(r8) :: grau_tau    (nswbands,pcols,pver) ! graupel extinction optical depth
    real(r8) :: grau_tau_w  (nswbands,pcols,pver) ! graupel single scattering albedo * tau
-   real(r8) :: grau_tau_w_g(nswbands,pcols,pver) ! graupel assymetry parameter * tau * w
+   real(r8) :: grau_tau_w_g(nswbands,pcols,pver) ! graupel asymmetry parameter * tau * w
    real(r8) :: grau_tau_w_f(nswbands,pcols,pver) ! graupel forward scattered fraction * tau * w
    real(r8) :: grau_lw_abs (nlwbands,pcols,pver)! graupel absorption optics depth (LW)
 
@@ -865,7 +865,7 @@ subroutine radiation_tend( &
    real(r8) :: cldfprime(pcols,pver)              ! combined cloud fraction (snow plus regular)
    real(r8) :: c_cld_tau    (nswbands,pcols,pver) ! combined cloud extinction optical depth
    real(r8) :: c_cld_tau_w  (nswbands,pcols,pver) ! combined cloud single scattering albedo * tau
-   real(r8) :: c_cld_tau_w_g(nswbands,pcols,pver) ! combined cloud assymetry parameter * w * tau
+   real(r8) :: c_cld_tau_w_g(nswbands,pcols,pver) ! combined cloud asymmetry parameter * w * tau
    real(r8) :: c_cld_tau_w_f(nswbands,pcols,pver) ! combined cloud forward scattered fraction * w * tau
    real(r8) :: c_cld_lw_abs (nlwbands,pcols,pver) ! combined cloud absorption optics depth (LW)
 
@@ -901,7 +901,7 @@ subroutine radiation_tend( &
    ! Aerosol radiative properties
    real(r8) :: aer_tau    (pcols,0:pver,nswbands) ! aerosol extinction optical depth
    real(r8) :: aer_tau_w  (pcols,0:pver,nswbands) ! aerosol single scattering albedo * tau
-   real(r8) :: aer_tau_w_g(pcols,0:pver,nswbands) ! aerosol assymetry parameter * w * tau
+   real(r8) :: aer_tau_w_g(pcols,0:pver,nswbands) ! aerosol asymmetry parameter * w * tau
    real(r8) :: aer_tau_w_f(pcols,0:pver,nswbands) ! aerosol forward scattered fraction * w * tau
    real(r8) :: aer_lw_abs (pcols,pver,nlwbands)   ! aerosol absorption optics depth (LW)
 
@@ -1240,9 +1240,9 @@ subroutine radiation_tend( &
 
       ! Solar radiation computation
 
-      ! OSLO_AERO begin
       if (dosw) then
 
+         ! OSLO_AERO begin
          qdirind(:ncol,:,:) = state%q(:ncol,:,:)
 
          ! Volcanic optics for solar (SW) bands
@@ -1265,6 +1265,13 @@ subroutine radiation_tend( &
               volc_ext_sun, volc_omega_sun, volc_g_sun, volc_ext_earth, volc_omega_earth, &
               aodvis, absvis)
 
+         !TODO (mvertens): should the following be added here?
+         rd%cld_tau_cloudsim(:ncol,:) = cld_tau(rrtmg_sw_cloudsim_band,:ncol,:)
+         rd%aer_tau550(:ncol,:)       = aer_tau(:ncol,:,idx_sw_diag)
+         rd%aer_tau400(:ncol,:)       = aer_tau(:ncol,:,idx_sw_diag+1)
+         rd%aer_tau700(:ncol,:)       = aer_tau(:ncol,:,idx_sw_diag-1)
+         ! OSLO_AERO end
+
          call get_variability(sfac)
 
          ! Get the active climate/diagnostic shortwave calculations
@@ -1278,6 +1285,7 @@ subroutine radiation_tend( &
                ! update the concentrations in the RRTMG state object
                call rrtmg_state_update(state, pbuf, icall, r_state)
 
+               ! OSLO_AERO begin
                ! A first call with Oslo aerosols set to zero for radiative forcing diagnostics
                ! follwoing the Ghan (2013) method:
                ! for calculation of direct radiative forcing, not necessarily "offline" as such anymore
@@ -1319,17 +1327,18 @@ subroutine radiation_tend( &
 #endif
 
                call rad_rrtmg_sw( &
-                    lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,          &
-                    cldfprime, aer_tau, aer_tau_w, aer_tau_w_g, aer_tau_w_f,   &
-                    eccf, coszrs, rd%solin, sfac, cam_in%asdir,                &
-                    cam_in%asdif, cam_in%aldir, cam_in%aldif, qrs, rd%qrsc,    &
-                    fsnt, rd%fsntc, rd%fsntoa, rd%fsutoa, rd%fsntoac,          &
-                    rd%fsnirt, rd%fsnrtc, rd%fsnirtsq, fsns, rd%fsnsc,         &
-                    rd%fsdsc, fsds, cam_out%sols, cam_out%soll, cam_out%solsd, &
-                    cam_out%solld, fns, fcns, Nday, Nnite,                     &
-                    IdxDay, IdxNite, su, sd, E_cld_tau=c_cld_tau,              &
-                    E_cld_tau_w=c_cld_tau_w, E_cld_tau_w_g=c_cld_tau_w_g,      &
-                    E_cld_tau_w_f=c_cld_tau_w_f, old_convert=.false., idrf=.false.)
+                  lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,          &
+                  cldfprime, aer_tau, aer_tau_w, aer_tau_w_g,  aer_tau_w_f,  &
+                  eccf, coszrs, rd%solin, sfac, cam_in%asdir,                &
+                  cam_in%asdif, cam_in%aldir, cam_in%aldif, qrs, rd%qrsc,    &
+                  fsnt, rd%fsntc, rd%fsntoa, rd%fsutoa, rd%fsntoac,          &
+                  rd%fsnirt, rd%fsnrtc, rd%fsnirtsq, fsns, rd%fsnsc,         &
+                  rd%fsdsc, fsds, cam_out%sols, cam_out%soll, cam_out%solsd, &
+                  cam_out%solld, fns, fcns, Nday, Nnite,                     &
+                  IdxDay, IdxNite, su, sd, E_cld_tau=c_cld_tau,              &
+                  E_cld_tau_w=c_cld_tau_w, E_cld_tau_w_g=c_cld_tau_w_g,      &
+                  E_cld_tau_w_f=c_cld_tau_w_f, old_convert=.false.)
+               ! OSLO_AERO end
 
                ! Output net fluxes at 200 mb
                call vertinterp(ncol, pcols, pverp, state%pint, 20000._r8, fcns, rd%fsn200c)
@@ -1344,45 +1353,8 @@ subroutine radiation_tend( &
 
             end if
          end do
+
       end if
-
-      ! Calculate cloud-free fraction assuming random overlap
-      ! (kind of duplicated from cloud_cover_diags::cldsav)
-      ! (note this duplicated code and may not be consistent with cldtot calculated elsewhere)
-      cloudfree(1:ncol)    = 1.0_r8
-      cloudfreemax(1:ncol) = 1.0_r8
-      do k = 1, pver
-         do i=1,ncol
-            cloudfree(i) = cloudfree(i) * cloudfreemax(i)
-            cloudfreemax(i) = min(cloudfreemax(i),1.0_r8-cld(i,k))
-         end do
-      end do
-
-      ! Calculate AOD (visible) for cloud free
-      do i = 1, ncol
-         clearodvis(i)  = cloudfree(i)*aodvis(i)
-         clearabsvis(i) = cloudfree(i)*absvis(i)
-      end do
-
-      ! clear-sky AOD and absorptive AOD for visible wavelength close to 0.55 um (0.35-0.64)
-      ! Note that caodvis and cabsvis output should be devided by dayfoc*cloudfree to give physical (A)AOD values
-      call outfld('CAODVIS ',clearodvis  ,pcols,lchnk)
-      call outfld('CABSVIS ',clearabsvis ,pcols,lchnk)
-      call outfld('CLDFREE ',cloudfree   ,pcols,lchnk)
-#ifdef AEROCOM
-      do i = 1, ncol
-         clearod440(i)     = cloudfree(i)*dod440(i)
-         clearod550(i)     = cloudfree(i)*dod550(i)
-         clearod870(i)     = cloudfree(i)*dod870(i)
-         clearabs550(i)    = cloudfree(i)*abs550(i)
-         clearabs550alt(i) = cloudfree(i)*abs550alt(i)
-      end do
-      call outfld('CDOD440 ',clearod440     ,pcols,lchnk)
-      call outfld('CDOD550 ',clearod550     ,pcols,lchnk)
-      call outfld('CDOD870 ',clearod870     ,pcols,lchnk)
-      call outfld('CABS550 ',clearabs550    ,pcols,lchnk)
-      call outfld('CABS550A',clearabs550alt ,pcols,lchnk)
-#endif
 
       ! Output aerosol mmr
       call rad_cnst_out(0, state, pbuf)
@@ -1398,29 +1370,19 @@ subroutine radiation_tend( &
 
             if (active_calls(icall)) then
 
+               ! OSLO_AERO BEGIN
                ! update the concentrations in the RRTMG state object
                call  rrtmg_state_update( state, pbuf, icall, r_state)
 
-               call rad_rrtmg_lw(                                             &
-                    lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,         &
-                    aer_lw_abs*0.0_r8, cldfprime, c_cld_lw_abs, qrl, rd%qrlc, &
-                    flns, flnt, rd%flnsc, rd%flntc, cam_out%flwds,            &
-                    rd%flut, rd%flutc, fnl, fcnl, rd%fldsc,                   &
-                    lu, ld)
-
-               call outfld('FLNT_DRF',flnt(:)    , pcols, lchnk)
-               call outfld('FLNTCDRF',rd%flntc(:), pcols, lchnk)
+               ! Note that aer_lw_abs is calculated in the call to oslo_aero_optical_params_calc
+               ! OSLO_AERO_END
 
                call rad_rrtmg_lw( &
-                    lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,  &
-                    aer_lw_abs, cldfprime, c_cld_lw_abs, qrl, rd%qrlc, &
-                    flns, flnt, rd%flnsc, rd%flntc, cam_out%flwds,     &
-                    rd%flut, rd%flutc, fnl, fcnl, rd%fldsc,            &
-                    lu, ld)
-
-               ! FLNT_ORG is just for temporary testing vs. FLNT
-               ftem_1d(1:ncol) = cam_out%flwds(1:ncol) - flns(1:ncol)
-               call outfld('FLUS    ',ftem_1d ,pcols,lchnk)
+                  lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,  &
+                  aer_lw_abs, cldfprime, c_cld_lw_abs, qrl, rd%qrlc, &
+                  flns, flnt, rd%flnsc, rd%flntc, cam_out%flwds,     &
+                  rd%flut, rd%flutc, fnl, fcnl, rd%fldsc,            &
+                  lu, ld)
 
                !  Output fluxes at 200 mb
                call vertinterp(ncol, pcols, pverp, state%pint, 20000._r8, fnl,  rd%fln200)
@@ -1446,7 +1408,6 @@ subroutine radiation_tend( &
          end do
 
       end if
-      ! OSLO_AERO end
 
       ! deconstruct the RRTMG state object
       call rrtmg_state_destroy(r_state)
