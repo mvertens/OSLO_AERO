@@ -94,6 +94,7 @@ contains
     real(r8) :: microp_aero_wsub_scale  = unset_r8 ! subgrid vertical velocity (liquid) scale factor
     real(r8) :: microp_aero_wsubi_scale = unset_r8 ! subgrid vertical velocity (ice) scale factor
     real(r8) :: microp_aero_wsub_min    = unset_r8 ! subgrid vertical velocity (liquid) minimum
+    real(r8) :: microp_aero_wsub_min_asf = unset_r8 ! subgrid vertical velocity (liquid) minimum (after scale factor)
     real(r8) :: microp_aero_wsubi_min   = unset_r8 ! subgrid vertical velocity (ice) minimum
 
     ! Local variables
@@ -101,7 +102,7 @@ contains
     character(len=*), parameter :: subname = 'microp_aero_readnl'
 
     namelist /microp_aero_nl/ microp_aero_bulk_scale, microp_aero_npccn_scale, microp_aero_wsub_min, &
-                              microp_aero_wsubi_min, microp_aero_wsub_scale, microp_aero_wsubi_scale
+                              microp_aero_wsubi_min, microp_aero_wsub_scale, microp_aero_wsubi_scale, microp_aero_wsub_min_asf
     !-----------------------------------------------------------------------------
 
     if (masterproc) then
