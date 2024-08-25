@@ -1292,110 +1292,47 @@ contains
           end do
           call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
 
-          ! mixing of cloud droplets
+          !mixing of cloud droplets
           call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
-          do k=top_lev,pver
-             ! force to non-negative if (q(k)<-1.e-30) then
-             if (k == top_lev) then
-                qcld(k) = qncld(k) + dtmix*(srcn(k) &
-                     + ekkp(k)*(overlapp(k)*qncld(k+1)-qncld(k)))
-                qcld(k) = max(qcld(k),0._r8)
-             else if (k == pver) then
-                qcld(k) = qncld(k) + dtmix*(srcn(k) &
-                     + ekkm(k)*(overlapm(k)*qncld(k-1)-qncld(k)) )
-                qcld(k) = max(qcld(k),0._r8)
-             else
-                qcld(k) = qncld(k) + dtmix*(srcn(k) &
-                     + ekkp(k)*(overlapp(k)*qncld(k+1)-qncld(k))&
-                     + ekkm(k)*(overlapm(k)*qncld(k-1)-qncld(k)) )
-                qcld(k) = max(qcld(k),0._r8)
-             end if
-          end do
+          call explmix_oslo(qcld, srcn, ekkp, ekkm, overlapp, overlapm, qncld, zero, zero, pver, dtmix, .false.)
 
           ! Mix number concentrations consistently!!
           do m = 1, ntot_amode
              mm = mam_idx(m,0)
-             do k=top_lev,pver
-                if (k < pver) then
-                   ! activation source in layer k involves particles from k+1
-                   source(k) = nact(k,m)*(raercol(k+1,mm,nsav))
-                else
-                   ! new formulation for k=pver
-                   tmpa = raercol(k,mm,nsav)*nact(k,m) + raercol_cw(k,mm,nsav)*(nact(k,m)-taumix_internal_pver_inv)
-                   source(k) = max(0.0_r8, tmpa)
-                end if
+             ! activation source in layer k involves particles from k+1
+             source(top_lev:pver-1) = nact(top_lev:pver-1,m)*(raercol(top_lev+1:pver,mm,nsav))
 
-                ! explicit integration of droplet/aerosol mixing with source due to activation/nucleation
-                ! force to non-negative if (raercol_cw(k,mm,nnew)<-1.e-30) then
-                ! the qactold*(1-overlap) terms are resuspension of activated material
-                if (k == top_lev) then
-                   raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
-                        + ekkp(k)*(overlapp(k)*raercol_cw(k+1,mm,nsav)-raercol_cw(k,mm,nsav)))
-                   raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
-                        + ekkp(k)*(raercol(k+1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k+1,mm,nsav)*(1.0_r8-overlapp(k))))
+             ! new formulation for k=pver
+             tmpa = raercol(pver,mm,nsav)*nact(pver,m) &
+                  + raercol_cw(pver,mm,nsav)*(nact(pver,m) - taumix_internal_pver_inv)
+             source(pver) = max(0.0_r8, tmpa)
+             flxconv = 0._r8
 
-                else if (k == pver) then
-                   raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
-                        + ekkm(k)*(overlapm(k)*raercol_cw(k-1,mm,nsav)-raercol_cw(k,mm,nsav)) )
-                   raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
-                        + ekkm(k)*(raercol(k-1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k-1,mm,nsav)*(1.0_r8-overlapm(k))) )
+             call explmix_oslo( raercol_cw(:,mm,nnew), source, ekkp, ekkm, overlapp, &
+                  overlapm, raercol_cw(:,mm,nsav), zero, zero, pver, dtmix, .false.)
 
-                else
-                   raercol_cw(k,mm,nnew) = raercol_cw(k,mm,nsav) + dtmix*(source(k) &
-                        + ekkp(k)*(overlapp(k)*raercol_cw(k+1,mm,nsav)-raercol_cw(k,mm,nsav))&
-                        + ekkm(k)*(overlapm(k)*raercol_cw(k-1,mm,nsav)-raercol_cw(k,mm,nsav)) )
-                   raercol(k,mm,nnew) = raercol(k,mm,nsav) + dtmix*(-source(k) &
-                        + ekkp(k)*(raercol(k+1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k+1,mm,nsav)*(1.0_r8-overlapp(k)))  &
-                        + ekkm(k)*(raercol(k-1,mm,nsav)-raercol(k,mm,nsav)+raercol_cw(k-1,mm,nsav)*(1.0_r8-overlapm(k))) )
-                end if
-                raercol_cw(k,mm,nnew) = max(raercol_cw(k,mm,nnew),0._r8)
-                raercol(k,mm,nnew) = max(raercol(k,mm,nnew),0._r8)
-             end do
+             call explmix_oslo( raercol(:,mm,nnew), source, ekkp, ekkm, overlapp,  &
+                  overlapm, raercol(:,mm,nsav), zero, flxconv, pver, dtmix, .true., raercol_cw(:,mm,nsav))
           end do
-          call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
 
-          call t_startf('ndrop_calc_VertMix_aerotracker')
           do lptr2=1,n_aerosol_tracers
-             do k=top_lev,pver
-                if (k < pver) then
-                   source(k) = mact_tracer(k,lptr2)*(raercol_tracer(k+1,lptr2,nsav))
-                else
-                   tmpa = raercol_tracer(k,lptr2,nsav)*mact_tracer(k,lptr2) &
-                        + raercol_cw_tracer(k,lptr2,nsav)*(mact_tracer(k,lptr2) - taumix_internal_pver_inv)
-                   source(k) = max(0.0_r8, tmpa)
-                end if
-                if (k == top_lev) then
-                   raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
-                        + ekkp(k)*(overlapp(k)*raercol_cw_tracer(k+1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)))
-                   raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
-                        + ekkp(k)*(raercol_tracer(k+1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
-                        +raercol_cw_tracer(k+1,lptr2,nsav)*(1.0_r8-overlapp(k))))
+             source(top_lev:pver-1) = mact_tracer(top_lev:pver-1,lptr2) &
+                                     *(raercol_tracer(top_lev+1:pver,lptr2,nsav))
 
-                else if (k == pver) then
-                   raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
-                        + ekkm(k)*(overlapm(k)*raercol_cw_tracer(k-1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)) )
-                   raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
-                        + ekkm(k)*(raercol_tracer(k-1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav) &
-                        +raercol_cw_tracer(k-1,lptr2,nsav)*(1.0_r8-overlapm(k))) )
+             tmpa = raercol_tracer(pver,lptr2,nsav)*mact_tracer(pver,lptr2) &
+                  + raercol_cw_tracer(pver,lptr2,nsav)*(mact_tracer(pver,lptr2) - taumix_internal_pver_inv)
 
-                else
-                   raercol_cw_tracer(k,lptr2,nnew) = raercol_cw_tracer(k,lptr2,nsav) + dtmix*(source(k) &
-                        + ekkp(k)*(overlapp(k)*raercol_cw_tracer(k+1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav))&
-                        + ekkm(k)*(overlapm(k)*raercol_cw_tracer(k-1,lptr2,nsav)-raercol_cw_tracer(k,lptr2,nsav)) )
-                   raercol_tracer(k,lptr2,nnew) = raercol_tracer(k,lptr2,nsav) + dtmix*(-source(k) &
-                        + ekkp(k)*(raercol_tracer(k+1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
-                        +raercol_cw_tracer(k+1,lptr2,nsav)*(1.0_r8-overlapp(k)))  &
-                        + ekkm(k)*(raercol_tracer(k-1,lptr2,nsav)-raercol_tracer(k,lptr2,nsav)&
-                        +raercol_cw_tracer(k-1,lptr2,nsav)*(1.0_r8-overlapm(k))) )
-                end if
+             source(pver) = max(0.0_r8, tmpa)
+             flxconv = 0.0_r8
 
-                ! force to non-negative if (raercol_cw_tracer(k,lptr2,nnew)<-1.e-30) then
-                ! force to non-negative if (raercol_tracer(k,lptr2,nnew)<-1.e-30) then
-                raercol_cw_tracer(k,lptr2,nnew) = max(raercol_cw_tracer(k,lptr2,nnew),0._r8)
-                raercol_tracer(k,lptr2,nnew) = max(raercol_tracer(k,lptr2,nnew),0._r8)
-             end do
+             call explmix_oslo(raercol_cw_tracer(:,lptr2,nnew), source, ekkp, ekkm, overlapp, &
+                  overlapm, raercol_cw_tracer(:,lptr2,nsav), zero, zero, pver,  dtmix, .false.)
+
+             call explmix_oslo(raercol_tracer(:,lptr2,nnew), source, ekkp, ekkm, overlapp,  &
+                  overlapm, raercol_tracer(:,lptr2,nsav), zero, flxconv, pver, dtmix, .true., &
+                  raercol_cw_tracer(:,lptr2,nsav))
           end do !Number of aerosol tracers
-          call t_stopf('ndrop_calc_VertMix_aerotracker')
+          call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
 
        end do ! old_cloud_nsubmix_loop
        call t_stopf('ndrop_oldcloud_nsubmix')
@@ -1584,6 +1521,62 @@ contains
     deallocate(mfullact_tracer)
 
   end subroutine dropmixnuc_oslo
+
+  !===============================================================================
+
+  subroutine explmix_oslo( q, src, ekkp, ekkm, overlapp, overlapm, &
+       qold, surfrate, flxconv, pver, dt, is_unact, qactold )
+
+    ! explicit integration of droplet/aerosol mixing with source due to activation/nucleation
+
+    integer,  intent(in) :: pver           ! number of levels
+    real(r8), intent(out):: q(pver)        ! mixing ratio to be updated
+    real(r8), intent(in) :: qold(pver)     ! mixing ratio from previous time step
+    real(r8), intent(in) :: src(pver)      ! source due to activation/nucleation (/s)
+    real(r8), intent(in) :: ekkp(pver)     ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
+                                           ! below layer k  (k,k+1 interface)
+    real(r8), intent(in) :: ekkm(pver)     ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
+                                           ! above layer k  (k,k+1 interface)
+    real(r8), intent(in) :: overlapp(pver) ! cloud overlap below
+    real(r8), intent(in) :: overlapm(pver) ! cloud overlap above
+    real(r8), intent(in) :: surfrate       ! surface exchange rate (/s)
+    real(r8), intent(in) :: flxconv        ! convergence of flux from surface
+    real(r8), intent(in) :: dt             ! time step (s)
+    logical,  intent(in) :: is_unact       ! true if this is an unactivated species
+    real(r8), intent(in),optional :: qactold(pver) ! mixing ratio of ACTIVATED species from previous step
+                                                   ! *** this should only be present if the current species
+                                                   ! is unactivated number/sfc/mass
+
+    integer k,kp1,km1
+
+    if ( is_unact ) then
+       ! the qactold*(1-overlap) terms are resuspension of activated material
+       do k=top_lev,pver
+          kp1=min(k+1,pver)
+          km1=max(k-1,top_lev)
+          q(k) = qold(k) + dt*( - src(k) + ekkp(k)*(qold(kp1) - qold(k) +       &
+               qactold(kp1)*(1.0_r8-overlapp(k)))               &
+               + ekkm(k)*(qold(km1) - qold(k) +     &
+               qactold(km1)*(1.0_r8-overlapm(k))) )
+          q(k)=max(q(k),0._r8)
+       end do
+
+       ! diffusion loss at base of lowest layer
+       q(pver)=q(pver)-surfrate*qold(pver)*dt+flxconv*dt
+       q(pver)=max(q(pver),0._r8)
+    else
+       do k=top_lev,pver
+          kp1=min(k+1,pver)
+          km1=max(k-1,top_lev)
+          q(k) = qold(k) + dt*(src(k) + ekkp(k)*(overlapp(k)*qold(kp1)-qold(k)) +      &
+               ekkm(k)*(overlapm(k)*qold(km1)-qold(k)) )
+          q(k) = max(q(k),0._r8) ! force to non-negative if (q(k)<-1.e-30) then
+       end do
+       q(pver)=q(pver)-surfrate*qold(pver)*dt+flxconv*dt ! diffusion loss at base of lowest layer
+       q(pver)=max(q(pver),0._r8) ! force to non-negative if(q(pver)<-1.e-30)then
+    end if
+
+  end subroutine explmix_oslo
 
   !===============================================================================
 
