@@ -111,7 +111,8 @@ contains
     real(r8) :: radmol           ![m] radius molecule
     integer  :: iDonor
     integer  :: l_donor
-    integer  :: m, l
+    integer  :: mind ! mode index
+    integer  :: tind ! tracer index
     !--------------------------------------------------
 
     !These are the lifecycle-species which receive mass when
@@ -122,7 +123,7 @@ contains
     lifeCycleReceiver(chemistryIndex(l_bc_ni))  = chemistryIndex(l_bc_ai) !create bc int mix from bc in mode 14
     lifeCycleReceiver(chemistryIndex(l_om_ni))  = chemistryIndex(l_om_ai) !create om int mix from om in mode 14
     lifeCycleReceiver(chemistryIndex(l_bc_ax))  = chemistryIndex(l_bc_ai) !create bc int mix from bc in mode 0
-                                                                          !Note Mass is conserved but not number
+    !Note Mass is conserved but not number
 
     !Sticking coeffcients for H2SO4 condensation
     !See table 1 in Kirkevag et al (2013)
@@ -252,9 +253,9 @@ contains
     end if
 
     ! initialize module variable for performance
-    do m = 0,nmodes
-       do l=1,n_tracers_in_mode(m)
-          tracer_index(m,l) = getTracerIndex(m,l,.true.)
+    do mind = 0,nmodes
+       do tind = 1,n_tracers_in_mode(mind)
+          tracer_index(mind,tind) = getTracerIndex(mind,tind,.true.)
        end do
     end do
 
