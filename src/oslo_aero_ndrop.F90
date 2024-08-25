@@ -664,34 +664,44 @@ contains
                !calculate fraction of component "l" in mode "m" based on concentrations in clear air
                tracerIndex = tracer_index(m,l)
 
-               if((l_so4_a1 == tracerIndex))then !so4 condensation
-                  componentFractionOK(m,tracerIndex,k)= &
-                       (Cam(i,k,m)*(1.0_r8-f_acm(i,k,m))*(1.0_r8-f_aqm(i,k,m))*(f_so4_condm(i,k,m))) &
+               if (l_so4_a1 == tracerIndex) then !so4 condensation
+                  componentFractionOK(m,tracerIndex,k)= (Cam(i,k,m) &
+                       *(1.0_r8 - f_acm(i,k,m)) & !sulfate fraction
+                       *(1.0_r8 - f_aqm(i,k,m)) & !fraction not from aq phase
+                       *(f_so4_condm(i,k,m)))   & !fraction being condensate
                        /(CProcessModes(i,k)*(1.0_r8-f_c(i,k))*(1.0_r8-f_aq(i,k))*f_so4_cond(i,k)+smallNumber) !total so4 condensate
 
-               else if(l_so4_ac == tracerIndex) then ! so4 coagulation
-                  componentFractionOK(m,tracerIndex,k) = &
-                       (Cam(i,k,m)*(1.0_r8 - f_acm(i,k,m))*(1.0_r8 - f_aqm(i,k,m))*(1.0_r8 - f_so4_condm(i,k,m))) &
+               else if (l_so4_ac == tracerIndex) then ! so4 coagulation
+                  componentFractionOK(m,tracerIndex,k) = (Cam(i,k,m) &
+                       *(1.0_r8 - f_acm(i,k,m)) &         !sulfate fraction
+                       *(1.0_r8 - f_aqm(i,k,m)) &         !fraction not from aq phase
+                       *(1.0_r8 - f_so4_condm(i,k,m))) &  !fraction not being condensate
                        /(CProcessModes(i,k)*(1.0_r8-f_c(i,k))*(1.0_r8-f_aq(i,k))*(1.0_r8-f_so4_cond(i,k)) + smallNumber)
 
-               else if(l_so4_a2 == tracerIndex) then  !so4 wet phase
-                  componentFractionOK(m,tracerIndex,k) = &
-                       (Cam(i,k,m)*(1.0_r8-f_acm(i,k,m))*f_aqm(i,k,m)) &
+               else if (l_so4_a2 == tracerIndex) then  !so4 wet phase
+                  componentFractionOK(m,tracerIndex,k) = (Cam(i,k,m) &
+                       *(1.0_r8-f_acm(i,k,m)) & !sulfate fraction
+                       *f_aqm(i,k,m))         & !aq phase fraction of sulfate
                        /(CProcessModes(i,k)*(1.0_r8-f_c(i,k))*(f_aq(i,k))+smallNumber)
 
-               else if(l_bc_ac == tracerIndex)then  !bc coagulated
-                  componentFractionOK(m,tracerIndex,k) = &
-                       (Cam(i,k,m)*f_acm(i,k,m)*f_bcm(i,k,m)) & ! bc fraction of carbonaceous
+               else if (l_bc_ac == tracerIndex)then  !bc coagulated
+                  componentFractionOK(m,tracerIndex,k) = (Cam(i,k,m) &
+                       *f_acm(i,k,m)  & ! carbonaceous fraction
+                       *f_bcm(i,k,m)) & ! bc fraction of carbonaceous
                        /(CProcessModes(i,k)*f_c(i,k)*f_bc(i,k)+smallNumber)
 
-               else if(l_om_ac == tracerIndex ) then  !oc coagulated
-                  componentFractionOK(m,tracerIndex,k) = &
-                       (Cam(i,k,m)*f_acm(i,k,m)*(1.0_r8-f_bcm(i,k,m))*(1.0_r8-f_soam(i,k,m))) &
+               else if (l_om_ac == tracerIndex ) then  !oc coagulated
+                  componentFractionOK(m,tracerIndex,k) = (Cam(i,k,m) &
+                       *f_acm(i,k,m)            &  ! carbonaceous fraction
+                       *(1.0_r8-f_bcm(i,k,m))   &  ! oc fraction of carbonaceous
+                       *(1.0_r8-f_soam(i,k,m))) &  ! oc fraction which is soa
                        /(CProcessModes(i,k)*f_c(i,k)*(1.0_r8-f_bc(i,k))*(1.0_r8-f_soa(i,k))+smallNumber)
 
                else if (l_soa_a1 == tracerIndex) then !SOA condensate
-                  componentFractionOK(m,tracerIndex,k) = &
-                       Cam(i,k,m) * f_acm(i,k,m) * (1.0_r8 -f_bcm(i,k,m)) * (f_soam(i,k,m)) &
+                  componentFractionOK(m,tracerIndex,k) = Cam(i,k,m) &
+                       *f_acm(i,k,m)           &  !carbonaceous fraction
+                       *(1.0_r8 -f_bcm(i,k,m)) &  !om fraction
+                       *(f_soam(i,k,m))        &  !fraction of OM is SOA
                        /(CProcessModes(i,k)*f_c(i,k)*(1.0_r8 -f_bc(i,k))*f_soa(i,k) + smallNumber)
                end if
                if (componentFractionOK(m,tracerIndex,k) >  1.0_r8)then
