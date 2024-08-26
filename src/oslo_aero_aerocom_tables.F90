@@ -604,7 +604,7 @@ contains
     real(r8) , intent(out) :: backsc550(pcols,pver,0:nbmodes)
 
     ! Local variables
-    integer  :: i, iv, ierr, k, kcomp, icol
+    integer  :: iv, ierr, ilev, kcomp, icol
     !-------------------------------------------------------------------------
 
     kcomp=0
@@ -612,97 +612,97 @@ contains
     ! BC(ax) mode:
 
     ! initialize all output fields
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          bext440(icol,k,kcomp)=0.0_r8
-          babs440(icol,k,kcomp)=0.0_r8
-          bext500(icol,k,kcomp)=0.0_r8
-          babs500(icol,k,kcomp)=0.0_r8
-          bext550(icol,k,kcomp)=0.0_r8
-          babs550(icol,k,kcomp)=0.0_r8
-          bext670(icol,k,kcomp)=0.0_r8
-          babs670(icol,k,kcomp)=0.0_r8
-          bext870(icol,k,kcomp)=0.0_r8
-          babs870(icol,k,kcomp)=0.0_r8
-          bebg440(icol,k,kcomp)=0.0_r8
-          bebg500(icol,k,kcomp)=0.0_r8
-          bebg550(icol,k,kcomp)=0.0_r8
-          babg550(icol,k,kcomp)=0.0_r8
-          bebg670(icol,k,kcomp)=0.0_r8
-          bebg870(icol,k,kcomp)=0.0_r8
-          bebc440(icol,k,kcomp)=0.0_r8
-          bebc500(icol,k,kcomp)=0.0_r8
-          bebc550(icol,k,kcomp)=0.0_r8
-          babc550(icol,k,kcomp)=0.0_r8
-          bebc670(icol,k,kcomp)=0.0_r8
-          bebc870(icol,k,kcomp)=0.0_r8
-          beoc440(icol,k,kcomp)=0.0_r8
-          beoc500(icol,k,kcomp)=0.0_r8
-          beoc550(icol,k,kcomp)=0.0_r8
-          baoc550(icol,k,kcomp)=0.0_r8
-          beoc670(icol,k,kcomp)=0.0_r8
-          beoc870(icol,k,kcomp)=0.0_r8
-          besu440(icol,k,kcomp)=0.0_r8
-          besu500(icol,k,kcomp)=0.0_r8
-          besu550(icol,k,kcomp)=0.0_r8
-          basu550(icol,k,kcomp)=0.0_r8
-          besu670(icol,k,kcomp)=0.0_r8
-          besu870(icol,k,kcomp)=0.0_r8
-          bebg550lt1(icol,k,kcomp)=0.0_r8
-          bebg550gt1(icol,k,kcomp)=0.0_r8
-          bebc550lt1(icol,k,kcomp)=0.0_r8
-          bebc550gt1(icol,k,kcomp)=0.0_r8
-          beoc550lt1(icol,k,kcomp)=0.0_r8
-          beoc550gt1(icol,k,kcomp)=0.0_r8
-          besu550lt1(icol,k,kcomp)=0.0_r8
-          besu550gt1(icol,k,kcomp)=0.0_r8
-          backsc550(icol,k,kcomp)=0.0_r8
+          bext440(icol,ilev,kcomp)=0.0_r8
+          babs440(icol,ilev,kcomp)=0.0_r8
+          bext500(icol,ilev,kcomp)=0.0_r8
+          babs500(icol,ilev,kcomp)=0.0_r8
+          bext550(icol,ilev,kcomp)=0.0_r8
+          babs550(icol,ilev,kcomp)=0.0_r8
+          bext670(icol,ilev,kcomp)=0.0_r8
+          babs670(icol,ilev,kcomp)=0.0_r8
+          bext870(icol,ilev,kcomp)=0.0_r8
+          babs870(icol,ilev,kcomp)=0.0_r8
+          bebg440(icol,ilev,kcomp)=0.0_r8
+          bebg500(icol,ilev,kcomp)=0.0_r8
+          bebg550(icol,ilev,kcomp)=0.0_r8
+          babg550(icol,ilev,kcomp)=0.0_r8
+          bebg670(icol,ilev,kcomp)=0.0_r8
+          bebg870(icol,ilev,kcomp)=0.0_r8
+          bebc440(icol,ilev,kcomp)=0.0_r8
+          bebc500(icol,ilev,kcomp)=0.0_r8
+          bebc550(icol,ilev,kcomp)=0.0_r8
+          babc550(icol,ilev,kcomp)=0.0_r8
+          bebc670(icol,ilev,kcomp)=0.0_r8
+          bebc870(icol,ilev,kcomp)=0.0_r8
+          beoc440(icol,ilev,kcomp)=0.0_r8
+          beoc500(icol,ilev,kcomp)=0.0_r8
+          beoc550(icol,ilev,kcomp)=0.0_r8
+          baoc550(icol,ilev,kcomp)=0.0_r8
+          beoc670(icol,ilev,kcomp)=0.0_r8
+          beoc870(icol,ilev,kcomp)=0.0_r8
+          besu440(icol,ilev,kcomp)=0.0_r8
+          besu500(icol,ilev,kcomp)=0.0_r8
+          besu550(icol,ilev,kcomp)=0.0_r8
+          basu550(icol,ilev,kcomp)=0.0_r8
+          besu670(icol,ilev,kcomp)=0.0_r8
+          besu870(icol,ilev,kcomp)=0.0_r8
+          bebg550lt1(icol,ilev,kcomp)=0.0_r8
+          bebg550gt1(icol,ilev,kcomp)=0.0_r8
+          bebc550lt1(icol,ilev,kcomp)=0.0_r8
+          bebc550gt1(icol,ilev,kcomp)=0.0_r8
+          beoc550lt1(icol,ilev,kcomp)=0.0_r8
+          beoc550gt1(icol,ilev,kcomp)=0.0_r8
+          besu550lt1(icol,ilev,kcomp)=0.0_r8
+          besu550gt1(icol,ilev,kcomp)=0.0_r8
+          backsc550(icol,ilev,kcomp)=0.0_r8
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kcomp).gt.0) then
-             bext440(icol,k,kcomp)=bex440
-             babs440(icol,k,kcomp)=bax440
-             bext500(icol,k,kcomp)=bex500
-             babs500(icol,k,kcomp)=bax500
-             bext550(icol,k,kcomp)=bex550lt1+bex550gt1
-             babs550(icol,k,kcomp)=bax550
-             bext670(icol,k,kcomp)=bex670
-             babs670(icol,k,kcomp)=bax670
-             bext870(icol,k,kcomp)=bex870
-             babs870(icol,k,kcomp)=bax870
-             bebg440(icol,k,kcomp)=bex440
-             bebg500(icol,k,kcomp)=bex500
-             bebg550(icol,k,kcomp)=bex550lt1+bex550gt1
-             babg550(icol,k,kcomp)=bax550
-             bebg670(icol,k,kcomp)=bex670
-             bebg870(icol,k,kcomp)=bex870
-             bebc440(icol,k,kcomp)=0.0_r8
-             bebc500(icol,k,kcomp)=0.0_r8
-             bebc670(icol,k,kcomp)=0.0_r8
-             bebc870(icol,k,kcomp)=0.0_r8
-             beoc440(icol,k,kcomp)=0.0_r8
-             beoc500(icol,k,kcomp)=0.0_r8
-             beoc670(icol,k,kcomp)=0.0_r8
-             beoc870(icol,k,kcomp)=0.0_r8
-             besu440(icol,k,kcomp)=0.0_r8
-             besu500(icol,k,kcomp)=0.0_r8
-             besu670(icol,k,kcomp)=0.0_r8
-             besu870(icol,k,kcomp)=0.0_r8
-             bebg550lt1(icol,k,kcomp)=bex550lt1
-             bebg550gt1(icol,k,kcomp)=bex550gt1
-             bebc550lt1(icol,k,kcomp)=0.0_r8
-             bebc550gt1(icol,k,kcomp)=0.0_r8
-             beoc550lt1(icol,k,kcomp)=0.0_r8
-             beoc550gt1(icol,k,kcomp)=0.0_r8
-             besu550lt1(icol,k,kcomp)=0.0_r8
-             besu550gt1(icol,k,kcomp)=0.0_r8
-             backsc550(icol,k,kcomp)=backscx550
+          if(Nnatk(icol,ilev,kcomp).gt.0) then
+             bext440(icol,ilev,kcomp)=bex440
+             babs440(icol,ilev,kcomp)=bax440
+             bext500(icol,ilev,kcomp)=bex500
+             babs500(icol,ilev,kcomp)=bax500
+             bext550(icol,ilev,kcomp)=bex550lt1+bex550gt1
+             babs550(icol,ilev,kcomp)=bax550
+             bext670(icol,ilev,kcomp)=bex670
+             babs670(icol,ilev,kcomp)=bax670
+             bext870(icol,ilev,kcomp)=bex870
+             babs870(icol,ilev,kcomp)=bax870
+             bebg440(icol,ilev,kcomp)=bex440
+             bebg500(icol,ilev,kcomp)=bex500
+             bebg550(icol,ilev,kcomp)=bex550lt1+bex550gt1
+             babg550(icol,ilev,kcomp)=bax550
+             bebg670(icol,ilev,kcomp)=bex670
+             bebg870(icol,ilev,kcomp)=bex870
+             bebc440(icol,ilev,kcomp)=0.0_r8
+             bebc500(icol,ilev,kcomp)=0.0_r8
+             bebc670(icol,ilev,kcomp)=0.0_r8
+             bebc870(icol,ilev,kcomp)=0.0_r8
+             beoc440(icol,ilev,kcomp)=0.0_r8
+             beoc500(icol,ilev,kcomp)=0.0_r8
+             beoc670(icol,ilev,kcomp)=0.0_r8
+             beoc870(icol,ilev,kcomp)=0.0_r8
+             besu440(icol,ilev,kcomp)=0.0_r8
+             besu500(icol,ilev,kcomp)=0.0_r8
+             besu670(icol,ilev,kcomp)=0.0_r8
+             besu870(icol,ilev,kcomp)=0.0_r8
+             bebg550lt1(icol,ilev,kcomp)=bex550lt1
+             bebg550gt1(icol,ilev,kcomp)=bex550gt1
+             bebc550lt1(icol,ilev,kcomp)=0.0_r8
+             bebc550gt1(icol,ilev,kcomp)=0.0_r8
+             beoc550lt1(icol,ilev,kcomp)=0.0_r8
+             beoc550gt1(icol,ilev,kcomp)=0.0_r8
+             besu550lt1(icol,ilev,kcomp)=0.0_r8
+             besu550gt1(icol,ilev,kcomp)=0.0_r8
+             backsc550(icol,ilev,kcomp)=backscx550
           endif
        end do ! icol
-    end do ! k
+    end do ! ilev
   end subroutine intaeropt0
 
   !===============================================================================
@@ -766,7 +766,7 @@ contains
     real(r8) , intent(out) :: backsc550(pcols,pver,0:nbmodes)
 
     ! Local variables
-    integer  :: i, iv, ierr, irelh, ifombg, ictot, ifac, kcomp, k, icol, kc10
+    integer  :: iv, ierr, irelh, ifombg, ictot, ifac, kcomp, ilev, icol, kc10
     integer  :: t_irh1, t_irh2, t_ifo1, t_ifo2, t_ict1, t_ict2, t_ifc1, t_ifc2
     real(r8) :: a, b, e
     real(r8) :: t_fac1, t_fac2, t_xfac
@@ -787,67 +787,67 @@ contains
     endif
 
     ! initialize all output fields
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          bext440(icol,k,kcomp)=0.0_r8
-          babs440(icol,k,kcomp)=0.0_r8
-          bext500(icol,k,kcomp)=0.0_r8
-          babs500(icol,k,kcomp)=0.0_r8
-          bext550(icol,k,kcomp)=0.0_r8
-          babs550(icol,k,kcomp)=0.0_r8
-          bext670(icol,k,kcomp)=0.0_r8
-          babs670(icol,k,kcomp)=0.0_r8
-          bext870(icol,k,kcomp)=0.0_r8
-          babs870(icol,k,kcomp)=0.0_r8
-          bebg440(icol,k,kcomp)=0.0_r8
-          bebg500(icol,k,kcomp)=0.0_r8
-          bebg550(icol,k,kcomp)=0.0_r8
-          babg550(icol,k,kcomp)=0.0_r8
-          bebg670(icol,k,kcomp)=0.0_r8
-          bebg870(icol,k,kcomp)=0.0_r8
-          bebc440(icol,k,kcomp)=0.0_r8
-          bebc500(icol,k,kcomp)=0.0_r8
-          bebc550(icol,k,kcomp)=0.0_r8
-          babc550(icol,k,kcomp)=0.0_r8
-          bebc670(icol,k,kcomp)=0.0_r8
-          bebc870(icol,k,kcomp)=0.0_r8
-          beoc440(icol,k,kcomp)=0.0_r8
-          beoc500(icol,k,kcomp)=0.0_r8
-          beoc550(icol,k,kcomp)=0.0_r8
-          baoc550(icol,k,kcomp)=0.0_r8
-          beoc670(icol,k,kcomp)=0.0_r8
-          beoc870(icol,k,kcomp)=0.0_r8
-          besu440(icol,k,kcomp)=0.0_r8
-          besu500(icol,k,kcomp)=0.0_r8
-          besu550(icol,k,kcomp)=0.0_r8
-          basu550(icol,k,kcomp)=0.0_r8
-          besu670(icol,k,kcomp)=0.0_r8
-          besu870(icol,k,kcomp)=0.0_r8
-          bebg550lt1(icol,k,kcomp)=0.0_r8
-          bebg550gt1(icol,k,kcomp)=0.0_r8
-          bebc550lt1(icol,k,kcomp)=0.0_r8
-          bebc550gt1(icol,k,kcomp)=0.0_r8
-          beoc550lt1(icol,k,kcomp)=0.0_r8
-          beoc550gt1(icol,k,kcomp)=0.0_r8
-          besu550lt1(icol,k,kcomp)=0.0_r8
-          besu550gt1(icol,k,kcomp)=0.0_r8
-          backsc550(icol,k,kcomp)=0.0_r8
+          bext440(icol,ilev,kcomp)=0.0_r8
+          babs440(icol,ilev,kcomp)=0.0_r8
+          bext500(icol,ilev,kcomp)=0.0_r8
+          babs500(icol,ilev,kcomp)=0.0_r8
+          bext550(icol,ilev,kcomp)=0.0_r8
+          babs550(icol,ilev,kcomp)=0.0_r8
+          bext670(icol,ilev,kcomp)=0.0_r8
+          babs670(icol,ilev,kcomp)=0.0_r8
+          bext870(icol,ilev,kcomp)=0.0_r8
+          babs870(icol,ilev,kcomp)=0.0_r8
+          bebg440(icol,ilev,kcomp)=0.0_r8
+          bebg500(icol,ilev,kcomp)=0.0_r8
+          bebg550(icol,ilev,kcomp)=0.0_r8
+          babg550(icol,ilev,kcomp)=0.0_r8
+          bebg670(icol,ilev,kcomp)=0.0_r8
+          bebg870(icol,ilev,kcomp)=0.0_r8
+          bebc440(icol,ilev,kcomp)=0.0_r8
+          bebc500(icol,ilev,kcomp)=0.0_r8
+          bebc550(icol,ilev,kcomp)=0.0_r8
+          babc550(icol,ilev,kcomp)=0.0_r8
+          bebc670(icol,ilev,kcomp)=0.0_r8
+          bebc870(icol,ilev,kcomp)=0.0_r8
+          beoc440(icol,ilev,kcomp)=0.0_r8
+          beoc500(icol,ilev,kcomp)=0.0_r8
+          beoc550(icol,ilev,kcomp)=0.0_r8
+          baoc550(icol,ilev,kcomp)=0.0_r8
+          beoc670(icol,ilev,kcomp)=0.0_r8
+          beoc870(icol,ilev,kcomp)=0.0_r8
+          besu440(icol,ilev,kcomp)=0.0_r8
+          besu500(icol,ilev,kcomp)=0.0_r8
+          besu550(icol,ilev,kcomp)=0.0_r8
+          basu550(icol,ilev,kcomp)=0.0_r8
+          besu670(icol,ilev,kcomp)=0.0_r8
+          besu870(icol,ilev,kcomp)=0.0_r8
+          bebg550lt1(icol,ilev,kcomp)=0.0_r8
+          bebg550gt1(icol,ilev,kcomp)=0.0_r8
+          bebc550lt1(icol,ilev,kcomp)=0.0_r8
+          bebc550gt1(icol,ilev,kcomp)=0.0_r8
+          beoc550lt1(icol,ilev,kcomp)=0.0_r8
+          beoc550gt1(icol,ilev,kcomp)=0.0_r8
+          besu550lt1(icol,ilev,kcomp)=0.0_r8
+          besu550gt1(icol,ilev,kcomp)=0.0_r8
+          backsc550(icol,ilev,kcomp)=0.0_r8
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kc10).gt.0) then
+          if(Nnatk(icol,ilev,kc10).gt.0) then
 
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
-             t_irh1 = irh1(icol,k)
+             t_irh1 = irh1(icol,ilev)
              t_irh2 = t_irh1+1
-             t_ifo1 = ifombg1(icol,k)
+             t_ifo1 = ifombg1(icol,ilev)
              t_ifo2 = t_ifo1+1
-             t_ict1 = ict1(icol,k,kcomp)
+             t_ict1 = ict1(icol,ilev,kcomp)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
 
              t_rh1  = rh(t_irh1)
@@ -859,10 +859,10 @@ contains
              t_fac1 = fac(t_ifc1)
              t_fac2 = fac(t_ifc2)
 
-             t_xrh  = xrh(icol,k)
-             t_xct  = xct(icol,k,kc10)
-             t_xfac = xfac(icol,k,kcomp)
-             t_xfombg = xfombg(icol,k)
+             t_xrh  = xrh(icol,ilev)
+             t_xct  = xct(icol,ilev,kc10)
+             t_xfac = xfac(icol,ilev,kcomp)
+             t_xfombg = xfombg(icol,ilev)
 
              ! partial lengths along each dimension (1-4) for interpolation
              d2mx(1) = (t_rh2-t_xrh)
@@ -904,53 +904,53 @@ contains
                 opt(iv)=((t_rh2-t_xrh)*opt1+(t_xrh-t_rh1)*opt2) /(t_rh2-t_rh1)
              end do ! iv=1,38
 
-             bext440(icol,k,kcomp)=opt(1)
-             bext500(icol,k,kcomp)=opt(2)
-             bext670(icol,k,kcomp)=opt(3)
-             bext870(icol,k,kcomp)=opt(4)
-             bebg440(icol,k,kcomp)=opt(5)
-             bebg500(icol,k,kcomp)=opt(6)
-             bebg670(icol,k,kcomp)=opt(7)
-             bebg870(icol,k,kcomp)=opt(8)
-             bebc440(icol,k,kcomp)=opt(9)
-             bebc500(icol,k,kcomp)=opt(10)
-             bebc670(icol,k,kcomp)=opt(11)
-             bebc870(icol,k,kcomp)=opt(12)
-             beoc440(icol,k,kcomp)=opt(13)
-             beoc500(icol,k,kcomp)=opt(14)
-             beoc670(icol,k,kcomp)=opt(15)
-             beoc870(icol,k,kcomp)=opt(16)
-             besu440(icol,k,kcomp)=opt(17)
-             besu500(icol,k,kcomp)=opt(18)
-             besu670(icol,k,kcomp)=opt(19)
-             besu870(icol,k,kcomp)=opt(20)
-             babs440(icol,k,kcomp)=opt(21)
-             babs500(icol,k,kcomp)=opt(22)
-             babs550(icol,k,kcomp)=opt(23)
-             babs670(icol,k,kcomp)=opt(24)
-             babs870(icol,k,kcomp)=opt(25)
-             bebg550lt1(icol,k,kcomp)=opt(26)
-             bebg550gt1(icol,k,kcomp)=opt(27)
-             bebc550lt1(icol,k,kcomp)=opt(28)
-             bebc550gt1(icol,k,kcomp)=opt(29)
-             beoc550lt1(icol,k,kcomp)=opt(30)
-             beoc550gt1(icol,k,kcomp)=opt(31)
-             besu550lt1(icol,k,kcomp)=opt(32)
-             besu550gt1(icol,k,kcomp)=opt(33)
-             backsc550(icol,k,kcomp)=opt(34)
-             babg550(icol,k,kcomp)=opt(35)
-             babc550(icol,k,kcomp)=opt(36)
-             baoc550(icol,k,kcomp)=opt(37)
-             basu550(icol,k,kcomp)=opt(38)
-             bebg550(icol,k,kcomp)=opt(26)+opt(27)
-             bebc550(icol,k,kcomp)=opt(28)+opt(29)
-             beoc550(icol,k,kcomp)=opt(30)+opt(31)
-             besu550(icol,k,kcomp)=opt(32)+opt(33)
-             bext550(icol,k,kcomp)=bebg550(icol,k,kcomp)+bebc550(icol,k,kcomp) &
-                                  +beoc550(icol,k,kcomp)+besu550(icol,k,kcomp)
+             bext440(icol,ilev,kcomp)=opt(1)
+             bext500(icol,ilev,kcomp)=opt(2)
+             bext670(icol,ilev,kcomp)=opt(3)
+             bext870(icol,ilev,kcomp)=opt(4)
+             bebg440(icol,ilev,kcomp)=opt(5)
+             bebg500(icol,ilev,kcomp)=opt(6)
+             bebg670(icol,ilev,kcomp)=opt(7)
+             bebg870(icol,ilev,kcomp)=opt(8)
+             bebc440(icol,ilev,kcomp)=opt(9)
+             bebc500(icol,ilev,kcomp)=opt(10)
+             bebc670(icol,ilev,kcomp)=opt(11)
+             bebc870(icol,ilev,kcomp)=opt(12)
+             beoc440(icol,ilev,kcomp)=opt(13)
+             beoc500(icol,ilev,kcomp)=opt(14)
+             beoc670(icol,ilev,kcomp)=opt(15)
+             beoc870(icol,ilev,kcomp)=opt(16)
+             besu440(icol,ilev,kcomp)=opt(17)
+             besu500(icol,ilev,kcomp)=opt(18)
+             besu670(icol,ilev,kcomp)=opt(19)
+             besu870(icol,ilev,kcomp)=opt(20)
+             babs440(icol,ilev,kcomp)=opt(21)
+             babs500(icol,ilev,kcomp)=opt(22)
+             babs550(icol,ilev,kcomp)=opt(23)
+             babs670(icol,ilev,kcomp)=opt(24)
+             babs870(icol,ilev,kcomp)=opt(25)
+             bebg550lt1(icol,ilev,kcomp)=opt(26)
+             bebg550gt1(icol,ilev,kcomp)=opt(27)
+             bebc550lt1(icol,ilev,kcomp)=opt(28)
+             bebc550gt1(icol,ilev,kcomp)=opt(29)
+             beoc550lt1(icol,ilev,kcomp)=opt(30)
+             beoc550gt1(icol,ilev,kcomp)=opt(31)
+             besu550lt1(icol,ilev,kcomp)=opt(32)
+             besu550gt1(icol,ilev,kcomp)=opt(33)
+             backsc550(icol,ilev,kcomp)=opt(34)
+             babg550(icol,ilev,kcomp)=opt(35)
+             babc550(icol,ilev,kcomp)=opt(36)
+             baoc550(icol,ilev,kcomp)=opt(37)
+             basu550(icol,ilev,kcomp)=opt(38)
+             bebg550(icol,ilev,kcomp)=opt(26)+opt(27)
+             bebc550(icol,ilev,kcomp)=opt(28)+opt(29)
+             beoc550(icol,ilev,kcomp)=opt(30)+opt(31)
+             besu550(icol,ilev,kcomp)=opt(32)+opt(33)
+             bext550(icol,ilev,kcomp)=bebg550(icol,ilev,kcomp)+bebc550(icol,ilev,kcomp) &
+                                     +beoc550(icol,ilev,kcomp)+besu550(icol,ilev,kcomp)
           endif
        end do ! icol
-    end do ! k
+    end do ! ilev
   end subroutine intaeropt1
 
   !===============================================================================
@@ -1014,7 +1014,7 @@ contains
 
     ! Local variables
     real(r8) :: a, b, e
-    integer  :: i, iv, kcomp, k, icol, kc10
+    integer  :: iv, kcomp, ilev, icol, kc10
     integer  :: t_irh1, t_irh2, t_ict1, t_ict2, t_ifc1, t_ifc2
     real(r8) :: t_fac1, t_fac2, t_xfac, t_xrh, t_xct, t_rh1, t_rh2, t_cat1, t_cat2
     real(r8) :: d2mx(3), dxm1(3), invd(3)
@@ -1031,65 +1031,65 @@ contains
     endif
 
     ! initialize all output fields
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          bext440(icol,k,kcomp)=0.0_r8
-          babs440(icol,k,kcomp)=0.0_r8
-          bext500(icol,k,kcomp)=0.0_r8
-          babs500(icol,k,kcomp)=0.0_r8
-          bext550(icol,k,kcomp)=0.0_r8
-          babs550(icol,k,kcomp)=0.0_r8
-          bext670(icol,k,kcomp)=0.0_r8
-          babs670(icol,k,kcomp)=0.0_r8
-          bext870(icol,k,kcomp)=0.0_r8
-          babs870(icol,k,kcomp)=0.0_r8
-          bebg440(icol,k,kcomp)=0.0_r8
-          bebg500(icol,k,kcomp)=0.0_r8
-          bebg550(icol,k,kcomp)=0.0_r8
-          babg550(icol,k,kcomp)=0.0_r8
-          bebg670(icol,k,kcomp)=0.0_r8
-          bebg870(icol,k,kcomp)=0.0_r8
-          bebc440(icol,k,kcomp)=0.0_r8
-          bebc500(icol,k,kcomp)=0.0_r8
-          bebc550(icol,k,kcomp)=0.0_r8
-          babc550(icol,k,kcomp)=0.0_r8
-          bebc670(icol,k,kcomp)=0.0_r8
-          bebc870(icol,k,kcomp)=0.0_r8
-          beoc440(icol,k,kcomp)=0.0_r8
-          beoc500(icol,k,kcomp)=0.0_r8
-          beoc550(icol,k,kcomp)=0.0_r8
-          baoc550(icol,k,kcomp)=0.0_r8
-          beoc670(icol,k,kcomp)=0.0_r8
-          beoc870(icol,k,kcomp)=0.0_r8
-          besu440(icol,k,kcomp)=0.0_r8
-          besu500(icol,k,kcomp)=0.0_r8
-          besu550(icol,k,kcomp)=0.0_r8
-          basu550(icol,k,kcomp)=0.0_r8
-          besu670(icol,k,kcomp)=0.0_r8
-          besu870(icol,k,kcomp)=0.0_r8
-          bebg550lt1(icol,k,kcomp)=0.0_r8
-          bebg550gt1(icol,k,kcomp)=0.0_r8
-          bebc550lt1(icol,k,kcomp)=0.0_r8
-          bebc550gt1(icol,k,kcomp)=0.0_r8
-          beoc550lt1(icol,k,kcomp)=0.0_r8
-          beoc550gt1(icol,k,kcomp)=0.0_r8
-          besu550lt1(icol,k,kcomp)=0.0_r8
-          besu550gt1(icol,k,kcomp)=0.0_r8
-          backsc550(icol,k,kcomp)=0.0_r8
+          bext440(icol,ilev,kcomp)=0.0_r8
+          babs440(icol,ilev,kcomp)=0.0_r8
+          bext500(icol,ilev,kcomp)=0.0_r8
+          babs500(icol,ilev,kcomp)=0.0_r8
+          bext550(icol,ilev,kcomp)=0.0_r8
+          babs550(icol,ilev,kcomp)=0.0_r8
+          bext670(icol,ilev,kcomp)=0.0_r8
+          babs670(icol,ilev,kcomp)=0.0_r8
+          bext870(icol,ilev,kcomp)=0.0_r8
+          babs870(icol,ilev,kcomp)=0.0_r8
+          bebg440(icol,ilev,kcomp)=0.0_r8
+          bebg500(icol,ilev,kcomp)=0.0_r8
+          bebg550(icol,ilev,kcomp)=0.0_r8
+          babg550(icol,ilev,kcomp)=0.0_r8
+          bebg670(icol,ilev,kcomp)=0.0_r8
+          bebg870(icol,ilev,kcomp)=0.0_r8
+          bebc440(icol,ilev,kcomp)=0.0_r8
+          bebc500(icol,ilev,kcomp)=0.0_r8
+          bebc550(icol,ilev,kcomp)=0.0_r8
+          babc550(icol,ilev,kcomp)=0.0_r8
+          bebc670(icol,ilev,kcomp)=0.0_r8
+          bebc870(icol,ilev,kcomp)=0.0_r8
+          beoc440(icol,ilev,kcomp)=0.0_r8
+          beoc500(icol,ilev,kcomp)=0.0_r8
+          beoc550(icol,ilev,kcomp)=0.0_r8
+          baoc550(icol,ilev,kcomp)=0.0_r8
+          beoc670(icol,ilev,kcomp)=0.0_r8
+          beoc870(icol,ilev,kcomp)=0.0_r8
+          besu440(icol,ilev,kcomp)=0.0_r8
+          besu500(icol,ilev,kcomp)=0.0_r8
+          besu550(icol,ilev,kcomp)=0.0_r8
+          basu550(icol,ilev,kcomp)=0.0_r8
+          besu670(icol,ilev,kcomp)=0.0_r8
+          besu870(icol,ilev,kcomp)=0.0_r8
+          bebg550lt1(icol,ilev,kcomp)=0.0_r8
+          bebg550gt1(icol,ilev,kcomp)=0.0_r8
+          bebc550lt1(icol,ilev,kcomp)=0.0_r8
+          bebc550gt1(icol,ilev,kcomp)=0.0_r8
+          beoc550lt1(icol,ilev,kcomp)=0.0_r8
+          beoc550gt1(icol,ilev,kcomp)=0.0_r8
+          besu550lt1(icol,ilev,kcomp)=0.0_r8
+          besu550gt1(icol,ilev,kcomp)=0.0_r8
+          backsc550(icol,ilev,kcomp)=0.0_r8
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kc10).gt.0) then
+          if(Nnatk(icol,ilev,kc10).gt.0) then
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
 
-             t_irh1 = irh1(icol,k)
+             t_irh1 = irh1(icol,ilev)
              t_irh2 = t_irh1+1
-             t_ict1 = ict1(icol,k,kc10)
+             t_ict1 = ict1(icol,ilev,kc10)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
              t_rh1  = rh(t_irh1)
              t_rh2  = rh(t_irh2)
@@ -1097,9 +1097,9 @@ contains
              t_cat2 = cate(kcomp,t_ict2)
              t_fac1 = fac(t_ifc1)
              t_fac2 = fac(t_ifc2)
-             t_xrh  = xrh(icol,k)
-             t_xct  = xct(icol,k,kc10)
-             t_xfac = xfac(icol,k,kcomp)
+             t_xrh  = xrh(icol,ilev)
+             t_xct  = xct(icol,ilev,kc10)
+             t_xfac = xfac(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-4) for interpolation
              d2mx(1) = (t_rh2-t_xrh)
@@ -1130,53 +1130,53 @@ contains
                 opt(iv)=((t_rh2-t_xrh)*opt1+(t_xrh-t_rh1)*opt2) /(t_rh2-t_rh1)
              end do ! iv=1,38
 
-             bext440(icol,k,kcomp)=opt(1)
-             bext500(icol,k,kcomp)=opt(2)
-             bext670(icol,k,kcomp)=opt(3)
-             bext870(icol,k,kcomp)=opt(4)
-             bebg440(icol,k,kcomp)=opt(5)
-             bebg500(icol,k,kcomp)=opt(6)
-             bebg670(icol,k,kcomp)=opt(7)
-             bebg870(icol,k,kcomp)=opt(8)
-             bebc440(icol,k,kcomp)=opt(9)
-             bebc500(icol,k,kcomp)=opt(10)
-             bebc670(icol,k,kcomp)=opt(11)
-             bebc870(icol,k,kcomp)=opt(12)
-             beoc440(icol,k,kcomp)=opt(13)
-             beoc500(icol,k,kcomp)=opt(14)
-             beoc670(icol,k,kcomp)=opt(15)
-             beoc870(icol,k,kcomp)=opt(16)
-             besu440(icol,k,kcomp)=opt(17)
-             besu500(icol,k,kcomp)=opt(18)
-             besu670(icol,k,kcomp)=opt(19)
-             besu870(icol,k,kcomp)=opt(20)
-             babs440(icol,k,kcomp)=opt(21)
-             babs500(icol,k,kcomp)=opt(22)
-             babs550(icol,k,kcomp)=opt(23)
-             babs670(icol,k,kcomp)=opt(24)
-             babs870(icol,k,kcomp)=opt(25)
-             bebg550lt1(icol,k,kcomp)=opt(26)
-             bebg550gt1(icol,k,kcomp)=opt(27)
-             bebc550lt1(icol,k,kcomp)=opt(28)
-             bebc550gt1(icol,k,kcomp)=opt(29)
-             beoc550lt1(icol,k,kcomp)=opt(30)
-             beoc550gt1(icol,k,kcomp)=opt(31)
-             besu550lt1(icol,k,kcomp)=opt(32)
-             besu550gt1(icol,k,kcomp)=opt(33)
-             backsc550(icol,k,kcomp)=opt(34)
-             babg550(icol,k,kcomp)=opt(35)
-             babc550(icol,k,kcomp)=opt(36)
-             baoc550(icol,k,kcomp)=opt(37)
-             basu550(icol,k,kcomp)=opt(38)
-             bebg550(icol,k,kcomp)=opt(26)+opt(27)
-             bebc550(icol,k,kcomp)=opt(28)+opt(29)
-             beoc550(icol,k,kcomp)=opt(30)+opt(31)
-             besu550(icol,k,kcomp)=opt(32)+opt(33)
-             bext550(icol,k,kcomp)=bebg550(icol,k,kcomp)+bebc550(icol,k,kcomp) &
-                                  +beoc550(icol,k,kcomp)+besu550(icol,k,kcomp)
+             bext440(icol,ilev,kcomp)=opt(1)
+             bext500(icol,ilev,kcomp)=opt(2)
+             bext670(icol,ilev,kcomp)=opt(3)
+             bext870(icol,ilev,kcomp)=opt(4)
+             bebg440(icol,ilev,kcomp)=opt(5)
+             bebg500(icol,ilev,kcomp)=opt(6)
+             bebg670(icol,ilev,kcomp)=opt(7)
+             bebg870(icol,ilev,kcomp)=opt(8)
+             bebc440(icol,ilev,kcomp)=opt(9)
+             bebc500(icol,ilev,kcomp)=opt(10)
+             bebc670(icol,ilev,kcomp)=opt(11)
+             bebc870(icol,ilev,kcomp)=opt(12)
+             beoc440(icol,ilev,kcomp)=opt(13)
+             beoc500(icol,ilev,kcomp)=opt(14)
+             beoc670(icol,ilev,kcomp)=opt(15)
+             beoc870(icol,ilev,kcomp)=opt(16)
+             besu440(icol,ilev,kcomp)=opt(17)
+             besu500(icol,ilev,kcomp)=opt(18)
+             besu670(icol,ilev,kcomp)=opt(19)
+             besu870(icol,ilev,kcomp)=opt(20)
+             babs440(icol,ilev,kcomp)=opt(21)
+             babs500(icol,ilev,kcomp)=opt(22)
+             babs550(icol,ilev,kcomp)=opt(23)
+             babs670(icol,ilev,kcomp)=opt(24)
+             babs870(icol,ilev,kcomp)=opt(25)
+             bebg550lt1(icol,ilev,kcomp)=opt(26)
+             bebg550gt1(icol,ilev,kcomp)=opt(27)
+             bebc550lt1(icol,ilev,kcomp)=opt(28)
+             bebc550gt1(icol,ilev,kcomp)=opt(29)
+             beoc550lt1(icol,ilev,kcomp)=opt(30)
+             beoc550gt1(icol,ilev,kcomp)=opt(31)
+             besu550lt1(icol,ilev,kcomp)=opt(32)
+             besu550gt1(icol,ilev,kcomp)=opt(33)
+             backsc550(icol,ilev,kcomp)=opt(34)
+             babg550(icol,ilev,kcomp)=opt(35)
+             babc550(icol,ilev,kcomp)=opt(36)
+             baoc550(icol,ilev,kcomp)=opt(37)
+             basu550(icol,ilev,kcomp)=opt(38)
+             bebg550(icol,ilev,kcomp)=opt(26)+opt(27)
+             bebc550(icol,ilev,kcomp)=opt(28)+opt(29)
+             beoc550(icol,ilev,kcomp)=opt(30)+opt(31)
+             besu550(icol,ilev,kcomp)=opt(32)+opt(33)
+             bext550(icol,ilev,kcomp)=bebg550(icol,ilev,kcomp)+bebc550(icol,ilev,kcomp) &
+                                     +beoc550(icol,ilev,kcomp)+besu550(icol,ilev,kcomp)
           endif   ! Nnatk > 0
        end do ! icol
-    end do ! k
+    end do ! ilev
   end subroutine intaeropt2to3
 
   !===============================================================================
@@ -1243,7 +1243,7 @@ contains
 
     ! Local variables
     real(r8) :: a, b, e
-    integer  :: i, iv, kcomp, k, icol, kc10
+    integer  :: iv, kcomp, ilev, icol, kc10
     integer  :: t_irh1, t_irh2, t_ict1, t_ict2, t_ifc1, t_ifc2,  t_ifa1, t_ifa2
     integer  :: t_ifb1, t_ifb2
     real(r8) :: t_fbcbg1, t_fbcbg2
@@ -1265,69 +1265,69 @@ contains
     endif
 
     ! initialize all output fields
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          bext440(icol,k,kcomp)=0.0_r8
-          babs440(icol,k,kcomp)=0.0_r8
-          bext500(icol,k,kcomp)=0.0_r8
-          babs500(icol,k,kcomp)=0.0_r8
-          bext550(icol,k,kcomp)=0.0_r8
-          babs550(icol,k,kcomp)=0.0_r8
-          bext670(icol,k,kcomp)=0.0_r8
-          babs670(icol,k,kcomp)=0.0_r8
-          bext870(icol,k,kcomp)=0.0_r8
-          babs870(icol,k,kcomp)=0.0_r8
-          bebg440(icol,k,kcomp)=0.0_r8
-          bebg500(icol,k,kcomp)=0.0_r8
-          bebg550(icol,k,kcomp)=0.0_r8
-          babg550(icol,k,kcomp)=0.0_r8
-          bebg670(icol,k,kcomp)=0.0_r8
-          bebg870(icol,k,kcomp)=0.0_r8
-          bebc440(icol,k,kcomp)=0.0_r8
-          bebc500(icol,k,kcomp)=0.0_r8
-          bebc550(icol,k,kcomp)=0.0_r8
-          babc550(icol,k,kcomp)=0.0_r8
-          bebc670(icol,k,kcomp)=0.0_r8
-          bebc870(icol,k,kcomp)=0.0_r8
-          beoc440(icol,k,kcomp)=0.0_r8
-          beoc500(icol,k,kcomp)=0.0_r8
-          beoc550(icol,k,kcomp)=0.0_r8
-          baoc550(icol,k,kcomp)=0.0_r8
-          beoc670(icol,k,kcomp)=0.0_r8
-          beoc870(icol,k,kcomp)=0.0_r8
-          besu440(icol,k,kcomp)=0.0_r8
-          besu500(icol,k,kcomp)=0.0_r8
-          besu550(icol,k,kcomp)=0.0_r8
-          basu550(icol,k,kcomp)=0.0_r8
-          besu670(icol,k,kcomp)=0.0_r8
-          besu870(icol,k,kcomp)=0.0_r8
-          bebg550lt1(icol,k,kcomp)=0.0_r8
-          bebg550gt1(icol,k,kcomp)=0.0_r8
-          bebc550lt1(icol,k,kcomp)=0.0_r8
-          bebc550gt1(icol,k,kcomp)=0.0_r8
-          beoc550lt1(icol,k,kcomp)=0.0_r8
-          beoc550gt1(icol,k,kcomp)=0.0_r8
-          besu550lt1(icol,k,kcomp)=0.0_r8
-          besu550gt1(icol,k,kcomp)=0.0_r8
-          backsc550(icol,k,kcomp)=0.0_r8
+          bext440(icol,ilev,kcomp)=0.0_r8
+          babs440(icol,ilev,kcomp)=0.0_r8
+          bext500(icol,ilev,kcomp)=0.0_r8
+          babs500(icol,ilev,kcomp)=0.0_r8
+          bext550(icol,ilev,kcomp)=0.0_r8
+          babs550(icol,ilev,kcomp)=0.0_r8
+          bext670(icol,ilev,kcomp)=0.0_r8
+          babs670(icol,ilev,kcomp)=0.0_r8
+          bext870(icol,ilev,kcomp)=0.0_r8
+          babs870(icol,ilev,kcomp)=0.0_r8
+          bebg440(icol,ilev,kcomp)=0.0_r8
+          bebg500(icol,ilev,kcomp)=0.0_r8
+          bebg550(icol,ilev,kcomp)=0.0_r8
+          babg550(icol,ilev,kcomp)=0.0_r8
+          bebg670(icol,ilev,kcomp)=0.0_r8
+          bebg870(icol,ilev,kcomp)=0.0_r8
+          bebc440(icol,ilev,kcomp)=0.0_r8
+          bebc500(icol,ilev,kcomp)=0.0_r8
+          bebc550(icol,ilev,kcomp)=0.0_r8
+          babc550(icol,ilev,kcomp)=0.0_r8
+          bebc670(icol,ilev,kcomp)=0.0_r8
+          bebc870(icol,ilev,kcomp)=0.0_r8
+          beoc440(icol,ilev,kcomp)=0.0_r8
+          beoc500(icol,ilev,kcomp)=0.0_r8
+          beoc550(icol,ilev,kcomp)=0.0_r8
+          baoc550(icol,ilev,kcomp)=0.0_r8
+          beoc670(icol,ilev,kcomp)=0.0_r8
+          beoc870(icol,ilev,kcomp)=0.0_r8
+          besu440(icol,ilev,kcomp)=0.0_r8
+          besu500(icol,ilev,kcomp)=0.0_r8
+          besu550(icol,ilev,kcomp)=0.0_r8
+          basu550(icol,ilev,kcomp)=0.0_r8
+          besu670(icol,ilev,kcomp)=0.0_r8
+          besu870(icol,ilev,kcomp)=0.0_r8
+          bebg550lt1(icol,ilev,kcomp)=0.0_r8
+          bebg550gt1(icol,ilev,kcomp)=0.0_r8
+          bebc550lt1(icol,ilev,kcomp)=0.0_r8
+          bebc550gt1(icol,ilev,kcomp)=0.0_r8
+          beoc550lt1(icol,ilev,kcomp)=0.0_r8
+          beoc550gt1(icol,ilev,kcomp)=0.0_r8
+          besu550lt1(icol,ilev,kcomp)=0.0_r8
+          besu550gt1(icol,ilev,kcomp)=0.0_r8
+          backsc550(icol,ilev,kcomp)=0.0_r8
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kc10).gt.0) then
+          if(Nnatk(icol,ilev,kc10).gt.0) then
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
 
-             t_irh1 = irh1(icol,k)
+             t_irh1 = irh1(icol,ilev)
              t_irh2 = t_irh1+1
-             t_ifb1 = ifbcbg1(icol,k)
+             t_ifb1 = ifbcbg1(icol,ilev)
              t_ifb2 = t_ifb1+1
-             t_ict1 = ict1(icol,k,kc10)
+             t_ict1 = ict1(icol,ilev,kc10)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
-             t_ifa1 = ifaq1(icol,k,kcomp)
+             t_ifa1 = ifaq1(icol,ilev,kcomp)
              t_ifa2 = t_ifa1+1
 
              t_rh1  = rh(t_irh1)
@@ -1341,11 +1341,11 @@ contains
              t_faq1 = faq(t_ifa1)
              t_faq2 = faq(t_ifa2)
 
-             t_xrh  = xrh(icol,k)
-             t_xfbcbg = xfbcbg(icol,k)
-             t_xct  = xct(icol,k,kc10)
-             t_xfac = xfac(icol,k,kcomp)
-             t_xfaq = xfaq(icol,k,kcomp)
+             t_xrh  = xrh(icol,ilev)
+             t_xfbcbg = xfbcbg(icol,ilev)
+             t_xct  = xct(icol,ilev,kc10)
+             t_xfac = xfac(icol,ilev,kcomp)
+             t_xfaq = xfaq(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-5) for interpolation
              d2mx(1) = (t_rh2-t_xrh)
@@ -1406,53 +1406,53 @@ contains
                 opt(iv)=((t_rh2-t_xrh)*opt1+(t_xrh-t_rh1)*opt2)/(t_rh2-t_rh1)
              end do ! iv=1,38
 
-             bext440(icol,k,kcomp)=opt(1)
-             bext500(icol,k,kcomp)=opt(2)
-             bext670(icol,k,kcomp)=opt(3)
-             bext870(icol,k,kcomp)=opt(4)
-             bebg440(icol,k,kcomp)=opt(5)
-             bebg500(icol,k,kcomp)=opt(6)
-             bebg670(icol,k,kcomp)=opt(7)
-             bebg870(icol,k,kcomp)=opt(8)
-             bebc440(icol,k,kcomp)=opt(9)
-             bebc500(icol,k,kcomp)=opt(10)
-             bebc670(icol,k,kcomp)=opt(11)
-             bebc870(icol,k,kcomp)=opt(12)
-             beoc440(icol,k,kcomp)=opt(13)
-             beoc500(icol,k,kcomp)=opt(14)
-             beoc670(icol,k,kcomp)=opt(15)
-             beoc870(icol,k,kcomp)=opt(16)
-             besu440(icol,k,kcomp)=opt(17)
-             besu500(icol,k,kcomp)=opt(18)
-             besu670(icol,k,kcomp)=opt(19)
-             besu870(icol,k,kcomp)=opt(20)
-             babs440(icol,k,kcomp)=opt(21)
-             babs500(icol,k,kcomp)=opt(22)
-             babs550(icol,k,kcomp)=opt(23)
-             babs670(icol,k,kcomp)=opt(24)
-             babs870(icol,k,kcomp)=opt(25)
-             bebg550lt1(icol,k,kcomp)=opt(26)
-             bebg550gt1(icol,k,kcomp)=opt(27)
-             bebc550lt1(icol,k,kcomp)=opt(28)
-             bebc550gt1(icol,k,kcomp)=opt(29)
-             beoc550lt1(icol,k,kcomp)=opt(30)
-             beoc550gt1(icol,k,kcomp)=opt(31)
-             besu550lt1(icol,k,kcomp)=opt(32)
-             besu550gt1(icol,k,kcomp)=opt(33)
-             backsc550(icol,k,kcomp)=opt(34)
-             babg550(icol,k,kcomp)=opt(35)
-             babc550(icol,k,kcomp)=opt(36)
-             baoc550(icol,k,kcomp)=opt(37)
-             basu550(icol,k,kcomp)=opt(38)
-             bebg550(icol,k,kcomp)=opt(26)+opt(27)
-             bebc550(icol,k,kcomp)=opt(28)+opt(29)
-             beoc550(icol,k,kcomp)=opt(30)+opt(31)
-             besu550(icol,k,kcomp)=opt(32)+opt(33)
-             bext550(icol,k,kcomp)=bebg550(icol,k,kcomp)+bebc550(icol,k,kcomp) &
-                                  +beoc550(icol,k,kcomp)+besu550(icol,k,kcomp)
+             bext440(icol,ilev,kcomp)=opt(1)
+             bext500(icol,ilev,kcomp)=opt(2)
+             bext670(icol,ilev,kcomp)=opt(3)
+             bext870(icol,ilev,kcomp)=opt(4)
+             bebg440(icol,ilev,kcomp)=opt(5)
+             bebg500(icol,ilev,kcomp)=opt(6)
+             bebg670(icol,ilev,kcomp)=opt(7)
+             bebg870(icol,ilev,kcomp)=opt(8)
+             bebc440(icol,ilev,kcomp)=opt(9)
+             bebc500(icol,ilev,kcomp)=opt(10)
+             bebc670(icol,ilev,kcomp)=opt(11)
+             bebc870(icol,ilev,kcomp)=opt(12)
+             beoc440(icol,ilev,kcomp)=opt(13)
+             beoc500(icol,ilev,kcomp)=opt(14)
+             beoc670(icol,ilev,kcomp)=opt(15)
+             beoc870(icol,ilev,kcomp)=opt(16)
+             besu440(icol,ilev,kcomp)=opt(17)
+             besu500(icol,ilev,kcomp)=opt(18)
+             besu670(icol,ilev,kcomp)=opt(19)
+             besu870(icol,ilev,kcomp)=opt(20)
+             babs440(icol,ilev,kcomp)=opt(21)
+             babs500(icol,ilev,kcomp)=opt(22)
+             babs550(icol,ilev,kcomp)=opt(23)
+             babs670(icol,ilev,kcomp)=opt(24)
+             babs870(icol,ilev,kcomp)=opt(25)
+             bebg550lt1(icol,ilev,kcomp)=opt(26)
+             bebg550gt1(icol,ilev,kcomp)=opt(27)
+             bebc550lt1(icol,ilev,kcomp)=opt(28)
+             bebc550gt1(icol,ilev,kcomp)=opt(29)
+             beoc550lt1(icol,ilev,kcomp)=opt(30)
+             beoc550gt1(icol,ilev,kcomp)=opt(31)
+             besu550lt1(icol,ilev,kcomp)=opt(32)
+             besu550gt1(icol,ilev,kcomp)=opt(33)
+             backsc550(icol,ilev,kcomp)=opt(34)
+             babg550(icol,ilev,kcomp)=opt(35)
+             babc550(icol,ilev,kcomp)=opt(36)
+             baoc550(icol,ilev,kcomp)=opt(37)
+             basu550(icol,ilev,kcomp)=opt(38)
+             bebg550(icol,ilev,kcomp)=opt(26)+opt(27)
+             bebc550(icol,ilev,kcomp)=opt(28)+opt(29)
+             beoc550(icol,ilev,kcomp)=opt(30)+opt(31)
+             besu550(icol,ilev,kcomp)=opt(32)+opt(33)
+             bext550(icol,ilev,kcomp)=bebg550(icol,ilev,kcomp)+bebc550(icol,ilev,kcomp) &
+                                     +beoc550(icol,ilev,kcomp)+besu550(icol,ilev,kcomp)
           endif
        end do ! icol
-    end do ! k
+    end do ! ilev
 
   end subroutine intaeropt4
 
@@ -1519,7 +1519,7 @@ contains
 
     ! Local variables
     real(r8) :: a, b, e
-    integer  :: i, iv, kcomp, k, icol
+    integer  :: iv, kcomp, ilev, icol
     integer  :: t_irh1, t_irh2, t_ict1, t_ict2, t_ifa1, t_ifa2
     integer  :: t_ifb1, t_ifb2, t_ifc1, t_ifc2
     real(r8) :: t_faq1, t_faq2, t_xfaq
@@ -1537,70 +1537,70 @@ contains
     do kcomp=5,10
 
        ! initialize all output fields
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             bext440(icol,k,kcomp)=0.0_r8
-             babs440(icol,k,kcomp)=0.0_r8
-             bext500(icol,k,kcomp)=0.0_r8
-             babs500(icol,k,kcomp)=0.0_r8
-             bext550(icol,k,kcomp)=0.0_r8
-             babs550(icol,k,kcomp)=0.0_r8
-             bext670(icol,k,kcomp)=0.0_r8
-             babs670(icol,k,kcomp)=0.0_r8
-             bext870(icol,k,kcomp)=0.0_r8
-             babs870(icol,k,kcomp)=0.0_r8
-             bebg440(icol,k,kcomp)=0.0_r8
-             bebg500(icol,k,kcomp)=0.0_r8
-             bebg550(icol,k,kcomp)=0.0_r8
-             babg550(icol,k,kcomp)=0.0_r8
-             bebg670(icol,k,kcomp)=0.0_r8
-             bebg870(icol,k,kcomp)=0.0_r8
-             bebc440(icol,k,kcomp)=0.0_r8
-             bebc500(icol,k,kcomp)=0.0_r8
-             bebc550(icol,k,kcomp)=0.0_r8
-             babc550(icol,k,kcomp)=0.0_r8
-             bebc670(icol,k,kcomp)=0.0_r8
-             bebc870(icol,k,kcomp)=0.0_r8
-             beoc440(icol,k,kcomp)=0.0_r8
-             beoc500(icol,k,kcomp)=0.0_r8
-             beoc550(icol,k,kcomp)=0.0_r8
-             baoc550(icol,k,kcomp)=0.0_r8
-             beoc670(icol,k,kcomp)=0.0_r8
-             beoc870(icol,k,kcomp)=0.0_r8
-             besu440(icol,k,kcomp)=0.0_r8
-             besu500(icol,k,kcomp)=0.0_r8
-             besu550(icol,k,kcomp)=0.0_r8
-             basu550(icol,k,kcomp)=0.0_r8
-             besu670(icol,k,kcomp)=0.0_r8
-             besu870(icol,k,kcomp)=0.0_r8
-             bebg550lt1(icol,k,kcomp)=0.0_r8
-             bebg550gt1(icol,k,kcomp)=0.0_r8
-             bebc550lt1(icol,k,kcomp)=0.0_r8
-             bebc550gt1(icol,k,kcomp)=0.0_r8
-             beoc550lt1(icol,k,kcomp)=0.0_r8
-             beoc550gt1(icol,k,kcomp)=0.0_r8
-             besu550lt1(icol,k,kcomp)=0.0_r8
-             besu550gt1(icol,k,kcomp)=0.0_r8
-             backsc550(icol,k,kcomp)=0.0_r8
+             bext440(icol,ilev,kcomp)=0.0_r8
+             babs440(icol,ilev,kcomp)=0.0_r8
+             bext500(icol,ilev,kcomp)=0.0_r8
+             babs500(icol,ilev,kcomp)=0.0_r8
+             bext550(icol,ilev,kcomp)=0.0_r8
+             babs550(icol,ilev,kcomp)=0.0_r8
+             bext670(icol,ilev,kcomp)=0.0_r8
+             babs670(icol,ilev,kcomp)=0.0_r8
+             bext870(icol,ilev,kcomp)=0.0_r8
+             babs870(icol,ilev,kcomp)=0.0_r8
+             bebg440(icol,ilev,kcomp)=0.0_r8
+             bebg500(icol,ilev,kcomp)=0.0_r8
+             bebg550(icol,ilev,kcomp)=0.0_r8
+             babg550(icol,ilev,kcomp)=0.0_r8
+             bebg670(icol,ilev,kcomp)=0.0_r8
+             bebg870(icol,ilev,kcomp)=0.0_r8
+             bebc440(icol,ilev,kcomp)=0.0_r8
+             bebc500(icol,ilev,kcomp)=0.0_r8
+             bebc550(icol,ilev,kcomp)=0.0_r8
+             babc550(icol,ilev,kcomp)=0.0_r8
+             bebc670(icol,ilev,kcomp)=0.0_r8
+             bebc870(icol,ilev,kcomp)=0.0_r8
+             beoc440(icol,ilev,kcomp)=0.0_r8
+             beoc500(icol,ilev,kcomp)=0.0_r8
+             beoc550(icol,ilev,kcomp)=0.0_r8
+             baoc550(icol,ilev,kcomp)=0.0_r8
+             beoc670(icol,ilev,kcomp)=0.0_r8
+             beoc870(icol,ilev,kcomp)=0.0_r8
+             besu440(icol,ilev,kcomp)=0.0_r8
+             besu500(icol,ilev,kcomp)=0.0_r8
+             besu550(icol,ilev,kcomp)=0.0_r8
+             basu550(icol,ilev,kcomp)=0.0_r8
+             besu670(icol,ilev,kcomp)=0.0_r8
+             besu870(icol,ilev,kcomp)=0.0_r8
+             bebg550lt1(icol,ilev,kcomp)=0.0_r8
+             bebg550gt1(icol,ilev,kcomp)=0.0_r8
+             bebc550lt1(icol,ilev,kcomp)=0.0_r8
+             bebc550gt1(icol,ilev,kcomp)=0.0_r8
+             beoc550lt1(icol,ilev,kcomp)=0.0_r8
+             beoc550gt1(icol,ilev,kcomp)=0.0_r8
+             besu550lt1(icol,ilev,kcomp)=0.0_r8
+             besu550gt1(icol,ilev,kcomp)=0.0_r8
+             backsc550(icol,ilev,kcomp)=0.0_r8
           end do
        end do
 
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             if(Nnatk(icol,k,kcomp).gt.0) then
+             if(Nnatk(icol,ilev,kcomp).gt.0) then
                 ! Collect all the vector elements into temporary storage
                 ! to avoid cache conflicts and excessive cross-referencing
 
-                t_irh1 = irh1(icol,k)
+                t_irh1 = irh1(icol,ilev)
                 t_irh2 = t_irh1+1
-                t_ict1 = ict1(icol,k,kcomp)
+                t_ict1 = ict1(icol,ilev,kcomp)
                 t_ict2 = t_ict1+1
-                t_ifc1 = ifac1(icol,k,kcomp)
+                t_ifc1 = ifac1(icol,ilev,kcomp)
                 t_ifc2 = t_ifc1+1
 
-                t_ifb1 = ifbc1(icol,k,kcomp)
+                t_ifb1 = ifbc1(icol,ilev,kcomp)
                 t_ifb2 = t_ifb1+1
-                t_ifa1 = ifaq1(icol,k,kcomp)
+                t_ifa1 = ifaq1(icol,ilev,kcomp)
                 t_ifa2 = t_ifa1+1
 
                 t_rh1  = rh(t_irh1)
@@ -1614,11 +1614,11 @@ contains
                 t_faq1 = faq(t_ifa1)
                 t_faq2 = faq(t_ifa2)
 
-                t_xrh  = xrh(icol,k)
-                t_xct  = xct(icol,k,kcomp)
-                t_xfac = xfac(icol,k,kcomp)
-                t_xfbc = xfbc(icol,k,kcomp)
-                t_xfaq = xfaq(icol,k,kcomp)
+                t_xrh  = xrh(icol,ilev)
+                t_xct  = xct(icol,ilev,kcomp)
+                t_xfac = xfac(icol,ilev,kcomp)
+                t_xfbc = xfbc(icol,ilev,kcomp)
+                t_xfaq = xfaq(icol,ilev,kcomp)
 
                 !     partial lengths along each dimension (1-5) for interpolation
                 d2mx(1) = (t_rh2-t_xrh)
@@ -1679,53 +1679,53 @@ contains
                    opt(iv)=((t_rh2-t_xrh)*opt1+(t_xrh-t_rh1)*opt2)/(t_rh2-t_rh1)
                 end do ! iv=1,38
 
-                bext440(icol,k,kcomp)=opt(1)
-                bext500(icol,k,kcomp)=opt(2)
-                bext670(icol,k,kcomp)=opt(3)
-                bext870(icol,k,kcomp)=opt(4)
-                bebg440(icol,k,kcomp)=opt(5)
-                bebg500(icol,k,kcomp)=opt(6)
-                bebg670(icol,k,kcomp)=opt(7)
-                bebg870(icol,k,kcomp)=opt(8)
-                bebc440(icol,k,kcomp)=opt(9)
-                bebc500(icol,k,kcomp)=opt(10)
-                bebc670(icol,k,kcomp)=opt(11)
-                bebc870(icol,k,kcomp)=opt(12)
-                beoc440(icol,k,kcomp)=opt(13)
-                beoc500(icol,k,kcomp)=opt(14)
-                beoc670(icol,k,kcomp)=opt(15)
-                beoc870(icol,k,kcomp)=opt(16)
-                besu440(icol,k,kcomp)=opt(17)
-                besu500(icol,k,kcomp)=opt(18)
-                besu670(icol,k,kcomp)=opt(19)
-                besu870(icol,k,kcomp)=opt(20)
-                babs440(icol,k,kcomp)=opt(21)
-                babs500(icol,k,kcomp)=opt(22)
-                babs550(icol,k,kcomp)=opt(23)
-                babs670(icol,k,kcomp)=opt(24)
-                babs870(icol,k,kcomp)=opt(25)
-                bebg550lt1(icol,k,kcomp)=opt(26)
-                bebg550gt1(icol,k,kcomp)=opt(27)
-                bebc550lt1(icol,k,kcomp)=opt(28)
-                bebc550gt1(icol,k,kcomp)=opt(29)
-                beoc550lt1(icol,k,kcomp)=opt(30)
-                beoc550gt1(icol,k,kcomp)=opt(31)
-                besu550lt1(icol,k,kcomp)=opt(32)
-                besu550gt1(icol,k,kcomp)=opt(33)
-                backsc550(icol,k,kcomp)=opt(34)
-                babg550(icol,k,kcomp)=opt(35)
-                babc550(icol,k,kcomp)=opt(36)
-                baoc550(icol,k,kcomp)=opt(37)
-                basu550(icol,k,kcomp)=opt(38)
-                bebg550(icol,k,kcomp)=opt(26)+opt(27)
-                bebc550(icol,k,kcomp)=opt(28)+opt(29)
-                beoc550(icol,k,kcomp)=opt(30)+opt(31)
-                besu550(icol,k,kcomp)=opt(32)+opt(33)
-                bext550(icol,k,kcomp)=bebg550(icol,k,kcomp)+bebc550(icol,k,kcomp) &
-                                     +beoc550(icol,k,kcomp)+besu550(icol,k,kcomp)
+                bext440(icol,ilev,kcomp)=opt(1)
+                bext500(icol,ilev,kcomp)=opt(2)
+                bext670(icol,ilev,kcomp)=opt(3)
+                bext870(icol,ilev,kcomp)=opt(4)
+                bebg440(icol,ilev,kcomp)=opt(5)
+                bebg500(icol,ilev,kcomp)=opt(6)
+                bebg670(icol,ilev,kcomp)=opt(7)
+                bebg870(icol,ilev,kcomp)=opt(8)
+                bebc440(icol,ilev,kcomp)=opt(9)
+                bebc500(icol,ilev,kcomp)=opt(10)
+                bebc670(icol,ilev,kcomp)=opt(11)
+                bebc870(icol,ilev,kcomp)=opt(12)
+                beoc440(icol,ilev,kcomp)=opt(13)
+                beoc500(icol,ilev,kcomp)=opt(14)
+                beoc670(icol,ilev,kcomp)=opt(15)
+                beoc870(icol,ilev,kcomp)=opt(16)
+                besu440(icol,ilev,kcomp)=opt(17)
+                besu500(icol,ilev,kcomp)=opt(18)
+                besu670(icol,ilev,kcomp)=opt(19)
+                besu870(icol,ilev,kcomp)=opt(20)
+                babs440(icol,ilev,kcomp)=opt(21)
+                babs500(icol,ilev,kcomp)=opt(22)
+                babs550(icol,ilev,kcomp)=opt(23)
+                babs670(icol,ilev,kcomp)=opt(24)
+                babs870(icol,ilev,kcomp)=opt(25)
+                bebg550lt1(icol,ilev,kcomp)=opt(26)
+                bebg550gt1(icol,ilev,kcomp)=opt(27)
+                bebc550lt1(icol,ilev,kcomp)=opt(28)
+                bebc550gt1(icol,ilev,kcomp)=opt(29)
+                beoc550lt1(icol,ilev,kcomp)=opt(30)
+                beoc550gt1(icol,ilev,kcomp)=opt(31)
+                besu550lt1(icol,ilev,kcomp)=opt(32)
+                besu550gt1(icol,ilev,kcomp)=opt(33)
+                backsc550(icol,ilev,kcomp)=opt(34)
+                babg550(icol,ilev,kcomp)=opt(35)
+                babc550(icol,ilev,kcomp)=opt(36)
+                baoc550(icol,ilev,kcomp)=opt(37)
+                basu550(icol,ilev,kcomp)=opt(38)
+                bebg550(icol,ilev,kcomp)=opt(26)+opt(27)
+                bebc550(icol,ilev,kcomp)=opt(28)+opt(29)
+                beoc550(icol,ilev,kcomp)=opt(30)+opt(31)
+                besu550(icol,ilev,kcomp)=opt(32)+opt(33)
+                bext550(icol,ilev,kcomp)=bebg550(icol,ilev,kcomp)+bebc550(icol,ilev,kcomp) &
+                                        +beoc550(icol,ilev,kcomp)+besu550(icol,ilev,kcomp)
              endif
           end do ! icol
-       end do ! k
+       end do ! ilev
     end do  ! kcomp
   end subroutine intaeropt5to10
 

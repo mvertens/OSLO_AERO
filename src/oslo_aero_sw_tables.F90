@@ -102,7 +102,7 @@ contains
   subroutine initopt()
 
     ! Local variables
-    integer  :: kcomp, iwl, irelh, ictot, ifac, ifbc, ifaq, i, irf
+    integer  :: kcomp, iwl, irelh, ictot, ifac, ifbc, ifaq, iband, irf
     integer  :: ifombg, ifbcbg
     integer  :: ik, ic, ifil, lin, linmax
     real(r8) :: catot, relh, frac, fabc, fraq, frombg, frbcbg
@@ -804,58 +804,58 @@ contains
     real(r8) , intent(out) :: kabs(pcols,pver,0:nmodes,nlwbands) ! LW spectral modal specific absorption coefficient
     !
     ! Local variables
-    integer i, kcomp, k, icol
+    integer iband, kcomp, ilev, icol
     !---------------------------------------
 
     kcomp=0
-    do i=1,nbands
+    do iband=1,nbands
        do icol=1,ncol
-          do k=1,pver
-             omega(icol,k,kcomp,i)=0.0_r8
-             gass(icol,k,kcomp,i)=0.0_r8
-             bex(icol,k,kcomp,i)=0.0_r8
-             ske(icol,k,kcomp,i)=0.0_r8
+          do ilev=1,pver
+             omega(icol,ilev,kcomp,iband)=0.0_r8
+             gass(icol,ilev,kcomp,iband)=0.0_r8
+             bex(icol,ilev,kcomp,iband)=0.0_r8
+             ske(icol,ilev,kcomp,iband)=0.0_r8
           end do
        end do
     end do
-    do i=1,nlwbands
+    do iband=1,nlwbands
        do icol=1,ncol
-          do k=1,pver
-             kabs(icol,k,kcomp,i)=0.0_r8
+          do ilev=1,pver
+             kabs(icol,ilev,kcomp,iband)=0.0_r8
           end do
        end do
     end do
 
     ! SW optical parameters
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          ! if(Nnatk(icol,k,kcomp)>0.0_r8) then
+          ! if(Nnatk(icol,ilev,kcomp)>0.0_r8) then
           if(daylight(icol)) then
-             do i=1,nbands   ! i = wavelength index
-                omega(icol,k,kcomp,i)=om0(i)
-                gass(icol,k,kcomp,i)=g0(i)
-                bex(icol,k,kcomp,i)=be0(i)
-                ske(icol,k,kcomp,i)=ke0(i)
-             end do          ! i
+             do iband=1,nbands   ! iband = wavelength index
+                omega(icol,ilev,kcomp,iband)=om0(iband)
+                gass(icol,ilev,kcomp,iband)=g0(iband)
+                bex(icol,ilev,kcomp,iband)=be0(iband)
+                ske(icol,ilev,kcomp,iband)=ke0(iband)
+             end do          ! iband
           else  ! daylight
              ! Need be and ke in   nband=4 for lw calculation
-             bex(icol,k,kcomp,4)=be0(4)
-             ske(icol,k,kcomp,4)=ke0(4)
+             bex(icol,ilev,kcomp,4)=be0(4)
+             ske(icol,ilev,kcomp,4)=ke0(4)
           end if ! daylight
        end do ! icol
-    end do ! k
+    end do ! ilev
 
     ! LW optical parameters
 
     if(lw_on) then
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             do i=1,nlwbands   ! i = wavelength index
-                kabs(icol,k,kcomp,i)=ka0(i)
-             end do            ! i
+             do iband=1,nlwbands   ! iband = wavelength index
+                kabs(icol,ilev,kcomp,iband)=ka0(iband)
+             end do            ! iband
           end do ! icol
-       end do ! k
+       end do ! ilev
 
     endif ! lw_on
 
@@ -889,7 +889,7 @@ contains
     real(r8), intent(out) :: kabs(pcols,pver,0:nmodes,nlwbands)! LW spectral modal specific absoption coefficient
     !
     ! Local variables
-    integer i, kcomp, k, icol, kc10
+    integer iband, kcomp, ilev, icol, kc10
     real(r8) a, b
     integer t_irh1, t_irh2, t_ict1, t_ict2, t_ifc1, t_ifc2, t_ifo1, t_ifo2
     real(r8) t_fac1, t_fac2, t_xfac, t_xrh, t_xct, t_rh1, t_rh2
@@ -910,37 +910,37 @@ contains
        endif
 
        ! write(*,*) 'Before init-loop', kc10
-       do i=1,nbands
+       do iband=1,nbands
           do icol=1,ncol
-             do k=1,pver
-                omega(icol,k,kc10,i)=0.0_r8
-                gass(icol,k,kc10,i)=0.0_r8
-                bex(icol,k,kc10,i)=0.0_r8
-                ske(icol,k,kc10,i)=0.0_r8
+             do ilev=1,pver
+                omega(icol,ilev,kc10,iband)=0.0_r8
+                gass(icol,ilev,kc10,iband)=0.0_r8
+                bex(icol,ilev,kc10,iband)=0.0_r8
+                ske(icol,ilev,kc10,iband)=0.0_r8
              end do
           end do
        end do
-       do i=1,nlwbands
+       do iband=1,nlwbands
           do icol=1,ncol
-             do k=1,pver
-                kabs(icol,k,kc10,i)=0.0_r8
+             do ilev=1,pver
+                kabs(icol,ilev,kc10,iband)=0.0_r8
              end do
           end do
        end do
 
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
 
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
 
-             t_irh1 = irh1(icol,k)
+             t_irh1 = irh1(icol,ilev)
              t_irh2 = t_irh1+1
-             t_ict1 = ict1(icol,k,kcomp)
+             t_ict1 = ict1(icol,ilev,kcomp)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
-             t_ifo1 = ifombg1(icol,k)
+             t_ifo1 = ifombg1(icol,ilev)
              t_ifo2 = t_ifo1+1
 
              t_rh1  = rh(t_irh1)
@@ -953,10 +953,10 @@ contains
              t_fombg1 = fombg(t_ifo1)
              t_fombg2 = fombg(t_ifo2)
 
-             t_xrh  = xrh(icol,k)
-             t_xct  = xct(icol,k,kcomp)
-             t_xfac = xfac(icol,k,kcomp)
-             t_xfombg = xfombg(icol,k)
+             t_xrh  = xrh(icol,ilev)
+             t_xct  = xct(icol,ilev,kcomp)
+             t_xfac = xfac(icol,ilev,kcomp)
+             t_xfombg = xfombg(icol,ilev)
 
              ! partial lengths along each dimension (1-4) for interpolation
              d2mx(1) = (t_rh2-t_xrh)
@@ -976,83 +976,79 @@ contains
              ! SW optical parameters
              if(daylight(icol)) then
 
-                do i=1,nbands            ! i = wavelength index
+                do iband=1,nbands            ! iband = wavelength index
 
                    ! single scattering albedo:
 
                    ! end points as basis for multidimentional linear interpolation
-                   opt4d(1,1,1,1)=om1(i,t_irh1,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(1,1,1,2)=om1(i,t_irh1,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(1,1,2,1)=om1(i,t_irh1,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(1,1,2,2)=om1(i,t_irh1,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(1,2,1,1)=om1(i,t_irh1,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(1,2,1,2)=om1(i,t_irh1,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(1,2,2,1)=om1(i,t_irh1,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(1,2,2,2)=om1(i,t_irh1,t_ifo2,t_ict2,t_ifc2)
-                   opt4d(2,1,1,1)=om1(i,t_irh2,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(2,1,1,2)=om1(i,t_irh2,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(2,1,2,1)=om1(i,t_irh2,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(2,1,2,2)=om1(i,t_irh2,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(2,2,1,1)=om1(i,t_irh2,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(2,2,1,2)=om1(i,t_irh2,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(2,2,2,1)=om1(i,t_irh2,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(2,2,2,2)=om1(i,t_irh2,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(1,1,1,1)=om1(iband,t_irh1,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(1,1,1,2)=om1(iband,t_irh1,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(1,1,2,1)=om1(iband,t_irh1,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(1,1,2,2)=om1(iband,t_irh1,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(1,2,1,1)=om1(iband,t_irh1,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(1,2,1,2)=om1(iband,t_irh1,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(1,2,2,1)=om1(iband,t_irh1,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(1,2,2,2)=om1(iband,t_irh1,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(2,1,1,1)=om1(iband,t_irh2,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(2,1,1,2)=om1(iband,t_irh2,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(2,1,2,1)=om1(iband,t_irh2,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(2,1,2,2)=om1(iband,t_irh2,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(2,2,1,1)=om1(iband,t_irh2,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(2,2,1,2)=om1(iband,t_irh2,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(2,2,2,1)=om1(iband,t_irh2,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(2,2,2,2)=om1(iband,t_irh2,t_ifo2,t_ict2,t_ifc2)
 
                    ! interpolation in the fac, cat and fombg dimensions
                    call lininterpol4dim (d2mx, dxm1, invd, opt4d, ome1, ome2)
 
                    ! finally, interpolation in the rh dimension
-                   ! write(*,*) 'Before omega'
-                   omega(icol,k,kc10,i)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2) /(t_rh2-t_rh1)
-                   !alt       omega(icol,k,kc10,i)=(d2mx(1)*ome1+dxm1(1)*ome2)*invd(1)
+                   omega(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2) /(t_rh2-t_rh1)
 
                    ! asymmetry factor
 
                    ! end points as basis for multidimentional linear interpolation
-                   opt4d(1,1,1,1)=g1(i,t_irh1,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(1,1,1,2)=g1(i,t_irh1,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(1,1,2,1)=g1(i,t_irh1,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(1,1,2,2)=g1(i,t_irh1,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(1,2,1,1)=g1(i,t_irh1,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(1,2,1,2)=g1(i,t_irh1,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(1,2,2,1)=g1(i,t_irh1,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(1,2,2,2)=g1(i,t_irh1,t_ifo2,t_ict2,t_ifc2)
-                   opt4d(2,1,1,1)=g1(i,t_irh2,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(2,1,1,2)=g1(i,t_irh2,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(2,1,2,1)=g1(i,t_irh2,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(2,1,2,2)=g1(i,t_irh2,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(2,2,1,1)=g1(i,t_irh2,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(2,2,1,2)=g1(i,t_irh2,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(2,2,2,1)=g1(i,t_irh2,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(2,2,2,2)=g1(i,t_irh2,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(1,1,1,1)=g1(iband,t_irh1,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(1,1,1,2)=g1(iband,t_irh1,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(1,1,2,1)=g1(iband,t_irh1,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(1,1,2,2)=g1(iband,t_irh1,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(1,2,1,1)=g1(iband,t_irh1,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(1,2,1,2)=g1(iband,t_irh1,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(1,2,2,1)=g1(iband,t_irh1,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(1,2,2,2)=g1(iband,t_irh1,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(2,1,1,1)=g1(iband,t_irh2,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(2,1,1,2)=g1(iband,t_irh2,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(2,1,2,1)=g1(iband,t_irh2,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(2,1,2,2)=g1(iband,t_irh2,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(2,2,1,1)=g1(iband,t_irh2,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(2,2,1,2)=g1(iband,t_irh2,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(2,2,2,1)=g1(iband,t_irh2,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(2,2,2,2)=g1(iband,t_irh2,t_ifo2,t_ict2,t_ifc2)
 
                    ! interpolation in the fac, cat and fombg dimensions
                    call lininterpol4dim (d2mx, dxm1, invd, opt4d, ge1, ge2)
 
                    ! finally, interpolation in the rh dimension (dim. 1)
-                   ! write(*,*) 'Before gass'
-                   gass(icol,k,kc10,i)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2) /(t_rh2-t_rh1)
-                   !alt      gass(icol,k,kc10,i)=(d2mx(1)*ge1+dxm1(1)*ge2)*invd(1)
+                   gass(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2) /(t_rh2-t_rh1)
 
                    ! aerosol extinction
 
                    ! end points as basis for multidimentional linear interpolation
-                   opt4d(1,1,1,1)=be1(i,t_irh1,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(1,1,1,2)=be1(i,t_irh1,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(1,1,2,1)=be1(i,t_irh1,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(1,1,2,2)=be1(i,t_irh1,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(1,2,1,1)=be1(i,t_irh1,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(1,2,1,2)=be1(i,t_irh1,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(1,2,2,1)=be1(i,t_irh1,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(1,2,2,2)=be1(i,t_irh1,t_ifo2,t_ict2,t_ifc2)
-                   opt4d(2,1,1,1)=be1(i,t_irh2,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(2,1,1,2)=be1(i,t_irh2,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(2,1,2,1)=be1(i,t_irh2,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(2,1,2,2)=be1(i,t_irh2,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(2,2,1,1)=be1(i,t_irh2,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(2,2,1,2)=be1(i,t_irh2,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(2,2,2,1)=be1(i,t_irh2,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(2,2,2,2)=be1(i,t_irh2,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(1,1,1,1)=be1(iband,t_irh1,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(1,1,1,2)=be1(iband,t_irh1,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(1,1,2,1)=be1(iband,t_irh1,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(1,1,2,2)=be1(iband,t_irh1,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(1,2,1,1)=be1(iband,t_irh1,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(1,2,1,2)=be1(iband,t_irh1,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(1,2,2,1)=be1(iband,t_irh1,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(1,2,2,2)=be1(iband,t_irh1,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(2,1,1,1)=be1(iband,t_irh2,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(2,1,1,2)=be1(iband,t_irh2,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(2,1,2,1)=be1(iband,t_irh2,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(2,1,2,2)=be1(iband,t_irh2,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(2,2,1,1)=be1(iband,t_irh2,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(2,2,1,2)=be1(iband,t_irh2,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(2,2,2,1)=be1(iband,t_irh2,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(2,2,2,2)=be1(iband,t_irh2,t_ifo2,t_ict2,t_ifc2)
 
                    ! interpolation in the fac, cat and fombg dimensions
                    call lininterpol4dim (d2mx, dxm1, invd, opt4d, bex1, bex2)
@@ -1061,39 +1057,38 @@ contains
                    bex2=max(bex2,1.e-30_r8)
 
                    ! finally, interpolation in the rh dimension
-                   ! write(*,*) 'Before bex'
                    if(t_xrh <= 0.37_r8) then
-                      bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2) /(t_rh2-t_rh1)
+                      bex(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2) /(t_rh2-t_rh1)
                    else
                       a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                      bex(icol,k,kc10,i)=e**(a*t_xrh+b)
+                      bex(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband (iband)
 
              else  ! daylight
 
                 ! aerosol extinction used for size information in LW
-                i=4
+                iband=4
 
                 ! end points as basis for multidimentional linear interpolation
-                opt4d(1,1,1,1)=be1(i,t_irh1,t_ifo1,t_ict1,t_ifc1)
-                opt4d(1,1,1,2)=be1(i,t_irh1,t_ifo1,t_ict1,t_ifc2)
-                opt4d(1,1,2,1)=be1(i,t_irh1,t_ifo1,t_ict2,t_ifc1)
-                opt4d(1,1,2,2)=be1(i,t_irh1,t_ifo1,t_ict2,t_ifc2)
-                opt4d(1,2,1,1)=be1(i,t_irh1,t_ifo2,t_ict1,t_ifc1)
-                opt4d(1,2,1,2)=be1(i,t_irh1,t_ifo2,t_ict1,t_ifc2)
-                opt4d(1,2,2,1)=be1(i,t_irh1,t_ifo2,t_ict2,t_ifc1)
-                opt4d(1,2,2,2)=be1(i,t_irh1,t_ifo2,t_ict2,t_ifc2)
-                opt4d(2,1,1,1)=be1(i,t_irh2,t_ifo1,t_ict1,t_ifc1)
-                opt4d(2,1,1,2)=be1(i,t_irh2,t_ifo1,t_ict1,t_ifc2)
-                opt4d(2,1,2,1)=be1(i,t_irh2,t_ifo1,t_ict2,t_ifc1)
-                opt4d(2,1,2,2)=be1(i,t_irh2,t_ifo1,t_ict2,t_ifc2)
-                opt4d(2,2,1,1)=be1(i,t_irh2,t_ifo2,t_ict1,t_ifc1)
-                opt4d(2,2,1,2)=be1(i,t_irh2,t_ifo2,t_ict1,t_ifc2)
-                opt4d(2,2,2,1)=be1(i,t_irh2,t_ifo2,t_ict2,t_ifc1)
-                opt4d(2,2,2,2)=be1(i,t_irh2,t_ifo2,t_ict2,t_ifc2)
+                opt4d(1,1,1,1)=be1(iband,t_irh1,t_ifo1,t_ict1,t_ifc1)
+                opt4d(1,1,1,2)=be1(iband,t_irh1,t_ifo1,t_ict1,t_ifc2)
+                opt4d(1,1,2,1)=be1(iband,t_irh1,t_ifo1,t_ict2,t_ifc1)
+                opt4d(1,1,2,2)=be1(iband,t_irh1,t_ifo1,t_ict2,t_ifc2)
+                opt4d(1,2,1,1)=be1(iband,t_irh1,t_ifo2,t_ict1,t_ifc1)
+                opt4d(1,2,1,2)=be1(iband,t_irh1,t_ifo2,t_ict1,t_ifc2)
+                opt4d(1,2,2,1)=be1(iband,t_irh1,t_ifo2,t_ict2,t_ifc1)
+                opt4d(1,2,2,2)=be1(iband,t_irh1,t_ifo2,t_ict2,t_ifc2)
+                opt4d(2,1,1,1)=be1(iband,t_irh2,t_ifo1,t_ict1,t_ifc1)
+                opt4d(2,1,1,2)=be1(iband,t_irh2,t_ifo1,t_ict1,t_ifc2)
+                opt4d(2,1,2,1)=be1(iband,t_irh2,t_ifo1,t_ict2,t_ifc1)
+                opt4d(2,1,2,2)=be1(iband,t_irh2,t_ifo1,t_ict2,t_ifc2)
+                opt4d(2,2,1,1)=be1(iband,t_irh2,t_ifo2,t_ict1,t_ifc1)
+                opt4d(2,2,1,2)=be1(iband,t_irh2,t_ifo2,t_ict1,t_ifc2)
+                opt4d(2,2,2,1)=be1(iband,t_irh2,t_ifo2,t_ict2,t_ifc1)
+                opt4d(2,2,2,2)=be1(iband,t_irh2,t_ifo2,t_ict2,t_ifc2)
 
                 ! interpolation in the fac, cat and fombg dimensions
                 call lininterpol4dim (d2mx, dxm1, invd, opt4d, bex1, bex2)
@@ -1103,37 +1098,36 @@ contains
 
                 ! finally, interpolation in the rh dimension
                 if(t_xrh <= 0.37_r8) then
-                   bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2) &
-                        /(t_rh2-t_rh1)
+                   bex(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                 else
                    a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                   bex(icol,k,kc10,i)=e**(a*t_xrh+b)
+                   bex(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                 endif
 
              endif  ! daylight
 
-             do i=4,4            ! i = wavelength index
+             do iband=4,4            ! iband = wavelength index
 
                 ! aerosol specific extinction
 
                 ! end points as basis for multidimentional linear interpolation
-                opt4d(1,1,1,1)=ke1(i,t_irh1,t_ifo1,t_ict1,t_ifc1)
-                opt4d(1,1,1,2)=ke1(i,t_irh1,t_ifo1,t_ict1,t_ifc2)
-                opt4d(1,1,2,1)=ke1(i,t_irh1,t_ifo1,t_ict2,t_ifc1)
-                opt4d(1,1,2,2)=ke1(i,t_irh1,t_ifo1,t_ict2,t_ifc2)
-                opt4d(1,2,1,1)=ke1(i,t_irh1,t_ifo2,t_ict1,t_ifc1)
-                opt4d(1,2,1,2)=ke1(i,t_irh1,t_ifo2,t_ict1,t_ifc2)
-                opt4d(1,2,2,1)=ke1(i,t_irh1,t_ifo2,t_ict2,t_ifc1)
-                opt4d(1,2,2,2)=ke1(i,t_irh1,t_ifo2,t_ict2,t_ifc2)
-                opt4d(2,1,1,1)=ke1(i,t_irh2,t_ifo1,t_ict1,t_ifc1)
-                opt4d(2,1,1,2)=ke1(i,t_irh2,t_ifo1,t_ict1,t_ifc2)
-                opt4d(2,1,2,1)=ke1(i,t_irh2,t_ifo1,t_ict2,t_ifc1)
-                opt4d(2,1,2,2)=ke1(i,t_irh2,t_ifo1,t_ict2,t_ifc2)
-                opt4d(2,2,1,1)=ke1(i,t_irh2,t_ifo2,t_ict1,t_ifc1)
-                opt4d(2,2,1,2)=ke1(i,t_irh2,t_ifo2,t_ict1,t_ifc2)
-                opt4d(2,2,2,1)=ke1(i,t_irh2,t_ifo2,t_ict2,t_ifc1)
-                opt4d(2,2,2,2)=ke1(i,t_irh2,t_ifo2,t_ict2,t_ifc2)
+                opt4d(1,1,1,1)=ke1(iband,t_irh1,t_ifo1,t_ict1,t_ifc1)
+                opt4d(1,1,1,2)=ke1(iband,t_irh1,t_ifo1,t_ict1,t_ifc2)
+                opt4d(1,1,2,1)=ke1(iband,t_irh1,t_ifo1,t_ict2,t_ifc1)
+                opt4d(1,1,2,2)=ke1(iband,t_irh1,t_ifo1,t_ict2,t_ifc2)
+                opt4d(1,2,1,1)=ke1(iband,t_irh1,t_ifo2,t_ict1,t_ifc1)
+                opt4d(1,2,1,2)=ke1(iband,t_irh1,t_ifo2,t_ict1,t_ifc2)
+                opt4d(1,2,2,1)=ke1(iband,t_irh1,t_ifo2,t_ict2,t_ifc1)
+                opt4d(1,2,2,2)=ke1(iband,t_irh1,t_ifo2,t_ict2,t_ifc2)
+                opt4d(2,1,1,1)=ke1(iband,t_irh2,t_ifo1,t_ict1,t_ifc1)
+                opt4d(2,1,1,2)=ke1(iband,t_irh2,t_ifo1,t_ict1,t_ifc2)
+                opt4d(2,1,2,1)=ke1(iband,t_irh2,t_ifo1,t_ict2,t_ifc1)
+                opt4d(2,1,2,2)=ke1(iband,t_irh2,t_ifo1,t_ict2,t_ifc2)
+                opt4d(2,2,1,1)=ke1(iband,t_irh2,t_ifo2,t_ict1,t_ifc1)
+                opt4d(2,2,1,2)=ke1(iband,t_irh2,t_ifo2,t_ict1,t_ifc2)
+                opt4d(2,2,2,1)=ke1(iband,t_irh2,t_ifo2,t_ict2,t_ifc1)
+                opt4d(2,2,2,2)=ke1(iband,t_irh2,t_ifo2,t_ict2,t_ifc2)
 
                 ! interpolation in the fac, cat and fombg dimensions
                 call lininterpol4dim (d2mx, dxm1, invd, opt4d, ske1, ske2)
@@ -1142,46 +1136,40 @@ contains
                 ske2=max(ske2,1.e-30_r8)
 
                 ! finally, interpolation in the rh dimension
-                ! write(*,*) 'Before ske'
                 if(t_xrh <= 0.37_r8) then
-                   ske(icol,k,kc10,i)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2) &
-                        /(t_rh2-t_rh1)
-                   !alt        ske(icol,k,kc10,i)=(d2mx(1)*ske1+dxm1(1)*ske2)*invd(1)
+                   ske(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
                 else
                    a=(log(ske2)-log(ske1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(ske1)-t_rh1*log(ske2))/(t_rh2-t_rh1)
-                   ske(icol,k,kc10,i)=e**(a*t_xrh+b)
-                   !alt        a=(log(ske2)-log(ske1))*invd(1)
-                   !alt        b=(t_rh2*log(ske1)-t_rh1*log(ske2))*invd(1)
-                   !alt        ske(icol,k,kc10,i)=e**(a*t_xrh+b)
+                   ske(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                 endif
 
-             end do ! i
+             end do ! iband
 
              if (lw_on) then
 
                 ! LW optical parameters
-                do i=1,nlwbands            ! i = wavelength index
+                do iband=1,nlwbands            ! iband = wavelength index
 
                    ! aerosol specific absorption in LW
 
                    ! end points as basis for multidimentional linear interpolation
-                   opt4d(1,1,1,1)=ka1(i,t_irh1,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(1,1,1,2)=ka1(i,t_irh1,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(1,1,2,1)=ka1(i,t_irh1,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(1,1,2,2)=ka1(i,t_irh1,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(1,2,1,1)=ka1(i,t_irh1,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(1,2,1,2)=ka1(i,t_irh1,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(1,2,2,1)=ka1(i,t_irh1,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(1,2,2,2)=ka1(i,t_irh1,t_ifo2,t_ict2,t_ifc2)
-                   opt4d(2,1,1,1)=ka1(i,t_irh2,t_ifo1,t_ict1,t_ifc1)
-                   opt4d(2,1,1,2)=ka1(i,t_irh2,t_ifo1,t_ict1,t_ifc2)
-                   opt4d(2,1,2,1)=ka1(i,t_irh2,t_ifo1,t_ict2,t_ifc1)
-                   opt4d(2,1,2,2)=ka1(i,t_irh2,t_ifo1,t_ict2,t_ifc2)
-                   opt4d(2,2,1,1)=ka1(i,t_irh2,t_ifo2,t_ict1,t_ifc1)
-                   opt4d(2,2,1,2)=ka1(i,t_irh2,t_ifo2,t_ict1,t_ifc2)
-                   opt4d(2,2,2,1)=ka1(i,t_irh2,t_ifo2,t_ict2,t_ifc1)
-                   opt4d(2,2,2,2)=ka1(i,t_irh2,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(1,1,1,1)=ka1(iband,t_irh1,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(1,1,1,2)=ka1(iband,t_irh1,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(1,1,2,1)=ka1(iband,t_irh1,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(1,1,2,2)=ka1(iband,t_irh1,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(1,2,1,1)=ka1(iband,t_irh1,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(1,2,1,2)=ka1(iband,t_irh1,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(1,2,2,1)=ka1(iband,t_irh1,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(1,2,2,2)=ka1(iband,t_irh1,t_ifo2,t_ict2,t_ifc2)
+                   opt4d(2,1,1,1)=ka1(iband,t_irh2,t_ifo1,t_ict1,t_ifc1)
+                   opt4d(2,1,1,2)=ka1(iband,t_irh2,t_ifo1,t_ict1,t_ifc2)
+                   opt4d(2,1,2,1)=ka1(iband,t_irh2,t_ifo1,t_ict2,t_ifc1)
+                   opt4d(2,1,2,2)=ka1(iband,t_irh2,t_ifo1,t_ict2,t_ifc2)
+                   opt4d(2,2,1,1)=ka1(iband,t_irh2,t_ifo2,t_ict1,t_ifc1)
+                   opt4d(2,2,1,2)=ka1(iband,t_irh2,t_ifo2,t_ict1,t_ifc2)
+                   opt4d(2,2,2,1)=ka1(iband,t_irh2,t_ifo2,t_ict2,t_ifc1)
+                   opt4d(2,2,2,2)=ka1(iband,t_irh2,t_ifo2,t_ict2,t_ifc2)
 
                    ! interpolation in the fac, cat and fombg dimensions
                    call lininterpol4dim (d2mx, dxm1, invd, opt4d, kabs1, kabs2)
@@ -1191,20 +1179,20 @@ contains
 
                    ! write(*,*) 'Before kabs'
                    if(t_xrh <= 0.37) then
-                      kabs(icol,k,kc10,i)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2) &
+                      kabs(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2) &
                            /(t_rh2-t_rh1)
                    else
                       a=(log(kabs2)-log(kabs1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(kabs1)-t_rh1*log(kabs2))/(t_rh2-t_rh1)
-                      kabs(icol,k,kc10,i)=e**(a*t_xrh+b)
+                      kabs(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband
 
              endif ! lw_on
 
           end do ! icol
-       end do ! k
+       end do ! ilev
        ! write(*,*) 'kcomp, omega(1,26,kcomp,4)=', kcomp, omega(1,26,kcomp,4)
        ! write(*,*) 'kcomp, gass(1,26,kcomp,4)=', kcomp, gass(1,26,kcomp,4)
        ! write(*,*) 'kcomp, bex(1,26,kcomp,4)=', kcomp, bex(1,26,kcomp,4)
@@ -1237,7 +1225,7 @@ contains
     real(r8), intent(out) :: kabs(pcols,pver,0:nmodes,nlwbands)! LW spectral modal specific absorption coefficient
     !
     ! Local variables
-    integer  :: i, kcomp, k, icol, kc10
+    integer  :: iband, kcomp, ilev, icol, kc10
     real(r8) :: a, b
     integer  :: t_irh1, t_irh2, t_ict1, t_ict2, t_ifc1, t_ifc2
     real(r8) :: t_fac1, t_fac2, t_xfac, t_xrh, t_xct, t_rh1, t_rh2,t_cat1, t_cat2
@@ -1256,34 +1244,34 @@ contains
        endif
 
        ! write(*,*) 'Before init-loop', kc10
-       do i=1,nbands
+       do iband=1,nbands
           do icol=1,ncol
-             do k=1,pver
-                omega(icol,k,kc10,i)=0.0_r8
-                gass(icol,k,kc10,i)=0.0_r8
-                bex(icol,k,kc10,i)=0.0_r8
-                ske(icol,k,kc10,i)=0.0_r8
+             do ilev=1,pver
+                omega(icol,ilev,kc10,iband)=0.0_r8
+                gass(icol,ilev,kc10,iband)=0.0_r8
+                bex(icol,ilev,kc10,iband)=0.0_r8
+                ske(icol,ilev,kc10,iband)=0.0_r8
              end do
           end do
        end do
-       do i=1,nlwbands
+       do iband=1,nlwbands
           do icol=1,ncol
-             do k=1,pver
-                kabs(icol,k,kc10,i)=0.0_r8
+             do ilev=1,pver
+                kabs(icol,ilev,kc10,iband)=0.0_r8
              end do
           end do
        end do
 
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
 
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
-             t_irh1 = irh1(icol,k)
+             t_irh1 = irh1(icol,ilev)
              t_irh2 = t_irh1+1
-             t_ict1 = ict1(icol,k,kc10)
+             t_ict1 = ict1(icol,ilev,kc10)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
 
              t_rh1  = rh(t_irh1)
@@ -1292,9 +1280,9 @@ contains
              t_cat2 = cate(kcomp,t_ict2)
              t_fac1 = fac(t_ifc1)
              t_fac2 = fac(t_ifc2)
-             t_xrh  = xrh(icol,k)
-             t_xct  = xct(icol,k,kc10)
-             t_xfac = xfac(icol,k,kcomp)
+             t_xrh  = xrh(icol,ilev)
+             t_xct  = xct(icol,ilev,kc10)
+             t_xfac = xfac(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-4) for interpolation
              d2mx(1) = (t_rh2-t_xrh)
@@ -1310,53 +1298,53 @@ contains
              ! SW optical parameters
              if(daylight(icol)) then
 
-                do i=1,nbands            ! i = wavelength index
+                do iband=1,nbands            ! iband = wavelength index
 
                    ! single scattering albedo:
 
                    ! end points as basis for multidimentional linear interpolation
-                   opt3d(1,1,1)=om2to3(i,t_irh1,t_ict1,t_ifc1,kcomp)
-                   opt3d(1,1,2)=om2to3(i,t_irh1,t_ict1,t_ifc2,kcomp)
-                   opt3d(1,2,1)=om2to3(i,t_irh1,t_ict2,t_ifc1,kcomp)
-                   opt3d(1,2,2)=om2to3(i,t_irh1,t_ict2,t_ifc2,kcomp)
-                   opt3d(2,1,1)=om2to3(i,t_irh2,t_ict1,t_ifc1,kcomp)
-                   opt3d(2,1,2)=om2to3(i,t_irh2,t_ict1,t_ifc2,kcomp)
-                   opt3d(2,2,1)=om2to3(i,t_irh2,t_ict2,t_ifc1,kcomp)
-                   opt3d(2,2,2)=om2to3(i,t_irh2,t_ict2,t_ifc2,kcomp)
+                   opt3d(1,1,1)=om2to3(iband,t_irh1,t_ict1,t_ifc1,kcomp)
+                   opt3d(1,1,2)=om2to3(iband,t_irh1,t_ict1,t_ifc2,kcomp)
+                   opt3d(1,2,1)=om2to3(iband,t_irh1,t_ict2,t_ifc1,kcomp)
+                   opt3d(1,2,2)=om2to3(iband,t_irh1,t_ict2,t_ifc2,kcomp)
+                   opt3d(2,1,1)=om2to3(iband,t_irh2,t_ict1,t_ifc1,kcomp)
+                   opt3d(2,1,2)=om2to3(iband,t_irh2,t_ict1,t_ifc2,kcomp)
+                   opt3d(2,2,1)=om2to3(iband,t_irh2,t_ict2,t_ifc1,kcomp)
+                   opt3d(2,2,2)=om2to3(iband,t_irh2,t_ict2,t_ifc2,kcomp)
 
                    ! interpolation in the (fac and) cat dimension
                    call lininterpol3dim (d2mx, dxm1, invd, opt3d, ome1, ome2)
 
                    ! finally, interpolation in the rh dimension
-                   omega(icol,k,kc10,i)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2)/(t_rh2-t_rh1)
+                   omega(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2)/(t_rh2-t_rh1)
 
                    ! asymmetry factor
                    ! end points as basis for multidimentional linear interpolation
-                   opt3d(1,1,1)=g2to3(i,t_irh1,t_ict1,t_ifc1,kcomp)
-                   opt3d(1,1,2)=g2to3(i,t_irh1,t_ict1,t_ifc2,kcomp)
-                   opt3d(1,2,1)=g2to3(i,t_irh1,t_ict2,t_ifc1,kcomp)
-                   opt3d(1,2,2)=g2to3(i,t_irh1,t_ict2,t_ifc2,kcomp)
-                   opt3d(2,1,1)=g2to3(i,t_irh2,t_ict1,t_ifc1,kcomp)
-                   opt3d(2,1,2)=g2to3(i,t_irh2,t_ict1,t_ifc2,kcomp)
-                   opt3d(2,2,1)=g2to3(i,t_irh2,t_ict2,t_ifc1,kcomp)
-                   opt3d(2,2,2)=g2to3(i,t_irh2,t_ict2,t_ifc2,kcomp)
+                   opt3d(1,1,1)=g2to3(iband,t_irh1,t_ict1,t_ifc1,kcomp)
+                   opt3d(1,1,2)=g2to3(iband,t_irh1,t_ict1,t_ifc2,kcomp)
+                   opt3d(1,2,1)=g2to3(iband,t_irh1,t_ict2,t_ifc1,kcomp)
+                   opt3d(1,2,2)=g2to3(iband,t_irh1,t_ict2,t_ifc2,kcomp)
+                   opt3d(2,1,1)=g2to3(iband,t_irh2,t_ict1,t_ifc1,kcomp)
+                   opt3d(2,1,2)=g2to3(iband,t_irh2,t_ict1,t_ifc2,kcomp)
+                   opt3d(2,2,1)=g2to3(iband,t_irh2,t_ict2,t_ifc1,kcomp)
+                   opt3d(2,2,2)=g2to3(iband,t_irh2,t_ict2,t_ifc2,kcomp)
 
                    ! interpolation in the (fac and) cat dimension
                    call lininterpol3dim (d2mx, dxm1, invd, opt3d, ge1, ge2)
 
                    ! finally, interpolation in the rh dimension
-                   gass(icol,k,kc10,i)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2)/(t_rh2-t_rh1)
+                   gass(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2)/(t_rh2-t_rh1)
 
                    ! aerosol extinction
                    ! end points as basis for multidimentional linear interpolation
-                   opt3d(1,1,1)=be2to3(i,t_irh1,t_ict1,t_ifc1,kcomp)
-                   opt3d(1,1,2)=be2to3(i,t_irh1,t_ict1,t_ifc2,kcomp)
-                   opt3d(1,2,1)=be2to3(i,t_irh1,t_ict2,t_ifc1,kcomp)
-                   opt3d(1,2,2)=be2to3(i,t_irh1,t_ict2,t_ifc2,kcomp)
-                   opt3d(2,1,1)=be2to3(i,t_irh2,t_ict1,t_ifc1,kcomp)
-                   opt3d(2,1,2)=be2to3(i,t_irh2,t_ict1,t_ifc2,kcomp)
-                   opt3d(2,2,1)=be2to3(i,t_irh2,t_ict2,t_ifc1,kcomp)
-                   opt3d(2,2,2)=be2to3(i,t_irh2,t_ict2,t_ifc2,kcomp)
+                   opt3d(1,1,1)=be2to3(iband,t_irh1,t_ict1,t_ifc1,kcomp)
+                   opt3d(1,1,2)=be2to3(iband,t_irh1,t_ict1,t_ifc2,kcomp)
+                   opt3d(1,2,1)=be2to3(iband,t_irh1,t_ict2,t_ifc1,kcomp)
+                   opt3d(1,2,2)=be2to3(iband,t_irh1,t_ict2,t_ifc2,kcomp)
+                   opt3d(2,1,1)=be2to3(iband,t_irh2,t_ict1,t_ifc1,kcomp)
+                   opt3d(2,1,2)=be2to3(iband,t_irh2,t_ict1,t_ifc2,kcomp)
+                   opt3d(2,2,1)=be2to3(iband,t_irh2,t_ict2,t_ifc1,kcomp)
+                   opt3d(2,2,2)=be2to3(iband,t_irh2,t_ict2,t_ifc2,kcomp)
 
                    ! interpolation in the (fac and) cat dimension
                    call lininterpol3dim (d2mx, dxm1, invd, opt3d, bex1, bex2)
@@ -1366,27 +1354,27 @@ contains
 
                    ! finally, interpolation in the rh dimension
                    if(t_xrh <= 0.37) then
-                      bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
+                      bex(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                    else
                       a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                      bex(icol,k,kc10,i)=e**(a*t_xrh+b)
+                      bex(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband
              else  ! daylight
 
                 ! aerosol extinction used for LW size information
                 ! end points as basis for multidimentional linear interpolation
-                i=4
-                opt3d(1,1,1)=be2to3(i,t_irh1,t_ict1,t_ifc1,kcomp)
-                opt3d(1,1,2)=be2to3(i,t_irh1,t_ict1,t_ifc2,kcomp)
-                opt3d(1,2,1)=be2to3(i,t_irh1,t_ict2,t_ifc1,kcomp)
-                opt3d(1,2,2)=be2to3(i,t_irh1,t_ict2,t_ifc2,kcomp)
-                opt3d(2,1,1)=be2to3(i,t_irh2,t_ict1,t_ifc1,kcomp)
-                opt3d(2,1,2)=be2to3(i,t_irh2,t_ict1,t_ifc2,kcomp)
-                opt3d(2,2,1)=be2to3(i,t_irh2,t_ict2,t_ifc1,kcomp)
-                opt3d(2,2,2)=be2to3(i,t_irh2,t_ict2,t_ifc2,kcomp)
+                iband=4
+                opt3d(1,1,1)=be2to3(iband,t_irh1,t_ict1,t_ifc1,kcomp)
+                opt3d(1,1,2)=be2to3(iband,t_irh1,t_ict1,t_ifc2,kcomp)
+                opt3d(1,2,1)=be2to3(iband,t_irh1,t_ict2,t_ifc1,kcomp)
+                opt3d(1,2,2)=be2to3(iband,t_irh1,t_ict2,t_ifc2,kcomp)
+                opt3d(2,1,1)=be2to3(iband,t_irh2,t_ict1,t_ifc1,kcomp)
+                opt3d(2,1,2)=be2to3(iband,t_irh2,t_ict1,t_ifc2,kcomp)
+                opt3d(2,2,1)=be2to3(iband,t_irh2,t_ict2,t_ifc1,kcomp)
+                opt3d(2,2,2)=be2to3(iband,t_irh2,t_ict2,t_ifc2,kcomp)
 
                 ! interpolation in the (fac and) cat dimension
                 call lininterpol3dim (d2mx, dxm1, invd, opt3d, bex1, bex2)
@@ -1396,27 +1384,27 @@ contains
 
                 ! finally, interpolation in the rh dimension
                 if(t_xrh <= 0.37) then
-                   bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
+                   bex(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                 else
                    a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                   bex(icol,k,kc10,i)=e**(a*t_xrh+b)
+                   bex(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                 endif
 
              endif  ! daylight
 
-             do i=4,4            ! i = wavelength index
+             do iband=4,4            ! iband = wavelength index
 
                 ! aerosol specific extinction
                 ! end points as basis for multidimentional linear interpolation
-                opt3d(1,1,1)=ke2to3(i,t_irh1,t_ict1,t_ifc1,kcomp)
-                opt3d(1,1,2)=ke2to3(i,t_irh1,t_ict1,t_ifc2,kcomp)
-                opt3d(1,2,1)=ke2to3(i,t_irh1,t_ict2,t_ifc1,kcomp)
-                opt3d(1,2,2)=ke2to3(i,t_irh1,t_ict2,t_ifc2,kcomp)
-                opt3d(2,1,1)=ke2to3(i,t_irh2,t_ict1,t_ifc1,kcomp)
-                opt3d(2,1,2)=ke2to3(i,t_irh2,t_ict1,t_ifc2,kcomp)
-                opt3d(2,2,1)=ke2to3(i,t_irh2,t_ict2,t_ifc1,kcomp)
-                opt3d(2,2,2)=ke2to3(i,t_irh2,t_ict2,t_ifc2,kcomp)
+                opt3d(1,1,1)=ke2to3(iband,t_irh1,t_ict1,t_ifc1,kcomp)
+                opt3d(1,1,2)=ke2to3(iband,t_irh1,t_ict1,t_ifc2,kcomp)
+                opt3d(1,2,1)=ke2to3(iband,t_irh1,t_ict2,t_ifc1,kcomp)
+                opt3d(1,2,2)=ke2to3(iband,t_irh1,t_ict2,t_ifc2,kcomp)
+                opt3d(2,1,1)=ke2to3(iband,t_irh2,t_ict1,t_ifc1,kcomp)
+                opt3d(2,1,2)=ke2to3(iband,t_irh2,t_ict1,t_ifc2,kcomp)
+                opt3d(2,2,1)=ke2to3(iband,t_irh2,t_ict2,t_ifc1,kcomp)
+                opt3d(2,2,2)=ke2to3(iband,t_irh2,t_ict2,t_ifc2,kcomp)
 
                 ! interpolation in the (fac and) cat dimension
                 call lininterpol3dim (d2mx, dxm1, invd, opt3d, ske1, ske2)
@@ -1426,30 +1414,30 @@ contains
 
                 ! finally, interpolation in the rh dimension
                 if(t_xrh <= 0.37) then
-                   ske(icol,k,kc10,i)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
+                   ske(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
                 else
                    a=(log(ske2)-log(ske1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(ske1)-t_rh1*log(ske2))/(t_rh2-t_rh1)
-                   ske(icol,k,kc10,i)=e**(a*t_xrh+b)
+                   ske(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                 endif
 
-             end do ! i
+             end do ! iband
 
              ! LW optical parameters
              if (lw_on) then
 
-                do i=1,nlwbands            ! i = wavelength index
+                do iband=1,nlwbands            ! iband = wavelength index
 
                    ! aerosol specific absorption in LW
                    ! end points as basis for multidimentional linear interpolation
-                   opt3d(1,1,1)=ka2to3(i,t_irh1,t_ict1,t_ifc1,kcomp)
-                   opt3d(1,1,2)=ka2to3(i,t_irh1,t_ict1,t_ifc2,kcomp)
-                   opt3d(1,2,1)=ka2to3(i,t_irh1,t_ict2,t_ifc1,kcomp)
-                   opt3d(1,2,2)=ka2to3(i,t_irh1,t_ict2,t_ifc2,kcomp)
-                   opt3d(2,1,1)=ka2to3(i,t_irh2,t_ict1,t_ifc1,kcomp)
-                   opt3d(2,1,2)=ka2to3(i,t_irh2,t_ict1,t_ifc2,kcomp)
-                   opt3d(2,2,1)=ka2to3(i,t_irh2,t_ict2,t_ifc1,kcomp)
-                   opt3d(2,2,2)=ka2to3(i,t_irh2,t_ict2,t_ifc2,kcomp)
+                   opt3d(1,1,1)=ka2to3(iband,t_irh1,t_ict1,t_ifc1,kcomp)
+                   opt3d(1,1,2)=ka2to3(iband,t_irh1,t_ict1,t_ifc2,kcomp)
+                   opt3d(1,2,1)=ka2to3(iband,t_irh1,t_ict2,t_ifc1,kcomp)
+                   opt3d(1,2,2)=ka2to3(iband,t_irh1,t_ict2,t_ifc2,kcomp)
+                   opt3d(2,1,1)=ka2to3(iband,t_irh2,t_ict1,t_ifc1,kcomp)
+                   opt3d(2,1,2)=ka2to3(iband,t_irh2,t_ict1,t_ifc2,kcomp)
+                   opt3d(2,2,1)=ka2to3(iband,t_irh2,t_ict2,t_ifc1,kcomp)
+                   opt3d(2,2,2)=ka2to3(iband,t_irh2,t_ict2,t_ifc2,kcomp)
 
                    ! interpolation in the (fac and) cat dimension
                    call lininterpol3dim (d2mx, dxm1, invd, opt3d, kabs1, kabs2)
@@ -1458,17 +1446,17 @@ contains
                    kabs2=max(kabs2,1.e-30_r8)
 
                    if(t_xrh <= 0.37_r8) then
-                      kabs(icol,k,kc10,i)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2)/(t_rh2-t_rh1)
+                      kabs(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2)/(t_rh2-t_rh1)
                    else
                       a=(log(kabs2)-log(kabs1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(kabs1)-t_rh1*log(kabs2))/(t_rh2-t_rh1)
-                      kabs(icol,k,kc10,i)=e**(a*t_xrh+b)
+                      kabs(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband
              endif ! lw_on
           end do ! icol
-       end do ! k
+       end do ! ilev
        ! write(*,*) 'kcomp, omega(1,26,kcomp,4)=', kcomp, omega(1,26,kcomp,4)
        ! write(*,*) 'kcomp, gass(1,26,kcomp,4)=', kcomp, gass(1,26,kcomp,4)
        ! write(*,*) 'kcomp, bex(1,26,kcomp,4)=', kcomp, bex(1,26,kcomp,4)
@@ -1506,7 +1494,7 @@ contains
     real(r8), intent(out) :: kabs(pcols,pver,0:nmodes,nlwbands)! LW spectral modal specific absorption coefficient
     !
     ! Local variables
-    integer  :: i, kcomp, k, kc10, icol
+    integer  :: iband, kcomp, ilev, kc10, icol
     real(r8) :: a, b
     integer  :: t_irh1, t_irh2, t_ict1, t_ict2, t_ifa1, t_ifa2, t_ifb1, t_ifb2, t_ifc1, t_ifc2
     real(r8) :: t_faq1, t_faq2, t_xfaq, t_fbcbg1, t_fbcbg2, t_xfbcbg, t_fac1
@@ -1526,39 +1514,39 @@ contains
        endif
 
        ! write(*,*) 'Before init-loop', kc10
-       do i=1,nbands
-          do k=1,pver
+       do iband=1,nbands
+          do ilev=1,pver
              do icol=1,ncol
-                omega(icol,k,kc10,i)=0.0_r8
-                gass(icol,k,kc10,i)=0.0_r8
-                bex(icol,k,kc10,i)=0.0_r8
-                ske(icol,k,kc10,i)=0.0_r8
+                omega(icol,ilev,kc10,iband)=0.0_r8
+                gass(icol,ilev,kc10,iband)=0.0_r8
+                bex(icol,ilev,kc10,iband)=0.0_r8
+                ske(icol,ilev,kc10,iband)=0.0_r8
              end do
           end do
        end do
-       do i=1,nlwbands
-          do k=1,pver
+       do iband=1,nlwbands
+          do ilev=1,pver
              do icol=1,ncol
-                kabs(icol,k,kc10,i)=0.0_r8
+                kabs(icol,ilev,kc10,iband)=0.0_r8
              end do
           end do
        end do
 
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
 
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
 
-             t_irh1 = irh1(icol,k)
+             t_irh1 = irh1(icol,ilev)
              t_irh2 = t_irh1+1
-             t_ict1 = ict1(icol,k,kc10)
+             t_ict1 = ict1(icol,ilev,kc10)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
-             t_ifb1 = ifbcbg1(icol,k)
+             t_ifb1 = ifbcbg1(icol,ilev)
              t_ifb2 = t_ifb1+1
-             t_ifa1 = ifaq1(icol,k,kcomp)
+             t_ifa1 = ifaq1(icol,ilev,kcomp)
              t_ifa2 = t_ifa1+1
 
              t_rh1  = rh(t_irh1)
@@ -1572,11 +1560,11 @@ contains
              t_faq1 = faq(t_ifa1)
              t_faq2 = faq(t_ifa2)
 
-             t_xrh  = xrh(icol,k)
-             t_xct  = xct(icol,k,kc10)
-             t_xfac = xfac(icol,k,kcomp)
-             t_xfbcbg = xfbcbg(icol,k)
-             t_xfaq = xfaq(icol,k,kcomp)
+             t_xrh  = xrh(icol,ilev)
+             t_xct  = xct(icol,ilev,kc10)
+             t_xfac = xfac(icol,ilev,kcomp)
+             t_xfbcbg = xfbcbg(icol,ilev)
+             t_xfaq = xfaq(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-5) for interpolation
              d2mx(1) = (t_rh2-t_xrh)
@@ -1598,121 +1586,121 @@ contains
              ! SW optical parameters
              if(daylight(icol)) then
 
-                do i=1,nbands ! wavelength index
+                do iband=1,nbands ! wavelength index
 
                    ! single scattering albedo:
-                   opt5d(1,1,1,1,1)=om4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,1,1,1,2)=om4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,1,1,2,1)=om4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,1,1,2,2)=om4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,1,2,1,1)=om4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,1,2,1,2)=om4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,1,2,2,1)=om4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,1,2,2,2)=om4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(1,2,1,1,1)=om4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,2,1,1,2)=om4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,2,1,2,1)=om4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,2,1,2,2)=om4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,2,2,1,1)=om4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,2,2,1,2)=om4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,2,2,2,1)=om4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,2,2,2,2)=om4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,1,1,1,1)=om4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,1,1,1,2)=om4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,1,1,2,1)=om4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,1,1,2,2)=om4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,1,2,1,1)=om4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,1,2,1,2)=om4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,1,2,2,1)=om4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,1,2,2,2)=om4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,2,1,1,1)=om4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,2,1,1,2)=om4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,2,1,2,1)=om4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,2,1,2,2)=om4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,2,2,1,1)=om4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,2,2,1,2)=om4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,2,2,2,1)=om4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,2,2,2,2)=om4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,1,1,1,1)=om4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,1,1,1,2)=om4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,1,1,2,1)=om4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,1,1,2,2)=om4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,1,2,1,1)=om4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,1,2,1,2)=om4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,1,2,2,1)=om4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,1,2,2,2)=om4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,2,1,1,1)=om4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,2,1,1,2)=om4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,2,1,2,1)=om4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,2,1,2,2)=om4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,2,2,1,1)=om4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,2,2,1,2)=om4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,2,2,2,1)=om4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,2,2,2,2)=om4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,1,1,1,1)=om4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,1,1,1,2)=om4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,1,1,2,1)=om4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,1,1,2,2)=om4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,1,2,1,1)=om4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,1,2,1,2)=om4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,1,2,2,1)=om4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,1,2,2,2)=om4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,2,1,1,1)=om4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,2,1,1,2)=om4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,2,1,2,1)=om4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,2,1,2,2)=om4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,2,2,1,1)=om4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,2,2,1,2)=om4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,2,2,2,1)=om4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,2,2,2,2)=om4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
 
                    ! interpolation in the faq, fac, cat and fbcbg dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, ome1, ome2)
 
                    ! finally, interpolation in the rh dimension
-                   omega(icol,k,kc10,i)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2) /(t_rh2-t_rh1)
+                   omega(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2) /(t_rh2-t_rh1)
 
                    ! asymmetry factor
-                   opt5d(1,1,1,1,1)=g4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,1,1,1,2)=g4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,1,1,2,1)=g4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,1,1,2,2)=g4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,1,2,1,1)=g4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,1,2,1,2)=g4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,1,2,2,1)=g4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,1,2,2,2)=g4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(1,2,1,1,1)=g4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,2,1,1,2)=g4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,2,1,2,1)=g4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,2,1,2,2)=g4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,2,2,1,1)=g4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,2,2,1,2)=g4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,2,2,2,1)=g4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,2,2,2,2)=g4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,1,1,1,1)=g4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,1,1,1,2)=g4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,1,1,2,1)=g4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,1,1,2,2)=g4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,1,2,1,1)=g4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,1,2,1,2)=g4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,1,2,2,1)=g4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,1,2,2,2)=g4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,2,1,1,1)=g4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,2,1,1,2)=g4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,2,1,2,1)=g4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,2,1,2,2)=g4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,2,2,1,1)=g4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,2,2,1,2)=g4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,2,2,2,1)=g4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,2,2,2,2)=g4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,1,1,1,1)=g4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,1,1,1,2)=g4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,1,1,2,1)=g4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,1,1,2,2)=g4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,1,2,1,1)=g4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,1,2,1,2)=g4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,1,2,2,1)=g4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,1,2,2,2)=g4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,2,1,1,1)=g4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,2,1,1,2)=g4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,2,1,2,1)=g4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,2,1,2,2)=g4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,2,2,1,1)=g4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,2,2,1,2)=g4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,2,2,2,1)=g4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,2,2,2,2)=g4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,1,1,1,1)=g4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,1,1,1,2)=g4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,1,1,2,1)=g4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,1,1,2,2)=g4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,1,2,1,1)=g4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,1,2,1,2)=g4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,1,2,2,1)=g4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,1,2,2,2)=g4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,2,1,1,1)=g4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,2,1,1,2)=g4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,2,1,2,1)=g4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,2,1,2,2)=g4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,2,2,1,1)=g4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,2,2,1,2)=g4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,2,2,2,1)=g4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,2,2,2,2)=g4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
 
                    ! interpolation in the faq, fac, cat and fbcbg dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, ge1, ge2)
 
                    ! finally, interpolation in the rh dimension
-                   gass(icol,k,kc10,i)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2)/(t_rh2-t_rh1)
+                   gass(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2)/(t_rh2-t_rh1)
 
                    ! aerosol extinction
-                   opt5d(1,1,1,1,1)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,1,1,1,2)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,1,1,2,1)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,1,1,2,2)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,1,2,1,1)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,1,2,1,2)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,1,2,2,1)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,1,2,2,2)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(1,2,1,1,1)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,2,1,1,2)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,2,1,2,1)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,2,1,2,2)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,2,2,1,1)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,2,2,1,2)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,2,2,2,1)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,2,2,2,2)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,1,1,1,1)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,1,1,1,2)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,1,1,2,1)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,1,1,2,2)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,1,2,1,1)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,1,2,1,2)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,1,2,2,1)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,1,2,2,2)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,2,1,1,1)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,2,1,1,2)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,2,1,2,1)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,2,1,2,2)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,2,2,1,1)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,2,2,1,2)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,2,2,2,1)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,2,2,2,2)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,1,1,1,1)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,1,1,1,2)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,1,1,2,1)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,1,1,2,2)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,1,2,1,1)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,1,2,1,2)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,1,2,2,1)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,1,2,2,2)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,2,1,1,1)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,2,1,1,2)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,2,1,2,1)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,2,1,2,2)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,2,2,1,1)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,2,2,1,2)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,2,2,2,1)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,2,2,2,2)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,1,1,1,1)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,1,1,1,2)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,1,1,2,1)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,1,1,2,2)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,1,2,1,1)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,1,2,1,2)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,1,2,2,1)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,1,2,2,2)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,2,1,1,1)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,2,1,1,2)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,2,1,2,1)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,2,1,2,2)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,2,2,1,1)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,2,2,1,2)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,2,2,2,1)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,2,2,2,2)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
 
                    ! interpolation in the faq, fac, cat and fbcbg dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, bex1, bex2)
@@ -1722,51 +1710,51 @@ contains
 
                    ! finally, interpolation in the rh dimension
                    if(t_xrh <= 0.37_r8) then
-                      bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
+                      bex(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                    else
                       a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                      bex(icol,k,kc10,i)=e**(a*t_xrh+b)
+                      bex(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband
 
              else  ! daylight
 
                 ! aerosol extinction called for use in size estimate for use in LW
-                i=4
-                opt5d(1,1,1,1,1)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                opt5d(1,1,1,1,2)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                opt5d(1,1,1,2,1)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                opt5d(1,1,1,2,2)=be4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                opt5d(1,1,2,1,1)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                opt5d(1,1,2,1,2)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                opt5d(1,1,2,2,1)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                opt5d(1,1,2,2,2)=be4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                opt5d(1,2,1,1,1)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                opt5d(1,2,1,1,2)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                opt5d(1,2,1,2,1)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                opt5d(1,2,1,2,2)=be4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                opt5d(1,2,2,1,1)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                opt5d(1,2,2,1,2)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                opt5d(1,2,2,2,1)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                opt5d(1,2,2,2,2)=be4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
-                opt5d(2,1,1,1,1)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                opt5d(2,1,1,1,2)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                opt5d(2,1,1,2,1)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                opt5d(2,1,1,2,2)=be4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                opt5d(2,1,2,1,1)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                opt5d(2,1,2,1,2)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                opt5d(2,1,2,2,1)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                opt5d(2,1,2,2,2)=be4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                opt5d(2,2,1,1,1)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                opt5d(2,2,1,1,2)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                opt5d(2,2,1,2,1)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                opt5d(2,2,1,2,2)=be4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                opt5d(2,2,2,1,1)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                opt5d(2,2,2,1,2)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                opt5d(2,2,2,2,1)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                opt5d(2,2,2,2,2)=be4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                iband=4
+                opt5d(1,1,1,1,1)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                opt5d(1,1,1,1,2)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                opt5d(1,1,1,2,1)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                opt5d(1,1,1,2,2)=be4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                opt5d(1,1,2,1,1)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                opt5d(1,1,2,1,2)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                opt5d(1,1,2,2,1)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                opt5d(1,1,2,2,2)=be4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                opt5d(1,2,1,1,1)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                opt5d(1,2,1,1,2)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                opt5d(1,2,1,2,1)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                opt5d(1,2,1,2,2)=be4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                opt5d(1,2,2,1,1)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                opt5d(1,2,2,1,2)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                opt5d(1,2,2,2,1)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                opt5d(1,2,2,2,2)=be4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                opt5d(2,1,1,1,1)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                opt5d(2,1,1,1,2)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                opt5d(2,1,1,2,1)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                opt5d(2,1,1,2,2)=be4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                opt5d(2,1,2,1,1)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                opt5d(2,1,2,1,2)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                opt5d(2,1,2,2,1)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                opt5d(2,1,2,2,2)=be4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                opt5d(2,2,1,1,1)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                opt5d(2,2,1,1,2)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                opt5d(2,2,1,2,1)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                opt5d(2,2,1,2,2)=be4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                opt5d(2,2,2,1,1)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                opt5d(2,2,2,1,2)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                opt5d(2,2,2,2,1)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                opt5d(2,2,2,2,2)=be4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
 
                 ! interpolation in the faq, fac, cat and fbcbg dimensions
                 call lininterpol5dim (d2mx, dxm1, invd, opt5d, bex1, bex2)
@@ -1777,50 +1765,50 @@ contains
                 ! finally, interpolation in the rh dimension
                 ! write(*,*) 'Before bex'
                 if(t_xrh <= 0.37_r8) then
-                   bex(icol,k,kc10,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
+                   bex(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                 else
                    a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                   bex(icol,k,kc10,i)=e**(a*t_xrh+b)
+                   bex(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                 endif
 
              endif  ! daylight
 
-             do i=4,4            ! i = wavelength index
+             do iband=4,4            ! iband = wavelength index
 
                 ! aerosol specific extinction
-                opt5d(1,1,1,1,1)=ke4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                opt5d(1,1,1,1,2)=ke4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                opt5d(1,1,1,2,1)=ke4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                opt5d(1,1,1,2,2)=ke4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                opt5d(1,1,2,1,1)=ke4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                opt5d(1,1,2,1,2)=ke4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                opt5d(1,1,2,2,1)=ke4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                opt5d(1,1,2,2,2)=ke4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                opt5d(1,2,1,1,1)=ke4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                opt5d(1,2,1,1,2)=ke4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                opt5d(1,2,1,2,1)=ke4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                opt5d(1,2,1,2,2)=ke4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                opt5d(1,2,2,1,1)=ke4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                opt5d(1,2,2,1,2)=ke4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                opt5d(1,2,2,2,1)=ke4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                opt5d(1,2,2,2,2)=ke4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
-                opt5d(2,1,1,1,1)=ke4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                opt5d(2,1,1,1,2)=ke4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                opt5d(2,1,1,2,1)=ke4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                opt5d(2,1,1,2,2)=ke4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                opt5d(2,1,2,1,1)=ke4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                opt5d(2,1,2,1,2)=ke4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                opt5d(2,1,2,2,1)=ke4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                opt5d(2,1,2,2,2)=ke4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                opt5d(2,2,1,1,1)=ke4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                opt5d(2,2,1,1,2)=ke4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                opt5d(2,2,1,2,1)=ke4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                opt5d(2,2,1,2,2)=ke4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                opt5d(2,2,2,1,1)=ke4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                opt5d(2,2,2,1,2)=ke4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                opt5d(2,2,2,2,1)=ke4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                opt5d(2,2,2,2,2)=ke4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                opt5d(1,1,1,1,1)=ke4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                opt5d(1,1,1,1,2)=ke4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                opt5d(1,1,1,2,1)=ke4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                opt5d(1,1,1,2,2)=ke4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                opt5d(1,1,2,1,1)=ke4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                opt5d(1,1,2,1,2)=ke4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                opt5d(1,1,2,2,1)=ke4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                opt5d(1,1,2,2,2)=ke4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                opt5d(1,2,1,1,1)=ke4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                opt5d(1,2,1,1,2)=ke4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                opt5d(1,2,1,2,1)=ke4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                opt5d(1,2,1,2,2)=ke4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                opt5d(1,2,2,1,1)=ke4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                opt5d(1,2,2,1,2)=ke4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                opt5d(1,2,2,2,1)=ke4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                opt5d(1,2,2,2,2)=ke4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                opt5d(2,1,1,1,1)=ke4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                opt5d(2,1,1,1,2)=ke4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                opt5d(2,1,1,2,1)=ke4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                opt5d(2,1,1,2,2)=ke4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                opt5d(2,1,2,1,1)=ke4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                opt5d(2,1,2,1,2)=ke4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                opt5d(2,1,2,2,1)=ke4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                opt5d(2,1,2,2,2)=ke4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                opt5d(2,2,1,1,1)=ke4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                opt5d(2,2,1,1,2)=ke4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                opt5d(2,2,1,2,1)=ke4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                opt5d(2,2,1,2,2)=ke4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                opt5d(2,2,2,1,1)=ke4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                opt5d(2,2,2,1,2)=ke4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                opt5d(2,2,2,2,1)=ke4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                opt5d(2,2,2,2,2)=ke4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
 
                 ! interpolation in the faq, fac, cat and fbcbg dimensions
                 call lininterpol5dim (d2mx, dxm1, invd, opt5d, ske1, ske2)
@@ -1831,51 +1819,51 @@ contains
                 ! finally, interpolation in the rh dimension
                 ! write(*,*) 'Before ske'
                 if(t_xrh <= 0.37_r8) then
-                   ske(icol,k,kc10,i)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
+                   ske(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
                 else
                    a=(log(ske2)-log(ske1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(ske1)-t_rh1*log(ske2))/(t_rh2-t_rh1)
-                   ske(icol,k,kc10,i)=e**(a*t_xrh+b)
+                   ske(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                 endif
-             end do ! i
+             end do ! iband
 
              ! LW optical parameters
              if (lw_on) then
-                do i=1,nlwbands            ! i = wavelength index
+                do iband=1,nlwbands            ! iband = wavelength index
 
                    ! aerosol specific absorption
-                   opt5d(1,1,1,1,1)=ka4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,1,1,1,2)=ka4(i,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,1,1,2,1)=ka4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,1,1,2,2)=ka4(i,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,1,2,1,1)=ka4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,1,2,1,2)=ka4(i,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,1,2,2,1)=ka4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,1,2,2,2)=ka4(i,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(1,2,1,1,1)=ka4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(1,2,1,1,2)=ka4(i,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(1,2,1,2,1)=ka4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(1,2,1,2,2)=ka4(i,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(1,2,2,1,1)=ka4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(1,2,2,1,2)=ka4(i,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(1,2,2,2,1)=ka4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(1,2,2,2,2)=ka4(i,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,1,1,1,1)=ka4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,1,1,1,2)=ka4(i,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,1,1,2,1)=ka4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,1,1,2,2)=ka4(i,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,1,2,1,1)=ka4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,1,2,1,2)=ka4(i,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,1,2,2,1)=ka4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,1,2,2,2)=ka4(i,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
-                   opt5d(2,2,1,1,1)=ka4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
-                   opt5d(2,2,1,1,2)=ka4(i,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
-                   opt5d(2,2,1,2,1)=ka4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
-                   opt5d(2,2,1,2,2)=ka4(i,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
-                   opt5d(2,2,2,1,1)=ka4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
-                   opt5d(2,2,2,1,2)=ka4(i,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
-                   opt5d(2,2,2,2,1)=ka4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
-                   opt5d(2,2,2,2,2)=ka4(i,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,1,1,1,1)=ka4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,1,1,1,2)=ka4(iband,t_irh1,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,1,1,2,1)=ka4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,1,1,2,2)=ka4(iband,t_irh1,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,1,2,1,1)=ka4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,1,2,1,2)=ka4(iband,t_irh1,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,1,2,2,1)=ka4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,1,2,2,2)=ka4(iband,t_irh1,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(1,2,1,1,1)=ka4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(1,2,1,1,2)=ka4(iband,t_irh1,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(1,2,1,2,1)=ka4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(1,2,1,2,2)=ka4(iband,t_irh1,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(1,2,2,1,1)=ka4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(1,2,2,1,2)=ka4(iband,t_irh1,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(1,2,2,2,1)=ka4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(1,2,2,2,2)=ka4(iband,t_irh1,t_ifb2,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,1,1,1,1)=ka4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,1,1,1,2)=ka4(iband,t_irh2,t_ifb1,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,1,1,2,1)=ka4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,1,1,2,2)=ka4(iband,t_irh2,t_ifb1,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,1,2,1,1)=ka4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,1,2,1,2)=ka4(iband,t_irh2,t_ifb1,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,1,2,2,1)=ka4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,1,2,2,2)=ka4(iband,t_irh2,t_ifb1,t_ict2,t_ifc2,t_ifa2)
+                   opt5d(2,2,1,1,1)=ka4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa1)
+                   opt5d(2,2,1,1,2)=ka4(iband,t_irh2,t_ifb2,t_ict1,t_ifc1,t_ifa2)
+                   opt5d(2,2,1,2,1)=ka4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa1)
+                   opt5d(2,2,1,2,2)=ka4(iband,t_irh2,t_ifb2,t_ict1,t_ifc2,t_ifa2)
+                   opt5d(2,2,2,1,1)=ka4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa1)
+                   opt5d(2,2,2,1,2)=ka4(iband,t_irh2,t_ifb2,t_ict2,t_ifc1,t_ifa2)
+                   opt5d(2,2,2,2,1)=ka4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa1)
+                   opt5d(2,2,2,2,2)=ka4(iband,t_irh2,t_ifb2,t_ict2,t_ifc2,t_ifa2)
 
                    ! interpolation in the faq, fac, cat and fbcbg dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, kabs1, kabs2)
@@ -1884,17 +1872,17 @@ contains
                    kabs2=max(kabs2,1.e-30_r8)
 
                    if(t_xrh <= 0.37_r8) then
-                      kabs(icol,k,kc10,i)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2)/(t_rh2-t_rh1)
+                      kabs(icol,ilev,kc10,iband)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2)/(t_rh2-t_rh1)
                    else
                       a=(log(kabs2)-log(kabs1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(kabs1)-t_rh1*log(kabs2))/(t_rh2-t_rh1)
-                      kabs(icol,k,kc10,i)=e**(a*t_xrh+b)
+                      kabs(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband
              endif ! lw_on
           end do ! icol
-       end do ! k
+       end do ! ilev
        ! write(*,*) 'kcomp, omega(1,26,kc10,4)=', kcomp, omega(1,26,kc10,4)
        ! write(*,*) 'kcomp, gass(1,26,kc10,4)=', kcomp, gass(1,26,kc10,4)
        ! write(*,*) 'kcomp, bex(1,26,kc10,4)=', kcomp, bex(1,26,kc10,4)
@@ -1933,7 +1921,7 @@ contains
     real(r8), intent(out) :: kabs(pcols,pver,0:nmodes,nlwbands)! LW spectral modal specific absorption coefficient
 
     ! Local variables
-    integer  :: i, kcomp, k, icol
+    integer  :: iband, kcomp, ilev, icol
     real(r8) :: a, b
     integer  :: t_irh1, t_irh2, t_ict1, t_ict2, t_ifa1, t_ifa2
     integer  :: t_ifb1, t_ifb2, t_ifc1, t_ifc2
@@ -1946,40 +1934,40 @@ contains
     !---------------------------------------
 
     do kcomp=5,10
-       do i=1,nbands
-          do k=1,pver
+       do iband=1,nbands
+          do ilev=1,pver
              do icol=1,ncol
-                omega(icol,k,kcomp,i)=0.0_r8
-                gass(icol,k,kcomp,i)=0.0_r8
-                bex(icol,k,kcomp,i)=0.0_r8
-                ske(icol,k,kcomp,i)=0.0_r8
+                omega(icol,ilev,kcomp,iband)=0.0_r8
+                gass(icol,ilev,kcomp,iband)=0.0_r8
+                bex(icol,ilev,kcomp,iband)=0.0_r8
+                ske(icol,ilev,kcomp,iband)=0.0_r8
              end do
           end do
        end do
-       do i=1,nlwbands
-          do k=1,pver
+       do iband=1,nlwbands
+          do ilev=1,pver
              do icol=1,ncol
-                kabs(icol,k,kcomp,i)=0.0_r8
+                kabs(icol,ilev,kcomp,iband)=0.0_r8
              end do
           end do
        end do
 
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
 
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
 
-             t_irh1 = irh1(icol,k)
+             t_irh1 = irh1(icol,ilev)
              t_irh2 = t_irh1+1
-             t_ict1 = ict1(icol,k,kcomp)
+             t_ict1 = ict1(icol,ilev,kcomp)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
 
-             t_ifb1 = ifbc1(icol,k,kcomp)
+             t_ifb1 = ifbc1(icol,ilev,kcomp)
              t_ifb2 = t_ifb1+1
-             t_ifa1 = ifaq1(icol,k,kcomp)
+             t_ifa1 = ifaq1(icol,ilev,kcomp)
              t_ifa2 = t_ifa1+1
 
              t_rh1  = rh(t_irh1)
@@ -1993,11 +1981,11 @@ contains
              t_faq1 = faq(t_ifa1)
              t_faq2 = faq(t_ifa2)
 
-             t_xrh  = xrh(icol,k)
-             t_xct  = xct(icol,k,kcomp)
-             t_xfac = xfac(icol,k,kcomp)
-             t_xfbc = xfbc(icol,k,kcomp)
-             t_xfaq = xfaq(icol,k,kcomp)
+             t_xrh  = xrh(icol,ilev)
+             t_xct  = xct(icol,ilev,kcomp)
+             t_xfac = xfac(icol,ilev,kcomp)
+             t_xfbc = xfbc(icol,ilev,kcomp)
+             t_xfaq = xfaq(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-5) for interpolation
              d2mx(1) = (t_rh2-t_xrh)
@@ -2018,121 +2006,121 @@ contains
 
              ! SW optical parameters
              if(daylight(icol)) then
-                do i=1,nbands            ! i = wavelength index
+                do iband=1,nbands            ! iband = wavelength index
 
                    ! single scattering albedo:
-                   opt5d(1,1,1,1,1)=om5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,1,1,2)=om5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,1,2,1)=om5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,1,2,2)=om5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,1,2,1,1)=om5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,2,1,2)=om5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,2,2,1)=om5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,2,2,2)=om5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,1,1,1)=om5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,1,1,2)=om5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,1,2,1)=om5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,1,2,2)=om5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,2,1,1)=om5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,2,1,2)=om5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,2,2,1)=om5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,2,2,2)=om5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,1,1,1)=om5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,1,1,2)=om5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,1,2,1)=om5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,1,2,2)=om5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,2,1,1)=om5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,2,1,2)=om5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,2,2,1)=om5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,2,2,2)=om5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,1,1,1)=om5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,1,1,2)=om5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,1,2,1)=om5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,1,2,2)=om5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,2,1,1)=om5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,2,1,2)=om5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,2,2,1)=om5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,2,2,2)=om5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,1,1,1)=om5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,1,1,2)=om5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,1,2,1)=om5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,1,2,2)=om5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,2,1,1)=om5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,2,1,2)=om5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,2,2,1)=om5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,2,2,2)=om5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,1,1,1)=om5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,1,1,2)=om5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,1,2,1)=om5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,1,2,2)=om5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,2,1,1)=om5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,2,1,2)=om5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,2,2,1)=om5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,2,2,2)=om5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,1,1,1)=om5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,1,1,2)=om5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,1,2,1)=om5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,1,2,2)=om5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,2,1,1)=om5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,2,1,2)=om5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,2,2,1)=om5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,2,2,2)=om5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,1,1,1)=om5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,1,1,2)=om5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,1,2,1)=om5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,1,2,2)=om5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,2,1,1)=om5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,2,1,2)=om5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,2,2,1)=om5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,2,2,2)=om5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
 
                    ! interpolation in the faq, fbc, fac and cat dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, ome1, ome2)
 
                    ! finally, interpolation in the rh dimension
-                   omega(icol,k,kcomp,i)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2)/(t_rh2-t_rh1)
+                   omega(icol,ilev,kcomp,iband)=((t_rh2-t_xrh)*ome1+(t_xrh-t_rh1)*ome2)/(t_rh2-t_rh1)
 
                    ! asymmetry factor
-                   opt5d(1,1,1,1,1)=g5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,1,1,2)=g5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,1,2,1)=g5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,1,2,2)=g5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,1,2,1,1)=g5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,2,1,2)=g5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,2,2,1)=g5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,2,2,2)=g5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,1,1,1)=g5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,1,1,2)=g5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,1,2,1)=g5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,1,2,2)=g5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,2,1,1)=g5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,2,1,2)=g5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,2,2,1)=g5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,2,2,2)=g5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,1,1,1)=g5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,1,1,2)=g5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,1,2,1)=g5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,1,2,2)=g5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,2,1,1)=g5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,2,1,2)=g5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,2,2,1)=g5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,2,2,2)=g5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,1,1,1)=g5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,1,1,2)=g5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,1,2,1)=g5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,1,2,2)=g5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,2,1,1)=g5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,2,1,2)=g5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,2,2,1)=g5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,2,2,2)=g5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,1,1,1)=g5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,1,1,2)=g5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,1,2,1)=g5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,1,2,2)=g5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,2,1,1)=g5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,2,1,2)=g5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,2,2,1)=g5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,2,2,2)=g5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,1,1,1)=g5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,1,1,2)=g5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,1,2,1)=g5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,1,2,2)=g5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,2,1,1)=g5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,2,1,2)=g5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,2,2,1)=g5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,2,2,2)=g5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,1,1,1)=g5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,1,1,2)=g5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,1,2,1)=g5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,1,2,2)=g5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,2,1,1)=g5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,2,1,2)=g5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,2,2,1)=g5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,2,2,2)=g5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,1,1,1)=g5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,1,1,2)=g5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,1,2,1)=g5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,1,2,2)=g5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,2,1,1)=g5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,2,1,2)=g5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,2,2,1)=g5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,2,2,2)=g5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
 
                    ! interpolation in the faq, fbc, fac and cat dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, ge1, ge2)
 
                    ! finally, interpolation in the rh dimension
-                   gass(icol,k,kcomp,i)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2)/(t_rh2-t_rh1)
+                   gass(icol,ilev,kcomp,iband)=((t_rh2-t_xrh)*ge1+(t_xrh-t_rh1)*ge2)/(t_rh2-t_rh1)
 
                    ! aerosol extinction
-                   opt5d(1,1,1,1,1)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,1,1,2)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,1,2,1)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,1,2,2)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,1,2,1,1)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,2,1,2)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,2,2,1)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,2,2,2)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,1,1,1)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,1,1,2)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,1,2,1)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,1,2,2)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,2,1,1)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,2,1,2)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,2,2,1)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,2,2,2)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,1,1,1)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,1,1,2)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,1,2,1)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,1,2,2)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,2,1,1)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,2,1,2)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,2,2,1)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,2,2,2)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,1,1,1)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,1,1,2)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,1,2,1)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,1,2,2)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,2,1,1)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,2,1,2)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,2,2,1)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,2,2,2)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,1,1,1)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,1,1,2)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,1,2,1)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,1,2,2)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,2,1,1)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,2,1,2)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,2,2,1)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,2,2,2)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,1,1,1)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,1,1,2)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,1,2,1)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,1,2,2)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,2,1,1)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,2,1,2)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,2,2,1)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,2,2,2)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,1,1,1)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,1,1,2)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,1,2,1)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,1,2,2)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,2,1,1)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,2,1,2)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,2,2,1)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,2,2,2)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,1,1,1)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,1,1,2)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,1,2,1)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,1,2,2)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,2,1,1)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,2,1,2)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,2,2,1)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,2,2,2)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
 
                    ! interpolation in the faq, fbc, fac and cat dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, bex1, bex2)
@@ -2142,51 +2130,51 @@ contains
 
                    ! finally, interpolation in the rh dimension
                    if(t_xrh <= 0.37_r8) then
-                      bex(icol,k,kcomp,i)=((t_rh2-t_xrh)*bex1 + (t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
+                      bex(icol,ilev,kcomp,iband)=((t_rh2-t_xrh)*bex1 + (t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                    else
                       a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                      bex(icol,k,kcomp,i)=e**(a*t_xrh+b)
+                      bex(icol,ilev,kcomp,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband
 
              else  ! daylight
 
                 ! aerosol extinction  used for aerosol size estimate needed for LW calculations
-                i=4
-                opt5d(1,1,1,1,1)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,1,1,1,2)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,1,1,2,1)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,1,1,2,2)=be5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(1,1,2,1,1)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,1,2,1,2)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,1,2,2,1)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,1,2,2,2)=be5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                opt5d(1,2,1,1,1)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,2,1,1,2)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,2,1,2,1)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,2,1,2,2)=be5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(1,2,2,1,1)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,2,2,1,2)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,2,2,2,1)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,2,2,2,2)=be5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,1,1,1,1)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,1,1,1,2)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,1,1,2,1)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,1,1,2,2)=be5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,1,2,1,1)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,1,2,1,2)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,1,2,2,1)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,1,2,2,2)=be5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,2,1,1,1)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,2,1,1,2)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,2,1,2,1)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,2,1,2,2)=be5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,2,2,1,1)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,2,2,1,2)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,2,2,2,1)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,2,2,2,2)=be5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                iband=4
+                opt5d(1,1,1,1,1)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,1,1,1,2)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,1,1,2,1)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,1,1,2,2)=be5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(1,1,2,1,1)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,1,2,1,2)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,1,2,2,1)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,1,2,2,2)=be5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                opt5d(1,2,1,1,1)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,2,1,1,2)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,2,1,2,1)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,2,1,2,2)=be5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(1,2,2,1,1)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,2,2,1,2)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,2,2,2,1)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,2,2,2,2)=be5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,1,1,1,1)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,1,1,1,2)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,1,1,2,1)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,1,1,2,2)=be5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,1,2,1,1)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,1,2,1,2)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,1,2,2,1)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,1,2,2,2)=be5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,2,1,1,1)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,2,1,1,2)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,2,1,2,1)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,2,1,2,2)=be5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,2,2,1,1)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,2,2,1,2)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,2,2,2,1)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,2,2,2,2)=be5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
 
                 ! interpolation in the faq, fbc, fac and cat dimensions
                 call lininterpol5dim (d2mx, dxm1, invd, opt5d, bex1, bex2)
@@ -2196,50 +2184,50 @@ contains
 
                 ! finally, interpolation in the rh dimension
                 if(t_xrh <= 0.37_r8) then
-                   bex(icol,k,kcomp,i)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
+                   bex(icol,ilev,kcomp,iband)=((t_rh2-t_xrh)*bex1+(t_xrh-t_rh1)*bex2)/(t_rh2-t_rh1)
                 else
                    a=(log(bex2)-log(bex1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(bex1)-t_rh1*log(bex2))/(t_rh2-t_rh1)
-                   bex(icol,k,kcomp,i)=e**(a*t_xrh+b)
+                   bex(icol,ilev,kcomp,iband)=e**(a*t_xrh+b)
                 endif
 
              endif  ! daylight
 
-             do i=4,4            ! i = wavelength index
+             do iband=4,4            ! iband = wavelength index
 
                 ! aerosol specific extinction
-                opt5d(1,1,1,1,1)=ke5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,1,1,1,2)=ke5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,1,1,2,1)=ke5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,1,1,2,2)=ke5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(1,1,2,1,1)=ke5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,1,2,1,2)=ke5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,1,2,2,1)=ke5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,1,2,2,2)=ke5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                opt5d(1,2,1,1,1)=ke5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,2,1,1,2)=ke5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,2,1,2,1)=ke5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,2,1,2,2)=ke5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(1,2,2,1,1)=ke5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(1,2,2,1,2)=ke5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(1,2,2,2,1)=ke5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(1,2,2,2,2)=ke5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,1,1,1,1)=ke5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,1,1,1,2)=ke5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,1,1,2,1)=ke5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,1,1,2,2)=ke5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,1,2,1,1)=ke5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,1,2,1,2)=ke5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,1,2,2,1)=ke5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,1,2,2,2)=ke5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,2,1,1,1)=ke5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,2,1,1,2)=ke5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,2,1,2,1)=ke5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,2,1,2,2)=ke5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                opt5d(2,2,2,1,1)=ke5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                opt5d(2,2,2,1,2)=ke5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                opt5d(2,2,2,2,1)=ke5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                opt5d(2,2,2,2,2)=ke5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                opt5d(1,1,1,1,1)=ke5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,1,1,1,2)=ke5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,1,1,2,1)=ke5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,1,1,2,2)=ke5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(1,1,2,1,1)=ke5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,1,2,1,2)=ke5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,1,2,2,1)=ke5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,1,2,2,2)=ke5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                opt5d(1,2,1,1,1)=ke5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,2,1,1,2)=ke5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,2,1,2,1)=ke5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,2,1,2,2)=ke5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(1,2,2,1,1)=ke5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(1,2,2,1,2)=ke5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(1,2,2,2,1)=ke5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(1,2,2,2,2)=ke5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,1,1,1,1)=ke5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,1,1,1,2)=ke5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,1,1,2,1)=ke5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,1,1,2,2)=ke5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,1,2,1,1)=ke5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,1,2,1,2)=ke5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,1,2,2,1)=ke5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,1,2,2,2)=ke5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,2,1,1,1)=ke5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,2,1,1,2)=ke5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,2,1,2,1)=ke5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,2,1,2,2)=ke5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                opt5d(2,2,2,1,1)=ke5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                opt5d(2,2,2,1,2)=ke5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                opt5d(2,2,2,2,1)=ke5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                opt5d(2,2,2,2,2)=ke5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
 
                 ! interpolation in the faq, fbc, fac and cat dimensions
                 call lininterpol5dim (d2mx, dxm1, invd, opt5d, ske1, ske2)
@@ -2250,50 +2238,50 @@ contains
                 ! finally, interpolation in the rh dimension
                 ! write(*,*) 'Before ske'
                 if(t_xrh <= 0.37_r8) then
-                   ske(icol,k,kcomp,i)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
+                   ske(icol,ilev,kcomp,iband)=((t_rh2-t_xrh)*ske1+(t_xrh-t_rh1)*ske2)/(t_rh2-t_rh1)
                 else
                    a=(log(ske2)-log(ske1))/(t_rh2-t_rh1)
                    b=(t_rh2*log(ske1)-t_rh1*log(ske2))/(t_rh2-t_rh1)
-                   ske(icol,k,kcomp,i)=e**(a*t_xrh+b)
+                   ske(icol,ilev,kcomp,iband)=e**(a*t_xrh+b)
                 endif
-             end do ! i
+             end do ! iband
 
              ! LW optical parameters
              if (lw_on) then
-                do i=1,nlwbands            ! i = wavelength index
+                do iband=1,nlwbands            ! iband = wavelength index
                    ! aerosol specific absorption
-                   opt5d(1,1,1,1,1)=ka5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,1,1,2)=ka5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,1,2,1)=ka5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,1,2,2)=ka5to10(i,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,1,2,1,1)=ka5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,1,2,1,2)=ka5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,1,2,2,1)=ka5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,1,2,2,2)=ka5to10(i,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,1,1,1)=ka5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,1,1,2)=ka5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,1,2,1)=ka5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,1,2,2)=ka5to10(i,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(1,2,2,1,1)=ka5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(1,2,2,1,2)=ka5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(1,2,2,2,1)=ka5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(1,2,2,2,2)=ka5to10(i,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,1,1,1)=ka5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,1,1,2)=ka5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,1,2,1)=ka5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,1,2,2)=ka5to10(i,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,1,2,1,1)=ka5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,1,2,1,2)=ka5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,1,2,2,1)=ka5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,1,2,2,2)=ka5to10(i,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,1,1,1)=ka5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,1,1,2)=ka5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,1,2,1)=ka5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,1,2,2)=ka5to10(i,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
-                   opt5d(2,2,2,1,1)=ka5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
-                   opt5d(2,2,2,1,2)=ka5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
-                   opt5d(2,2,2,2,1)=ka5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
-                   opt5d(2,2,2,2,2)=ka5to10(i,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,1,1,1)=ka5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,1,1,2)=ka5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,1,2,1)=ka5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,1,2,2)=ka5to10(iband,t_irh1,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,1,2,1,1)=ka5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,1,2,1,2)=ka5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,1,2,2,1)=ka5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,1,2,2,2)=ka5to10(iband,t_irh1,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,1,1,1)=ka5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,1,1,2)=ka5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,1,2,1)=ka5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,1,2,2)=ka5to10(iband,t_irh1,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(1,2,2,1,1)=ka5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(1,2,2,1,2)=ka5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(1,2,2,2,1)=ka5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(1,2,2,2,2)=ka5to10(iband,t_irh1,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,1,1,1)=ka5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,1,1,2)=ka5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,1,2,1)=ka5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,1,2,2)=ka5to10(iband,t_irh2,t_ict1,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,1,2,1,1)=ka5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,1,2,1,2)=ka5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,1,2,2,1)=ka5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,1,2,2,2)=ka5to10(iband,t_irh2,t_ict1,t_ifc2,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,1,1,1)=ka5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,1,1,2)=ka5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,1,2,1)=ka5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,1,2,2)=ka5to10(iband,t_irh2,t_ict2,t_ifc1,t_ifb2,t_ifa2,kcomp)
+                   opt5d(2,2,2,1,1)=ka5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa1,kcomp)
+                   opt5d(2,2,2,1,2)=ka5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb1,t_ifa2,kcomp)
+                   opt5d(2,2,2,2,1)=ka5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa1,kcomp)
+                   opt5d(2,2,2,2,2)=ka5to10(iband,t_irh2,t_ict2,t_ifc2,t_ifb2,t_ifa2,kcomp)
 
                    ! interpolation in the faq, fbc, fac and cat dimensions
                    call lininterpol5dim (d2mx, dxm1, invd, opt5d, kabs1, kabs2)
@@ -2302,19 +2290,19 @@ contains
                    kabs2=max(kabs2,1.e-30_r8)
 
                    if(t_xrh <= 0.37_r8) then
-                      kabs(icol,k,kcomp,i)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2)/(t_rh2-t_rh1)
+                      kabs(icol,ilev,kcomp,iband)=((t_rh2-t_xrh)*kabs1+(t_xrh-t_rh1)*kabs2)/(t_rh2-t_rh1)
                    else
                       a=(log(kabs2)-log(kabs1))/(t_rh2-t_rh1)
                       b=(t_rh2*log(kabs1)-t_rh1*log(kabs2))/(t_rh2-t_rh1)
-                      kabs(icol,k,kcomp,i)=e**(a*t_xrh+b)
+                      kabs(icol,ilev,kcomp,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! i
+                end do ! iband
 
              endif ! lw_on
 
           end do ! icol
-       end do ! k
+       end do ! ilev
     end do  ! kcomp
 
   end subroutine interpol5to10

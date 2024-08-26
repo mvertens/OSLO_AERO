@@ -14,7 +14,7 @@ module oslo_aero_aerodry_tables
   !
   use oslo_aero_share         , only: nmodes, nbmodes, nbmp1
   use oslo_aero_share         , only: cate, cat, fac, faq, fbc, fombg, fbcbg
-  use oslo_aero_linear_interp , only: lininterpol3dim, lininterpol4dim, lininterpol5dim  
+  use oslo_aero_linear_interp , only: lininterpol3dim, lininterpol4dim, lininterpol5dim
   use oslo_aero_control       , only: oslo_aero_getopts, dir_string_length
 
   implicit none
@@ -492,7 +492,7 @@ contains
     real(r8), intent(out)   :: vaerol(pcols,pver,0:nbmodes)
 
     ! Local variables
-    integer  :: i, ierr, kcomp, k, icol
+    integer  :: ivar, ierr, kcomp, ilev, icol
     real(r8) :: a, b, e
     real(r8), parameter :: eps=1.0e-60_r8
     !-------------------------------------------------------------------------
@@ -501,81 +501,81 @@ contains
     kcomp=0
 
     ! initialize output fields
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          cintbg(icol,k,kcomp)    =0.0_r8
-          cintbg05(icol,k,kcomp)  =0.0_r8
-          cintbg125(icol,k,kcomp) =0.0_r8
-          cintbc(icol,k,kcomp)    =0.0_r8
-          cintbc05(icol,k,kcomp)  =0.0_r8
-          cintbc125(icol,k,kcomp) =0.0_r8
-          cintoc(icol,k,kcomp)    =0.0_r8
-          cintoc05(icol,k,kcomp)  =0.0_r8
-          cintoc125(icol,k,kcomp) =0.0_r8
-          cintsc(icol,k,kcomp)    =0.0_r8
-          cintsc05(icol,k,kcomp)  =0.0_r8
-          cintsc125(icol,k,kcomp) =0.0_r8
-          cintsa(icol,k,kcomp)    =0.0_r8
-          cintsa05(icol,k,kcomp)  =0.0_r8
-          cintsa125(icol,k,kcomp) =0.0_r8
-          aaeros(icol,k,kcomp)    =0.0_r8
-          aaerol(icol,k,kcomp)    =0.0_r8
-          vaeros(icol,k,kcomp)    =0.0_r8
-          vaerol(icol,k,kcomp)    =0.0_r8
+          cintbg(icol,ilev,kcomp)    =0.0_r8
+          cintbg05(icol,ilev,kcomp)  =0.0_r8
+          cintbg125(icol,ilev,kcomp) =0.0_r8
+          cintbc(icol,ilev,kcomp)    =0.0_r8
+          cintbc05(icol,ilev,kcomp)  =0.0_r8
+          cintbc125(icol,ilev,kcomp) =0.0_r8
+          cintoc(icol,ilev,kcomp)    =0.0_r8
+          cintoc05(icol,ilev,kcomp)  =0.0_r8
+          cintoc125(icol,ilev,kcomp) =0.0_r8
+          cintsc(icol,ilev,kcomp)    =0.0_r8
+          cintsc05(icol,ilev,kcomp)  =0.0_r8
+          cintsc125(icol,ilev,kcomp) =0.0_r8
+          cintsa(icol,ilev,kcomp)    =0.0_r8
+          cintsa05(icol,ilev,kcomp)  =0.0_r8
+          cintsa125(icol,ilev,kcomp) =0.0_r8
+          aaeros(icol,ilev,kcomp)    =0.0_r8
+          aaerol(icol,ilev,kcomp)    =0.0_r8
+          vaeros(icol,ilev,kcomp)    =0.0_r8
+          vaerol(icol,ilev,kcomp)    =0.0_r8
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kcomp)>0.0_r8) then
-             do i=1,19  ! variable number
-                if(i==1) then
-                   cintbg(icol,k,kcomp)=a0cintbg
-                elseif(i==2) then
-                   cintbg05(icol,k,kcomp)=a0cintbg05
-                elseif(i==3) then
-                   cintbg125(icol,k,kcomp)=a0cintbg125
-                elseif(i==4) then
-                   cintbc(icol,k,kcomp)=eps
-                elseif(i==5) then
-                   cintbc05(icol,k,kcomp)=eps
-                elseif(i==6) then
-                   cintbc125(icol,k,kcomp)=eps
-                elseif(i==7) then
-                   cintoc(icol,k,kcomp)=eps
-                elseif(i==8) then
-                   cintoc05(icol,k,kcomp)=eps
-                elseif(i==9) then
-                   cintoc125(icol,k,kcomp)=eps
-                elseif(i==10) then
-                   cintsc(icol,k,kcomp)=eps
-                elseif(i==11) then
-                   cintsc05(icol,k,kcomp)=eps
-                elseif(i==12) then
-                   cintsc125(icol,k,kcomp)=eps
-                elseif(i==13) then
-                   cintsa(icol,k,kcomp)=eps
-                elseif(i==14) then
-                   cintsa05(icol,k,kcomp)=eps
-                elseif(i==15) then
-                   cintsa125(icol,k,kcomp)=eps
-                elseif(i==16) then
-                   aaeros(icol,k,kcomp)=a0aaeros
-                elseif(i==17) then
-                   aaerol(icol,k,kcomp)=a0aaerol
-                elseif(i==18) then
-                   vaeros(icol,k,kcomp)=a0vaeros
-                elseif(i==19) then
-                   vaerol(icol,k,kcomp)=a0vaerol
+          if(Nnatk(icol,ilev,kcomp)>0.0_r8) then
+             do ivar=1,19  ! variable number
+                if(ivar==1) then
+                   cintbg(icol,ilev,kcomp)=a0cintbg
+                elseif(ivar==2) then
+                   cintbg05(icol,ilev,kcomp)=a0cintbg05
+                elseif(ivar==3) then
+                   cintbg125(icol,ilev,kcomp)=a0cintbg125
+                elseif(ivar==4) then
+                   cintbc(icol,ilev,kcomp)=eps
+                elseif(ivar==5) then
+                   cintbc05(icol,ilev,kcomp)=eps
+                elseif(ivar==6) then
+                   cintbc125(icol,ilev,kcomp)=eps
+                elseif(ivar==7) then
+                   cintoc(icol,ilev,kcomp)=eps
+                elseif(ivar==8) then
+                   cintoc05(icol,ilev,kcomp)=eps
+                elseif(ivar==9) then
+                   cintoc125(icol,ilev,kcomp)=eps
+                elseif(ivar==10) then
+                   cintsc(icol,ilev,kcomp)=eps
+                elseif(ivar==11) then
+                   cintsc05(icol,ilev,kcomp)=eps
+                elseif(ivar==12) then
+                   cintsc125(icol,ilev,kcomp)=eps
+                elseif(ivar==13) then
+                   cintsa(icol,ilev,kcomp)=eps
+                elseif(ivar==14) then
+                   cintsa05(icol,ilev,kcomp)=eps
+                elseif(ivar==15) then
+                   cintsa125(icol,ilev,kcomp)=eps
+                elseif(ivar==16) then
+                   aaeros(icol,ilev,kcomp)=a0aaeros
+                elseif(ivar==17) then
+                   aaerol(icol,ilev,kcomp)=a0aaerol
+                elseif(ivar==18) then
+                   vaeros(icol,ilev,kcomp)=a0vaeros
+                elseif(ivar==19) then
+                   vaerol(icol,ilev,kcomp)=a0vaerol
                 endif
-             end do ! i=1,19
+             end do ! ivar=1,19
           endif
 
-          cknorm(icol,k,kcomp)  = a0cintbg
-          cknlt05(icol,k,kcomp) = a0cintbg05
-          ckngt125(icol,k,kcomp)= a0cintbg125
+          cknorm(icol,ilev,kcomp)  = a0cintbg
+          cknlt05(icol,ilev,kcomp) = a0cintbg05
+          ckngt125(icol,ilev,kcomp)= a0cintbg125
        end do ! icol
-    end do ! k
+    end do ! ilev
 
   end subroutine intdrypar0
 
@@ -630,7 +630,7 @@ contains
     real(r8), intent(out)   :: vaerol(pcols,pver,0:nbmodes)
 
     ! Local variables
-    integer  :: iv, kcomp, k, icol
+    integer  :: iv, kcomp, ilev, icol
     integer  :: t_ifo1, t_ifo2
     integer  :: t_ict1, t_ict2, t_ifc1, t_ifc2
     real(r8) :: a, b, e
@@ -646,50 +646,50 @@ contains
     kcomp=1
 
     ! initialize output fields
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          cintbg(icol,k,kcomp)    =0.0_r8
-          cintbg05(icol,k,kcomp)  =0.0_r8
-          cintbg125(icol,k,kcomp) =0.0_r8
-          cintbc(icol,k,kcomp)    =0.0_r8
-          cintbc05(icol,k,kcomp)  =0.0_r8
-          cintbc125(icol,k,kcomp) =0.0_r8
-          cintoc(icol,k,kcomp)    =0.0_r8
-          cintoc05(icol,k,kcomp)  =0.0_r8
-          cintoc125(icol,k,kcomp) =0.0_r8
-          cintsc(icol,k,kcomp)    =0.0_r8
-          cintsc05(icol,k,kcomp)  =0.0_r8
-          cintsc125(icol,k,kcomp) =0.0_r8
-          cintsa(icol,k,kcomp)    =0.0_r8
-          cintsa05(icol,k,kcomp)  =0.0_r8
-          cintsa125(icol,k,kcomp) =0.0_r8
-          aaeros(icol,k,kcomp)    =0.0_r8
-          aaerol(icol,k,kcomp)    =0.0_r8
-          vaeros(icol,k,kcomp)    =0.0_r8
-          vaerol(icol,k,kcomp)    =0.0_r8
+          cintbg(icol,ilev,kcomp)    =0.0_r8
+          cintbg05(icol,ilev,kcomp)  =0.0_r8
+          cintbg125(icol,ilev,kcomp) =0.0_r8
+          cintbc(icol,ilev,kcomp)    =0.0_r8
+          cintbc05(icol,ilev,kcomp)  =0.0_r8
+          cintbc125(icol,ilev,kcomp) =0.0_r8
+          cintoc(icol,ilev,kcomp)    =0.0_r8
+          cintoc05(icol,ilev,kcomp)  =0.0_r8
+          cintoc125(icol,ilev,kcomp) =0.0_r8
+          cintsc(icol,ilev,kcomp)    =0.0_r8
+          cintsc05(icol,ilev,kcomp)  =0.0_r8
+          cintsc125(icol,ilev,kcomp) =0.0_r8
+          cintsa(icol,ilev,kcomp)    =0.0_r8
+          cintsa05(icol,ilev,kcomp)  =0.0_r8
+          cintsa125(icol,ilev,kcomp) =0.0_r8
+          aaeros(icol,ilev,kcomp)    =0.0_r8
+          aaerol(icol,ilev,kcomp)    =0.0_r8
+          vaeros(icol,ilev,kcomp)    =0.0_r8
+          vaerol(icol,ilev,kcomp)    =0.0_r8
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kcomp)>0.0_r8) then
+          if(Nnatk(icol,ilev,kcomp)>0.0_r8) then
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
-             t_ifo1 = ifombg1(icol,k)
+             t_ifo1 = ifombg1(icol,ilev)
              t_ifo2 = t_ifo1+1
              t_fombg1 = fombg(t_ifo1)
              t_fombg2 = fombg(t_ifo2)
-             t_xfombg = xfombg(icol,k)
-             t_ict1 = ict1(icol,k,kcomp)
+             t_xfombg = xfombg(icol,ilev)
+             t_ict1 = ict1(icol,ilev,kcomp)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
              t_cat1 = cate(kcomp,t_ict1)
              t_cat2 = cate(kcomp,t_ict2)
              t_fac1 = fac(t_ifc1)
              t_fac2 = fac(t_ifc2)
-             t_xct  = xct(icol,k,kcomp)
-             t_xfac = xfac(icol,k,kcomp)
+             t_xct  = xct(icol,ilev,kcomp)
+             t_xfac = xfac(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-3) for interpolation
              d2mx(1) = (t_fombg2-t_xfombg)
@@ -720,62 +720,62 @@ contains
                 opt = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
 
                 if(iv==1) then
-                   cintbg(icol,k,kcomp)=opt
+                   cintbg(icol,ilev,kcomp)=opt
                 elseif(iv==2) then
-                   cintbg05(icol,k,kcomp)=opt
+                   cintbg05(icol,ilev,kcomp)=opt
                 elseif(iv==3) then
-                   cintbg125(icol,k,kcomp)=opt
+                   cintbg125(icol,ilev,kcomp)=opt
                 elseif(iv==4) then
-                   cintbc(icol,k,kcomp)=opt
+                   cintbc(icol,ilev,kcomp)=opt
                 elseif(iv==5) then
-                   cintbc05(icol,k,kcomp)=opt
+                   cintbc05(icol,ilev,kcomp)=opt
                 elseif(iv==6) then
-                   cintbc125(icol,k,kcomp)=opt
+                   cintbc125(icol,ilev,kcomp)=opt
                 elseif(iv==7) then
-                   cintoc(icol,k,kcomp)=opt
+                   cintoc(icol,ilev,kcomp)=opt
                 elseif(iv==8) then
-                   cintoc05(icol,k,kcomp)=opt
+                   cintoc05(icol,ilev,kcomp)=opt
                 elseif(iv==9) then
-                   cintoc125(icol,k,kcomp)=opt
+                   cintoc125(icol,ilev,kcomp)=opt
                 elseif(iv==10) then
-                   cintsc(icol,k,kcomp)=opt
+                   cintsc(icol,ilev,kcomp)=opt
                 elseif(iv==11) then
-                   cintsc05(icol,k,kcomp)=opt
+                   cintsc05(icol,ilev,kcomp)=opt
                 elseif(iv==12) then
-                   cintsc125(icol,k,kcomp)=opt
+                   cintsc125(icol,ilev,kcomp)=opt
                 elseif(iv==13) then
-                   cintsa(icol,k,kcomp)=opt
+                   cintsa(icol,ilev,kcomp)=opt
                 elseif(iv==14) then
-                   cintsa05(icol,k,kcomp)=opt
+                   cintsa05(icol,ilev,kcomp)=opt
                 elseif(iv==15) then
-                   cintsa125(icol,k,kcomp)=opt
+                   cintsa125(icol,ilev,kcomp)=opt
                 elseif(iv==16) then
-                   aaeros(icol,k,kcomp)=opt
+                   aaeros(icol,ilev,kcomp)=opt
                 elseif(iv==17) then
-                   aaerol(icol,k,kcomp)=opt
+                   aaerol(icol,ilev,kcomp)=opt
                 elseif(iv==18) then
-                   vaeros(icol,k,kcomp)=opt
+                   vaeros(icol,ilev,kcomp)=opt
                 elseif(iv==19) then
-                   vaerol(icol,k,kcomp)=opt
+                   vaerol(icol,ilev,kcomp)=opt
                 endif
              end do ! iv=1,19
-          endif ! if (Nnatk(icol,k,kcomp)>0.0_r8)
+          endif ! if (Nnatk(icol,ilev,kcomp)>0.0_r8)
        end do ! icol
-    end do ! k
+    end do ! ilev
 
     ! Dry parameters for externally mixed mode 11, SO4(n):
     kcomp=11
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          cknorm(icol,k,kcomp)   = a1var(1,1,1,1)
-          cknlt05(icol,k,kcomp)  = a1var(2,1,1,1)
-          ckngt125(icol,k,kcomp) = a1var(3,1,1,1)
-          aaerosn(icol,k,kcomp)  = a1var(16,1,1,1)
-          aaeroln(icol,k,kcomp)  = a1var(17,1,1,1)
-          vaerosn(icol,k,kcomp)  = a1var(18,1,1,1)
-          vaeroln(icol,k,kcomp)  = a1var(19,1,1,1)
+          cknorm(icol,ilev,kcomp)   = a1var(1,1,1,1)
+          cknlt05(icol,ilev,kcomp)  = a1var(2,1,1,1)
+          ckngt125(icol,ilev,kcomp) = a1var(3,1,1,1)
+          aaerosn(icol,ilev,kcomp)  = a1var(16,1,1,1)
+          aaeroln(icol,ilev,kcomp)  = a1var(17,1,1,1)
+          vaerosn(icol,ilev,kcomp)  = a1var(18,1,1,1)
+          vaeroln(icol,ilev,kcomp)  = a1var(19,1,1,1)
        end do ! icol
-    end do ! k
+    end do ! ilev
 
   end subroutine intdrypar1
 
@@ -829,7 +829,7 @@ contains
 
     ! Local variables
     real(r8) :: a, b, e
-    integer  :: iv, kcomp, k, icol
+    integer  :: iv, kcomp, ilev, icol
     integer  :: t_ict1, t_ict2
     real(r8) :: t_xct,  t_cat1, t_cat2
     real(r8) :: t_fac1, t_fac2, t_xfac
@@ -842,47 +842,47 @@ contains
     ! Modes 1-3,  SO4(Ait), BC(Ait) and OC(Ait):
     do kcomp=2,3
        ! initialize output fields
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             cintbg(icol,k,kcomp)    =0.0_r8
-             cintbg05(icol,k,kcomp)  =0.0_r8
-             cintbg125(icol,k,kcomp) =0.0_r8
-             cintbc(icol,k,kcomp)    =0.0_r8
-             cintbc05(icol,k,kcomp)  =0.0_r8
-             cintbc125(icol,k,kcomp) =0.0_r8
-             cintoc(icol,k,kcomp)    =0.0_r8
-             cintoc05(icol,k,kcomp)  =0.0_r8
-             cintoc125(icol,k,kcomp) =0.0_r8
-             cintsc(icol,k,kcomp)    =0.0_r8
-             cintsc05(icol,k,kcomp)  =0.0_r8
-             cintsc125(icol,k,kcomp) =0.0_r8
-             cintsa(icol,k,kcomp)    =0.0_r8
-             cintsa05(icol,k,kcomp)  =0.0_r8
-             cintsa125(icol,k,kcomp) =0.0_r8
-             aaeros(icol,k,kcomp)    =0.0_r8
-             aaerol(icol,k,kcomp)    =0.0_r8
-             vaeros(icol,k,kcomp)    =0.0_r8
-             vaerol(icol,k,kcomp)    =0.0_r8
+             cintbg(icol,ilev,kcomp)    =0.0_r8
+             cintbg05(icol,ilev,kcomp)  =0.0_r8
+             cintbg125(icol,ilev,kcomp) =0.0_r8
+             cintbc(icol,ilev,kcomp)    =0.0_r8
+             cintbc05(icol,ilev,kcomp)  =0.0_r8
+             cintbc125(icol,ilev,kcomp) =0.0_r8
+             cintoc(icol,ilev,kcomp)    =0.0_r8
+             cintoc05(icol,ilev,kcomp)  =0.0_r8
+             cintoc125(icol,ilev,kcomp) =0.0_r8
+             cintsc(icol,ilev,kcomp)    =0.0_r8
+             cintsc05(icol,ilev,kcomp)  =0.0_r8
+             cintsc125(icol,ilev,kcomp) =0.0_r8
+             cintsa(icol,ilev,kcomp)    =0.0_r8
+             cintsa05(icol,ilev,kcomp)  =0.0_r8
+             cintsa125(icol,ilev,kcomp) =0.0_r8
+             aaeros(icol,ilev,kcomp)    =0.0_r8
+             aaerol(icol,ilev,kcomp)    =0.0_r8
+             vaeros(icol,ilev,kcomp)    =0.0_r8
+             vaerol(icol,ilev,kcomp)    =0.0_r8
           end do
        end do
     end do ! kcomp
 
     kcomp=2
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kcomp)>0.0_r8) then
+          if(Nnatk(icol,ilev,kcomp)>0.0_r8) then
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
-             t_ict1 = ict1(icol,k,kcomp)
+             t_ict1 = ict1(icol,ilev,kcomp)
              t_ict2 = t_ict1+1
              t_cat1 = cate(kcomp,t_ict1)
              t_cat2 = cate(kcomp,t_ict2)
-             t_xct  = xct(icol,k,kcomp)
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_xct  = xct(icol,ilev,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
              t_fac1 = fac(t_ifc1)
              t_fac2 = fac(t_ifc2)
-             t_xfac = xfac(icol,k,kcomp)
+             t_xfac = xfac(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-2) for interpolation
              d2mx(1) = (t_cat2-t_xct)
@@ -908,64 +908,64 @@ contains
                 opt = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
 
                 if(iv==1) then
-                   cintbg(icol,k,kcomp)=opt
+                   cintbg(icol,ilev,kcomp)=opt
                 elseif(iv==2) then
-                   cintbg05(icol,k,kcomp)=opt
+                   cintbg05(icol,ilev,kcomp)=opt
                 elseif(iv==3) then
-                   cintbg125(icol,k,kcomp)=opt
+                   cintbg125(icol,ilev,kcomp)=opt
                 elseif(iv==4) then
-                   cintbc(icol,k,kcomp)=opt
+                   cintbc(icol,ilev,kcomp)=opt
                 elseif(iv==5) then
-                   cintbc05(icol,k,kcomp)=opt
+                   cintbc05(icol,ilev,kcomp)=opt
                 elseif(iv==6) then
-                   cintbc125(icol,k,kcomp)=opt
+                   cintbc125(icol,ilev,kcomp)=opt
                 elseif(iv==7) then
-                   cintoc(icol,k,kcomp)=opt
+                   cintoc(icol,ilev,kcomp)=opt
                 elseif(iv==8) then
-                   cintoc05(icol,k,kcomp)=opt
+                   cintoc05(icol,ilev,kcomp)=opt
                 elseif(iv==9) then
-                   cintoc125(icol,k,kcomp)=opt
+                   cintoc125(icol,ilev,kcomp)=opt
                 elseif(iv==10) then
-                   cintsc(icol,k,kcomp)=opt
+                   cintsc(icol,ilev,kcomp)=opt
                 elseif(iv==11) then
-                   cintsc05(icol,k,kcomp)=opt
+                   cintsc05(icol,ilev,kcomp)=opt
                 elseif(iv==12) then
-                   cintsc125(icol,k,kcomp)=opt
+                   cintsc125(icol,ilev,kcomp)=opt
                 elseif(iv==13) then
-                   cintsa(icol,k,kcomp)=opt
+                   cintsa(icol,ilev,kcomp)=opt
                 elseif(iv==14) then
-                   cintsa05(icol,k,kcomp)=opt
+                   cintsa05(icol,ilev,kcomp)=opt
                 elseif(iv==15) then
-                   cintsa125(icol,k,kcomp)=opt
+                   cintsa125(icol,ilev,kcomp)=opt
                 elseif(iv==16) then
-                   aaeros(icol,k,kcomp)=opt
+                   aaeros(icol,ilev,kcomp)=opt
                 elseif(iv==17) then
-                   aaerol(icol,k,kcomp)=opt
+                   aaerol(icol,ilev,kcomp)=opt
                 elseif(iv==18) then
-                   vaeros(icol,k,kcomp)=opt
+                   vaeros(icol,ilev,kcomp)=opt
                 elseif(iv==19) then
-                   vaerol(icol,k,kcomp)=opt
+                   vaerol(icol,ilev,kcomp)=opt
                 endif
              end do ! iv=1,19
           endif
        end do ! icol
-    end do ! k
+    end do ! ilev
 
     ! Dry parameters for externally mixed modes modes 12-13,
     ! BC(n) and OC(n):
 
     do kcomp=12,13    ! using dummy initialization for kcomp=3
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             cknorm(icol,k,kcomp)  = a2to3var(1,1,1,kcomp-10)
-             cknlt05(icol,k,kcomp) = a2to3var(2,1,1,kcomp-10)
-             ckngt125(icol,k,kcomp)= a2to3var(3,1,1,kcomp-10)
-             aaerosn(icol,k,kcomp) = a2to3var(16,1,1,kcomp-10)
-             aaeroln(icol,k,kcomp) = a2to3var(17,1,1,kcomp-10)
-             vaerosn(icol,k,kcomp) = a2to3var(18,1,1,kcomp-10)
-             vaeroln(icol,k,kcomp) = a2to3var(19,1,1,kcomp-10)
+             cknorm(icol,ilev,kcomp)  = a2to3var(1,1,1,kcomp-10)
+             cknlt05(icol,ilev,kcomp) = a2to3var(2,1,1,kcomp-10)
+             ckngt125(icol,ilev,kcomp)= a2to3var(3,1,1,kcomp-10)
+             aaerosn(icol,ilev,kcomp) = a2to3var(16,1,1,kcomp-10)
+             aaeroln(icol,ilev,kcomp) = a2to3var(17,1,1,kcomp-10)
+             vaerosn(icol,ilev,kcomp) = a2to3var(18,1,1,kcomp-10)
+             vaeroln(icol,ilev,kcomp) = a2to3var(19,1,1,kcomp-10)
           end do ! icol
-       end do ! k
+       end do ! ilev
     end do  ! kcomp
 
   end subroutine intdrypar2to3
@@ -1025,7 +1025,7 @@ contains
     real(r8), intent(out)   :: vaerol(pcols,pver,0:nbmodes)
 
     ! Local variables
-    integer  :: iv, kcomp, k, icol
+    integer  :: iv, kcomp, ilev, icol
     integer  :: t_ifb1, t_ifb2
     integer  :: t_ict1, t_ict2, t_ifc1, t_ifc2, t_ifa1, t_ifa2
     real(r8) :: a, b, e
@@ -1043,42 +1043,42 @@ contains
     kcomp=4
 
     ! initialize output fields
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          cintbg(icol,k,kcomp)=0.0_r8
-          cintbg05(icol,k,kcomp)=0.0_r8
-          cintbg125(icol,k,kcomp)=0.0_r8
-          cintbc(icol,k,kcomp)=0.0_r8
-          cintbc05(icol,k,kcomp)=0.0_r8
-          cintbc125(icol,k,kcomp)=0.0_r8
-          cintoc(icol,k,kcomp)=0.0_r8
-          cintoc05(icol,k,kcomp)=0.0_r8
-          cintoc125(icol,k,kcomp)=0.0_r8
-          cintsc(icol,k,kcomp)=0.0_r8
-          cintsc05(icol,k,kcomp)=0.0_r8
-          cintsc125(icol,k,kcomp)=0.0_r8
-          cintsa(icol,k,kcomp)=0.0_r8
-          cintsa05(icol,k,kcomp)=0.0_r8
-          cintsa125(icol,k,kcomp)=0.0_r8
-          aaeros(icol,k,kcomp)=0.0_r8
-          aaerol(icol,k,kcomp)=0.0_r8
-          vaeros(icol,k,kcomp)=0.0_r8
-          vaerol(icol,k,kcomp)=0.0_r8
+          cintbg(icol,ilev,kcomp)=0.0_r8
+          cintbg05(icol,ilev,kcomp)=0.0_r8
+          cintbg125(icol,ilev,kcomp)=0.0_r8
+          cintbc(icol,ilev,kcomp)=0.0_r8
+          cintbc05(icol,ilev,kcomp)=0.0_r8
+          cintbc125(icol,ilev,kcomp)=0.0_r8
+          cintoc(icol,ilev,kcomp)=0.0_r8
+          cintoc05(icol,ilev,kcomp)=0.0_r8
+          cintoc125(icol,ilev,kcomp)=0.0_r8
+          cintsc(icol,ilev,kcomp)=0.0_r8
+          cintsc05(icol,ilev,kcomp)=0.0_r8
+          cintsc125(icol,ilev,kcomp)=0.0_r8
+          cintsa(icol,ilev,kcomp)=0.0_r8
+          cintsa05(icol,ilev,kcomp)=0.0_r8
+          cintsa125(icol,ilev,kcomp)=0.0_r8
+          aaeros(icol,ilev,kcomp)=0.0_r8
+          aaerol(icol,ilev,kcomp)=0.0_r8
+          vaeros(icol,ilev,kcomp)=0.0_r8
+          vaerol(icol,ilev,kcomp)=0.0_r8
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,k,kcomp)>0.0_r8) then
+          if(Nnatk(icol,ilev,kcomp)>0.0_r8) then
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
-             t_ifb1 = ifbcbg1(icol,k)
+             t_ifb1 = ifbcbg1(icol,ilev)
              t_ifb2 = t_ifb1+1
-             t_ict1 = ict1(icol,k,kcomp)
+             t_ict1 = ict1(icol,ilev,kcomp)
              t_ict2 = t_ict1+1
-             t_ifc1 = ifac1(icol,k,kcomp)
+             t_ifc1 = ifac1(icol,ilev,kcomp)
              t_ifc2 = t_ifc1+1
-             t_ifa1 = ifaq1(icol,k,kcomp)
+             t_ifa1 = ifaq1(icol,ilev,kcomp)
              t_ifa2 = t_ifa1+1
              t_fbcbg1 = fbcbg(t_ifb1)
              t_fbcbg2 = fbcbg(t_ifb2)
@@ -1088,10 +1088,10 @@ contains
              t_fac2 = fac(t_ifc2)
              t_faq1 = faq(t_ifa1)
              t_faq2 = faq(t_ifa2)
-             t_xfbcbg = xfbcbg(icol,k)
-             t_xct  = xct(icol,k,kcomp)
-             t_xfac = xfac(icol,k,kcomp)
-             t_xfaq = xfaq(icol,k,kcomp)
+             t_xfbcbg = xfbcbg(icol,ilev)
+             t_xct  = xct(icol,ilev,kcomp)
+             t_xfac = xfac(icol,ilev,kcomp)
+             t_xfaq = xfaq(icol,ilev,kcomp)
 
              ! partial lengths along each dimension (1-5) for interpolation
              d2mx(1) = (t_fbcbg2-t_xfbcbg)
@@ -1133,59 +1133,59 @@ contains
                 opt = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
 
                 if(iv==1) then
-                   cintbg(icol,k,kcomp)=opt
+                   cintbg(icol,ilev,kcomp)=opt
                 elseif(iv==2) then
-                   cintbg05(icol,k,kcomp)=opt
+                   cintbg05(icol,ilev,kcomp)=opt
                 elseif(iv==3) then
-                   cintbg125(icol,k,kcomp)=opt
+                   cintbg125(icol,ilev,kcomp)=opt
                 elseif(iv==4) then
-                   cintbc(icol,k,kcomp)=opt
+                   cintbc(icol,ilev,kcomp)=opt
                 elseif(iv==5) then
-                   cintbc05(icol,k,kcomp)=opt
+                   cintbc05(icol,ilev,kcomp)=opt
                 elseif(iv==6) then
-                   cintbc125(icol,k,kcomp)=opt
+                   cintbc125(icol,ilev,kcomp)=opt
                 elseif(iv==7) then
-                   cintoc(icol,k,kcomp)=opt
+                   cintoc(icol,ilev,kcomp)=opt
                 elseif(iv==8) then
-                   cintoc05(icol,k,kcomp)=opt
+                   cintoc05(icol,ilev,kcomp)=opt
                 elseif(iv==9) then
-                   cintoc125(icol,k,kcomp)=opt
+                   cintoc125(icol,ilev,kcomp)=opt
                 elseif(iv==10) then
-                   cintsc(icol,k,kcomp)=opt
+                   cintsc(icol,ilev,kcomp)=opt
                 elseif(iv==11) then
-                   cintsc05(icol,k,kcomp)=opt
+                   cintsc05(icol,ilev,kcomp)=opt
                 elseif(iv==12) then
-                   cintsc125(icol,k,kcomp)=opt
+                   cintsc125(icol,ilev,kcomp)=opt
                 elseif(iv==13) then
-                   cintsa(icol,k,kcomp)=opt
+                   cintsa(icol,ilev,kcomp)=opt
                 elseif(iv==14) then
-                   cintsa05(icol,k,kcomp)=opt
+                   cintsa05(icol,ilev,kcomp)=opt
                 elseif(iv==15) then
-                   cintsa125(icol,k,kcomp)=opt
+                   cintsa125(icol,ilev,kcomp)=opt
                 elseif(iv==16) then
-                   aaeros(icol,k,kcomp)=opt
+                   aaeros(icol,ilev,kcomp)=opt
                 elseif(iv==17) then
-                   aaerol(icol,k,kcomp)=opt
+                   aaerol(icol,ilev,kcomp)=opt
                 elseif(iv==18) then
-                   vaeros(icol,k,kcomp)=opt
+                   vaeros(icol,ilev,kcomp)=opt
                 elseif(iv==19) then
-                   vaerol(icol,k,kcomp)=opt
+                   vaerol(icol,ilev,kcomp)=opt
                 endif
              end do ! iv=1,19
           endif
 
        end do ! icol
-    end do ! k
+    end do ! ilev
 
     kcomp=14
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
 
-          t_ifb1 = ifbcbgn1(icol,k)
+          t_ifb1 = ifbcbgn1(icol,ilev)
           t_ifb2 = t_ifb1+1
           t_fbcbg1 = fbcbg(t_ifb1)
           t_fbcbg2 = fbcbg(t_ifb2)
-          t_xfbcbg = xfbcbgn(icol,k)
+          t_xfbcbg = xfbcbgn(icol,ilev)
 
           d2mx(1) = (t_fbcbg2-t_xfbcbg)
           dxm1(1) = (t_xfbcbg-t_fbcbg1)
@@ -1194,30 +1194,30 @@ contains
           ! Only interpolation in the fbcbg dimension for mode 14
           opt1 = a4var(1,1,1,1,1)
           opt2 = a4var(1,2,1,1,1)
-          cknorm(icol,k,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
+          cknorm(icol,ilev,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
           opt1 = a4var(2,1,1,1,1)
           opt2 = a4var(2,2,1,1,1)
-          cknlt05(icol,k,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
+          cknlt05(icol,ilev,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
           opt1 = a4var(3,1,1,1,1)
           opt2 = a4var(3,2,1,1,1)
-          ckngt125(icol,k,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
+          ckngt125(icol,ilev,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
           opt1 = a4var(16,1,1,1,1)
           opt2 = a4var(16,2,1,1,1)
           ! (The remaining variables are actually independent of fbcbg,
           ! but we follow the same procedure anyway:)
-          aaerosn(icol,k,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
+          aaerosn(icol,ilev,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
           opt1 = a4var(17,1,1,1,1)
           opt2 = a4var(17,2,1,1,1)
-          aaeroln(icol,k,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
+          aaeroln(icol,ilev,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
           opt1 = a4var(18,1,1,1,1)
           opt2 = a4var(18,2,1,1,1)
-          vaerosn(icol,k,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
+          vaerosn(icol,ilev,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
           opt1 = a4var(19,1,1,1,1)
           opt2 = a4var(19,2,1,1,1)
-          vaeroln(icol,k,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
+          vaeroln(icol,ilev,kcomp) = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
 
        end do ! icol
-    end do ! k
+    end do ! ilev
 
   end subroutine intdrypar4
 
@@ -1270,7 +1270,7 @@ contains
     real(r8), intent(out)   :: vaerol(pcols,pver,0:nbmodes)
 
     ! Local variables
-    integer  :: iv, kcomp, k, icol
+    integer  :: iv, kcomp, ilev, icol
     integer  :: t_ict1, t_ict2, t_ifa1, t_ifa2
     integer  :: t_ifb1, t_ifb2, t_ifc1, t_ifc2
     real(r8) :: a, b, e
@@ -1287,42 +1287,42 @@ contains
     do kcomp=5,10
 
        ! initialize output fields
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             cintbg(icol,k,kcomp)=0.0_r8
-             cintbg05(icol,k,kcomp)=0.0_r8
-             cintbg125(icol,k,kcomp)=0.0_r8
-             cintbc(icol,k,kcomp)=0.0_r8
-             cintbc05(icol,k,kcomp)=0.0_r8
-             cintbc125(icol,k,kcomp)=0.0_r8
-             cintoc(icol,k,kcomp)=0.0_r8
-             cintoc05(icol,k,kcomp)=0.0_r8
-             cintoc125(icol,k,kcomp)=0.0_r8
-             cintsc(icol,k,kcomp)=0.0_r8
-             cintsc05(icol,k,kcomp)=0.0_r8
-             cintsc125(icol,k,kcomp)=0.0_r8
-             cintsa(icol,k,kcomp)=0.0_r8
-             cintsa05(icol,k,kcomp)=0.0_r8
-             cintsa125(icol,k,kcomp)=0.0_r8
-             aaeros(icol,k,kcomp)=0.0_r8
-             aaerol(icol,k,kcomp)=0.0_r8
-             vaeros(icol,k,kcomp)=0.0_r8
-             vaerol(icol,k,kcomp)=0.0_r8
+             cintbg(icol,ilev,kcomp)=0.0_r8
+             cintbg05(icol,ilev,kcomp)=0.0_r8
+             cintbg125(icol,ilev,kcomp)=0.0_r8
+             cintbc(icol,ilev,kcomp)=0.0_r8
+             cintbc05(icol,ilev,kcomp)=0.0_r8
+             cintbc125(icol,ilev,kcomp)=0.0_r8
+             cintoc(icol,ilev,kcomp)=0.0_r8
+             cintoc05(icol,ilev,kcomp)=0.0_r8
+             cintoc125(icol,ilev,kcomp)=0.0_r8
+             cintsc(icol,ilev,kcomp)=0.0_r8
+             cintsc05(icol,ilev,kcomp)=0.0_r8
+             cintsc125(icol,ilev,kcomp)=0.0_r8
+             cintsa(icol,ilev,kcomp)=0.0_r8
+             cintsa05(icol,ilev,kcomp)=0.0_r8
+             cintsa125(icol,ilev,kcomp)=0.0_r8
+             aaeros(icol,ilev,kcomp)=0.0_r8
+             aaerol(icol,ilev,kcomp)=0.0_r8
+             vaeros(icol,ilev,kcomp)=0.0_r8
+             vaerol(icol,ilev,kcomp)=0.0_r8
           end do
        end do
 
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             if(Nnatk(icol,k,kcomp)>0.0_r8) then
+             if(Nnatk(icol,ilev,kcomp)>0.0_r8) then
                 ! Collect all the vector elements into temporary storage
                 ! to avoid cache conflicts and excessive cross-referencing
-                t_ict1 = ict1(icol,k,kcomp)
+                t_ict1 = ict1(icol,ilev,kcomp)
                 t_ict2 = t_ict1+1
-                t_ifc1 = ifac1(icol,k,kcomp)
+                t_ifc1 = ifac1(icol,ilev,kcomp)
                 t_ifc2 = t_ifc1+1
-                t_ifb1 = ifbc1(icol,k,kcomp)
+                t_ifb1 = ifbc1(icol,ilev,kcomp)
                 t_ifb2 = t_ifb1+1
-                t_ifa1 = ifaq1(icol,k,kcomp)
+                t_ifa1 = ifaq1(icol,ilev,kcomp)
                 t_ifa2 = t_ifa1+1
                 t_cat1 = cat(kcomp,t_ict1)
                 t_cat2 = cat(kcomp,t_ict2)
@@ -1332,10 +1332,10 @@ contains
                 t_fbc2 = fbc(t_ifb2)
                 t_faq1 = faq(t_ifa1)
                 t_faq2 = faq(t_ifa2)
-                t_xct  = xct(icol,k,kcomp)
-                t_xfac = xfac(icol,k,kcomp)
-                t_xfbc = xfbc(icol,k,kcomp)
-                t_xfaq = xfaq(icol,k,kcomp)
+                t_xct  = xct(icol,ilev,kcomp)
+                t_xfac = xfac(icol,ilev,kcomp)
+                t_xfbc = xfbc(icol,ilev,kcomp)
+                t_xfaq = xfaq(icol,ilev,kcomp)
 
                 ! partial lengths along each dimension (1-4) for interpolation
                 d2mx(1) = (t_cat2-t_xct)
@@ -1378,70 +1378,70 @@ contains
                    opt = (d2mx(1)*opt1+dxm1(1)*opt2)*invd(1)
 
                    if(iv==1) then
-                      cintbg(icol,k,kcomp)=opt
+                      cintbg(icol,ilev,kcomp)=opt
                    elseif(iv==2) then
-                      cintbg05(icol,k,kcomp)=opt
+                      cintbg05(icol,ilev,kcomp)=opt
                    elseif(iv==3) then
-                      cintbg125(icol,k,kcomp)=opt
+                      cintbg125(icol,ilev,kcomp)=opt
                    elseif(iv==4) then
-                      cintbc(icol,k,kcomp)=opt
+                      cintbc(icol,ilev,kcomp)=opt
                    elseif(iv==5) then
-                      cintbc05(icol,k,kcomp)=opt
+                      cintbc05(icol,ilev,kcomp)=opt
                    elseif(iv==6) then
-                      cintbc125(icol,k,kcomp)=opt
+                      cintbc125(icol,ilev,kcomp)=opt
                    elseif(iv==7) then
-                      cintoc(icol,k,kcomp)=opt
+                      cintoc(icol,ilev,kcomp)=opt
                    elseif(iv==8) then
-                      cintoc05(icol,k,kcomp)=opt
+                      cintoc05(icol,ilev,kcomp)=opt
                    elseif(iv==9) then
-                      cintoc125(icol,k,kcomp)=opt
+                      cintoc125(icol,ilev,kcomp)=opt
                    elseif(iv==10) then
-                      cintsc(icol,k,kcomp)=opt
+                      cintsc(icol,ilev,kcomp)=opt
                    elseif(iv==11) then
-                      cintsc05(icol,k,kcomp)=opt
+                      cintsc05(icol,ilev,kcomp)=opt
                    elseif(iv==12) then
-                      cintsc125(icol,k,kcomp)=opt
+                      cintsc125(icol,ilev,kcomp)=opt
                    elseif(iv==13) then
-                      cintsa(icol,k,kcomp)=opt
+                      cintsa(icol,ilev,kcomp)=opt
                    elseif(iv==14) then
-                      cintsa05(icol,k,kcomp)=opt
+                      cintsa05(icol,ilev,kcomp)=opt
                    elseif(iv==15) then
-                      cintsa125(icol,k,kcomp)=opt
+                      cintsa125(icol,ilev,kcomp)=opt
                    elseif(iv==16) then
-                      aaeros(icol,k,kcomp)=opt
+                      aaeros(icol,ilev,kcomp)=opt
                    elseif(iv==17) then
-                      aaerol(icol,k,kcomp)=opt
+                      aaerol(icol,ilev,kcomp)=opt
                    elseif(iv==18) then
-                      vaeros(icol,k,kcomp)=opt
+                      vaeros(icol,ilev,kcomp)=opt
                    elseif(iv==19) then
-                      vaerol(icol,k,kcomp)=opt
+                      vaerol(icol,ilev,kcomp)=opt
                    endif
                 end do ! iv=1,19
              endif
 
-             cknorm(icol,k,kcomp)  = a5to10var(1,1,1,1,1,kcomp)
-             cknlt05(icol,k,kcomp) = a5to10var(2,1,1,1,1,kcomp)
-             ckngt125(icol,k,kcomp)= a5to10var(3,1,1,1,1,kcomp)
+             cknorm(icol,ilev,kcomp)  = a5to10var(1,1,1,1,1,kcomp)
+             cknlt05(icol,ilev,kcomp) = a5to10var(2,1,1,1,1,kcomp)
+             ckngt125(icol,ilev,kcomp)= a5to10var(3,1,1,1,1,kcomp)
 
           end do ! icol
-       end do ! k
+       end do ! ilev
     end do  ! kcomp
 
   end subroutine intdrypar5to10
 
   !===============================================================================
   subroutine checkTableHeader (ifil)
-    ! Read the header-text in a look-up table (in file with iu=ifil). 
+    ! Read the header-text in a look-up table (in file with iu=ifil).
 
     integer, intent(in) :: ifil
     character*80 :: headertext
-    character*12 :: text0, text1 
+    character*12 :: text0, text1
 
     text0='X-CHECK LUT'
     text1='none       '
     do while (text1(2:12) .ne. text0(2:12))
        read(ifil,'(A)') headertext
-       text1 = headertext(2:12) 
+       text1 = headertext(2:12)
     enddo
   end subroutine checkTableHeader
 

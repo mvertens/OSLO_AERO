@@ -29,8 +29,8 @@ contains
     integer  , intent(in)    :: id_oh, id_ho2, id_no3
     real(r8) , intent(inout) :: invariants(ncol,pver,nfs)
 
-    integer  :: i                          ! column index
-    integer  :: k                          ! height index
+    integer  :: icol                          ! column index
+    integer  :: ilev                          ! height index
     integer  :: iriseset                   ! sunrise/set flag
     integer  :: day, mon, yr, jyr          ! date stuff
     integer  :: j                          ! working var
@@ -58,14 +58,14 @@ contains
     !   at any rate only valid between 1950 and 2050, so important years e.g. 1850
     !   is out of boundary
 
-    do i=1,ncol
+    do icol=1,ncol
 
        fdiurn_oxid=1._r8
        fdiurn_no3oxid=1._r8
 
-       deglat = rlats(i)*180._r8/pi
+       deglat = rlats(icol)*180._r8/pi
        deglat = max( -89.9999_r8, min( +89.9999_r8, deglat ) )
-       deglon = rlons(i)*180._r8/pi
+       deglon = rlons(icol)*180._r8/pi
 
        ! get sunrise and sunset times in UTC hours
        call sunrisesetxx( deglon, deglat, jyr, mon, day, iriseset, trise, tset, solardec )
@@ -129,22 +129,22 @@ contains
        end if
 
        if (inv_oh) then
-          do k=1,pver
-             invariants(i,k,id_oh)=invariants(i,k,id_oh)*fdiurn_oxid
+          do ilev=1,pver
+             invariants(icol,ilev,id_oh)=invariants(icol,ilev,id_oh)*fdiurn_oxid
           end do
        end if
        if (inv_ho2) then
-          do k=1,pver
-             invariants(i,k,id_ho2)=invariants(i,k,id_ho2)*fdiurn_oxid
+          do ilev=1,pver
+             invariants(icol,ilev,id_ho2)=invariants(icol,ilev,id_ho2)*fdiurn_oxid
           end do
        end if
        if (inv_no3) then
-          do k=1,pver
-             invariants(i,k,id_no3)=invariants(i,k,id_no3)*fdiurn_no3oxid
+          do ilev=1,pver
+             invariants(icol,ilev,id_no3)=invariants(icol,ilev,id_no3)*fdiurn_no3oxid
           end do
        end if
 
-    end do  ! i= 1,ncol
+    end do  ! icol= 1,ncol
   end   subroutine set_diurnal_invariants
 
 
@@ -184,7 +184,7 @@ contains
     ! local
     real(r8) :: sunrise, sunset, ap_dec
     real(r8) :: xlongb
-    integer  :: iriseset,i
+    integer  :: iriseset
 
     !   need xlong between -180 and +180
     xlongb = xlong
@@ -419,28 +419,28 @@ contains
 
     ! tangent of ecliptic_long separated into sine and cosine parts for ap_ra.
     f_ap_ra = atan2(cos(mean_obliquity) * sin(ecliptic_long), cos(ecliptic_long))
- 
+
    ! change range of ap_ra from -pi -> pi to 0 -> 2 pi.
     if (f_ap_ra .lt. 0.0) f_ap_ra = f_ap_ra + twopi
- 
+
    ! put ap_ra in the range 0 -> 24 hours.
     ap_ra = (f_ap_ra / twopi - int(f_ap_ra /twopi)) * 24._r8
     ap_dec = asin(sin(mean_obliquity) * sin(ecliptic_long))
- 
+
    ! calculate local mean sidereal time.
     ! A. A. 1990, B6-B7.
     ! horner's method of polynomial exponent expansion used for gmst0h.
     f_gmst0h = 24110.54841_r8 + cent_j2000 * (8640184.812866_r8 &
          +cent_j2000 * (0.093104_r8 - cent_j2000 * 6.2e-6_r8))
- 
+
    ! convert gmst0h from seconds to hours and put in the range 0 -> 24.
     ! 24 hours = 86400 seconds
     gmst0h = (f_gmst0h / 86400._r8 - int(f_gmst0h / 86400._r8)) * 24._r8
     if (gmst0h .lt. 0._r8) gmst0h = gmst0h + 24._r8
- 
+
    ! convert latitude to radians.
     rlat_r =  rlat * deg_rad
- 
+
    ! avoid tangent overflow at +-90 degrees.
     ! 1.57079615 radians is equal to 89.99999 degrees.
     if (abs(rlat_r) .lt. 1.57079615_r8) then
@@ -453,7 +453,7 @@ contains
     else
        tan_dec = 6.0e6_r8
     end if
- 
+
    ! compute UTs of sunrise and sunset.
     ! A. A. 1990, A12.
     tangterm = tan_lat * tan_dec

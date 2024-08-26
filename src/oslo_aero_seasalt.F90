@@ -34,7 +34,7 @@ contains
 
   subroutine oslo_aero_seasalt_init()
 
-    integer :: i
+    integer :: imode
 
     modeMap(1) = MODE_IDX_SS_A1
     modeMap(2) = MODE_IDX_SS_A2
@@ -45,8 +45,8 @@ contains
     tracerMap(3) = l_ss_a3
 
     seasalt_names(:) = "      "
-    do i = 1,numberOfSaltModes
-       seasalt_names(i) = cnst_name(tracerMap(i))
+    do imode = 1,numberOfSaltModes
+       seasalt_names(imode) = cnst_name(tracerMap(imode))
     end do
 
   end subroutine oslo_aero_seasalt_init
@@ -66,7 +66,7 @@ contains
     real(r8) , intent(inout) :: cflx(pcols,pcnst)
 
     ! Local variables
-    integer  :: n                                   ![] counter for modes
+    integer  :: imode                                   ![] counter for modes
     real(r8) :: whiteCapAreaFraction(pcols)         ![fraction]
     real(r8) :: open_ocean(pcols)                   ![fraction]
     real(r8) :: numberFlux(pcols,numberofSaltModes) ![#/m2/sec]
@@ -108,18 +108,18 @@ contains
     open_ocean(:ncol) = ocnfrc(:ncol) * (1._r8-icefrc(:ncol))
 
     ! Eqn. 9 in Salter et al. (2015)
-    do n=1,numberOfSaltModes
-       numberFlux(:ncol,n) = whitecapAreaFraction(:ncol)*                                    &
-            ( coeffA(n)*(sst(:ncol)-273.15_r8)*(sst(:ncol)-273.15_r8)*(sst(:ncol)-273.15_r8) &
-            + coeffB(n)*(sst(:ncol)-273.15_r8)*(sst(:ncol)-273.15_r8)                        &
-            + coeffC(n)*(sst(:ncol)-273.15_r8)                                               &
-            + coeffD(n) )
+    do imode=1,numberOfSaltModes
+       numberFlux(:ncol,imode) = whitecapAreaFraction(:ncol)*                                    &
+            ( coeffA(imode)*(sst(:ncol)-273.15_r8)*(sst(:ncol)-273.15_r8)*(sst(:ncol)-273.15_r8) &
+            + coeffB(imode)*(sst(:ncol)-273.15_r8)*(sst(:ncol)-273.15_r8)                        &
+            + coeffC(imode)*(sst(:ncol)-273.15_r8)                                               &
+            + coeffD(imode) )
     end do
 
-    do n=1,numberOfSaltModes
-       cflx(:ncol, tracerMap(n)) = numberFlux(:ncol,n)        & !#/m2/sec
-                                 / volumeToNumber(modeMap(n)) & !==> m3/m2/sec
-                                 * rhopart(tracerMap(n))        !==> kg/m2/sec
+    do imode=1,numberOfSaltModes
+       cflx(:ncol, tracerMap(imode)) = numberFlux(:ncol,imode)    & !#/m2/sec
+                                 / volumeToNumber(modeMap(imode)) & !==> m3/m2/sec
+                                 * rhopart(tracerMap(imode))        !==> kg/m2/sec
     end do
     spracklenOMOceanSource(:ncol) = cflx(:ncol, tracerMap(1))*seasaltToSpracklenOM2
 

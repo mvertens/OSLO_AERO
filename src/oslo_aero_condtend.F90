@@ -97,8 +97,7 @@ contains
     integer  :: nsiz             !counter for aerotab sizes
     integer  :: iChem            !counter for chemical species
     integer  :: mode_index_donor !index for mode
-    integer  :: iMode            !Counter for mode
-    integer  :: tracerIndex      !counter for chem. spec
+    integer  :: tracerIndex      !array for chem. spec
     logical  :: history_aerosol
     logical  :: isAlreadyOnList(gas_pcnst)
     integer  :: cond_vap_idx
@@ -111,8 +110,8 @@ contains
     real(r8) :: radmol           ![m] radius molecule
     integer  :: iDonor
     integer  :: l_donor
-    integer  :: mind ! mode index
-    integer  :: tind ! tracer index
+    integer  :: imode ! mode index
+    integer  :: itrac ! tracer index
     !--------------------------------------------------
 
     !These are the lifecycle-species which receive mass when
@@ -211,7 +210,7 @@ contains
     isAlreadyOnList(:) = .FALSE.
     do iChem = 1,gas_pcnst
        !Does this tracer have a receiver? If yes: It participate in condensation tendencies
-       if(lifeCycleReceiver(iChem) .gt. 0)then
+       if(lifeCycleReceiver(iChem) > 0)then
           unit = "kg/m2/s"
           fieldname_donor = trim(solsym(iChem))//"condTend"
           fieldname_receiver = trim(solsym(lifeCycleReceiver(iChem)))//"condTend"
@@ -253,9 +252,9 @@ contains
     end if
 
     ! initialize module variable for performance
-    do mind = 0,nmodes
-       do tind = 1,n_tracers_in_mode(mind)
-          tracer_index(mind,tind) = getTracerIndex(mind,tind,.true.)
+    do imode = 0,nmodes
+       do itrac = 1,n_tracers_in_mode(imode)
+          tracer_index(imode,itrac) = getTracerIndex(imode,itrac,.true.)
        end do
     end do
 
@@ -290,7 +289,7 @@ contains
 
     ! local
     character(len=fieldname_len+3) :: fieldname
-    integer  :: i,k,nsiz
+    integer  :: icol,ilev,nsiz
     integer  :: mode_index_donor            ![idx] index of mode donating mass
     integer  :: mode_index_receiver         ![idx] index of mode receiving mass
     integer  :: tracerIndex
@@ -334,8 +333,8 @@ contains
     condensationSinkFraction(:,:,:,:) = 0.0_r8  !Sink to the coming "receiver" of any vapour
     numberConcentrationExtMix(:,:,:) = 0.0_r8
 
-    do k=1,pver
-       do i=1,ncol
+    do ilev=1,pver
+       do icol=1,ncol
 
           condensationSink(:,:) = 0.0_r8  !Sink to the coming "receiver" of any vapour
 
@@ -343,7 +342,7 @@ contains
           !Initialize number concentration for this receiver
 
           !Air density
-          rhoAir(i,k) = pmid(i,k)/rair/temperature(i,k)
+          rhoAir(icol,ilev) = pmid(icol,ilev)/rair/temperature(icol,ilev)
 
           numberConcentration(:) = 0.0_r8
 
@@ -357,11 +356,11 @@ contains
                 l_receiver = tracer_index(mode_index_receiver, tracerIndex)
 
                 !Add up the number concentration of the receiving mode [#/m3]
-                numberConcentration(mode_index_receiver) = numberConcentration(mode_index_receiver) &  !previous value
-                     + q(i,k,l_receiver)                   &  !kg/kg
-                     / rhopart(physicsIndex(l_receiver))   &  !m3/kg ==> m3_{aer}/kg_{air}
-                     * volumeToNumber(mode_index_receiver) &  !#/m3 ==> #/kg_{air}
-                     * rhoAir(i,k)                                 !kg/m3 ==> #/m3_{air}
+                numberConcentration(mode_index_receiver) = numberConcentration(mode_index_receiver) & !previous value
+                     + q(icol,ilev,l_receiver)                                                      & !kg/kg
+                     / rhopart(physicsIndex(l_receiver))                                            & !m3/kg ==> m3_{aer}/kg_{air}
+                     * volumeToNumber(mode_index_receiver)                                          & !#/m3 ==> #/kg_{air}
+                     * rhoAir(icol,ilev)                                                              !kg/m3 ==> #/m3_{air}
              end do !Lifecycle "core" species in this mode
           enddo
 
@@ -382,14 +381,14 @@ contains
           do cond_vap_idx=1,N_COND_VAP
 
              !sum of cond. sink for this vapour [1/s]
-             sumCondensationSink(i,k,cond_vap_idx) = sum(condensationSink(:,cond_vap_idx))
+             sumCondensationSink(icol,ilev,cond_vap_idx) = sum(condensationSink(:,cond_vap_idx))
 
              !Solve the intermediate (end of timestep) concentration using
              !euler backward solution C_{old} + P *dt - L*C_{new}*dt = C_{new} ==>
              !Cnew -Cold = prod - loss ==>
-             intermediateConcentration(i,k,cond_vap_idx) = &
-                  ( q(i,k,cond_vap_map(cond_vap_idx)) + cond_vap_gasprod(i,k,cond_vap_idx)*dt ) &
-                  / (1.0_r8 + sumCondensationSink(i,k,cond_vap_idx)*dt)
+             intermediateConcentration(icol,ilev,cond_vap_idx) = &
+                  ( q(icol,ilev,cond_vap_map(cond_vap_idx)) + cond_vap_gasprod(icol,ilev,cond_vap_idx)*dt ) &
+                  / (1.0_r8 + sumCondensationSink(icol,ilev,cond_vap_idx)*dt)
           end do
 
           !Save the fraction of condensation sink for the externally mixed modes
@@ -401,17 +400,17 @@ contains
                 mode_index_donor = externallyMixedMode(iDonor)
 
                 !Remember fraction of cond sink for this mode
-                condensationSinkFraction(i,k,iDonor,cond_vap_idx) = &
-                     condensationSink(mode_index_donor,cond_vap_idx) / sumCondensationSink(i,k,cond_vap_idx)
+                condensationSinkFraction(icol,ilev,iDonor,cond_vap_idx) = &
+                     condensationSink(mode_index_donor,cond_vap_idx) / sumCondensationSink(icol,ilev,cond_vap_idx)
 
                 !Remember number concentration in this mode
-                numberConcentrationExtMix(i,k,iDonor) = numberConcentration(mode_index_donor)
+                numberConcentrationExtMix(icol,ilev,iDonor) = numberConcentration(mode_index_donor)
              end do
           end do
 
           ! Assume only a fraction of ORG_LV left can contribute to nucleation
           ! fraction of soa_lv left that is assumend to have low enough volatility to nucleate.
-          soa_lv_forNucleation(i,k) = lvocfrac*intermediateConcentration(i,k,COND_VAP_ORG_LV)
+          soa_lv_forNucleation(icol,ilev) = lvocfrac*intermediateConcentration(icol,ilev,COND_VAP_ORG_LV)
 
           !Sum coagulation sink for nucleated so4 and soa particles over all receivers of coagulate. Needed for RM's nucleation code
           !OBS - looks like RM's coagulation sink is multiplied by 10^-12??
@@ -420,8 +419,8 @@ contains
 
              modeIndexReceiverCoag = receiverMode(iCoagReceiver)
 
-             coagulationSink(i,k) =   &                                                  ![1/s]
-                  coagulationSink(i,k) + &                                               ![1/] previous value
+             coagulationSink(icol,ilev) =   &                                            ![1/s]
+                  coagulationSink(icol,ilev) + &                                         ![1/] previous value
                   normalizedCoagulationSink(modeIndexReceiverCoag,MODE_IDX_SO4SOA_AIT) & ![m3/#/s]
                   * numberConcentration(modeIndexReceiverCoag)                           !numberConcentration (#/m3)
           end do    !coagulation sink
@@ -432,14 +431,14 @@ contains
 
              modeIndexReceiverCoag = addReceiverMode(iCoagReceiver)
 
-             coagulationSink(i,k) =   &                        ![1/s]
-                  coagulationSink(i,k) + &                     ![1/] previous value
+             coagulationSink(icol,ilev) =   &                        ![1/s]
+                  coagulationSink(icol,ilev) + &                     ![1/] previous value
                   normCoagSinkAdd(iCoagReceiver) &             ![m3/#/s]
                   * numberConcentration(modeIndexReceiverCoag) !numberConcentration (#/m3)
           end do    !coagulation sink
 
-       end do !index i
-    end do !index k
+       end do !index icol
+    end do !index ilev
 
     !Calculate nucleated masses of so4 and soa (nuclso4, nuclsoa)
     !following RM's parameterization (cka)
@@ -449,53 +448,55 @@ contains
 
 
     firstOrderLossRateNucl(:,:,:)=0.0_r8
-    do k=1,pver
-       do i=1,ncol
+    do ilev=1,pver
+       do icol=1,ncol
 
           !First order loss rate (1/s) for nucleation
-          firstOrderLossRateNucl(i,k,COND_VAP_H2SO4) = nuclSo4(i,k)/intermediateConcentration(i,k,COND_VAP_H2SO4)
+          firstOrderLossRateNucl(icol,ilev,COND_VAP_H2SO4) = nuclSo4(icol,ilev) &
+               /intermediateConcentration(icol,ilev,COND_VAP_H2SO4)
 
           !First order loss rate (1/s) for nucleation
-          firstOrderLossRateNucl(i,k,COND_VAP_ORG_LV) = nuclSOA(i,k)/intermediateConcentration(i,k,COND_VAP_ORG_LV)
+          firstOrderLossRateNucl(icol,ilev,COND_VAP_ORG_LV) = nuclSOA(icol,ilev) &
+               /intermediateConcentration(icol,ilev,COND_VAP_ORG_LV)
 
           do cond_vap_idx = 1,N_COND_VAP
              !Solve implicitly (again)
              !C_new - C_old =  PROD_{gas} - CS*C_new*dt - LR_{nucl}*C_new =>
-             intermediateConcentration(i,k,cond_vap_idx) = &
-                  ( q(i,k,cond_vap_map(cond_vap_idx)) + cond_vap_gasprod(i,k,cond_vap_idx)*dt ) &
-                  / (1.0_r8 + sumCondensationSink(i,k,cond_vap_idx)*dt + firstOrderLossRateNucl(i,k,cond_vap_idx)*dt)
+             intermediateConcentration(icol,ilev,cond_vap_idx) = &
+                  ( q(icol,ilev,cond_vap_map(cond_vap_idx)) + cond_vap_gasprod(icol,ilev,cond_vap_idx)*dt ) &
+                  / (1.0_r8 + sumCondensationSink(icol,ilev,cond_vap_idx)*dt + firstOrderLossRateNucl(icol,ilev,cond_vap_idx)*dt)
 
              !fraction nucleated
-             fracNucl(i,k,cond_vap_idx) = firstOrderLossRateNucl(i,k,cond_vap_idx) &
-                  /(firstOrderLossRateNucl(i,k,cond_vap_idx) + sumCondensationSink(i,k,cond_vap_idx))
+             fracNucl(icol,ilev,cond_vap_idx) = firstOrderLossRateNucl(icol,ilev,cond_vap_idx) &
+                  /(firstOrderLossRateNucl(icol,ilev,cond_vap_idx) + sumCondensationSink(icol,ilev,cond_vap_idx))
              !From budget, we get: lost = prod -cnew + cold
-             gasLost(i,k,cond_vap_idx) = cond_vap_gasprod(i,k,cond_vap_idx)*dt   & !Produced
-                  + q(i,k,cond_vap_map(cond_vap_idx))            & !cold
-                  - intermediateConcentration(i,k,cond_vap_idx)    !cnew
+             gasLost(icol,ilev,cond_vap_idx) = cond_vap_gasprod(icol,ilev,cond_vap_idx)*dt   & !Produced
+                  + q(icol,ilev,cond_vap_map(cond_vap_idx))            & !cold
+                  - intermediateConcentration(icol,ilev,cond_vap_idx)    !cnew
 
           end do !cond_vap_idx
 
           !Add nuceated mass to so4_na mode
-          q(i,k,chemistryIndex(l_so4_na)) =  q(i,k,chemistryIndex(l_so4_na))       &
-               + gasLost(i,k,COND_VAP_H2SO4)*fracNucl(i,k,COND_VAP_H2SO4)
+          q(icol,ilev,chemistryIndex(l_so4_na)) =  q(icol,ilev,chemistryIndex(l_so4_na))       &
+               + gasLost(icol,ilev,COND_VAP_H2SO4)*fracNucl(icol,ilev,COND_VAP_H2SO4)
 
           !H2SO4 condensate
-          q(i,k,chemistryIndex(l_so4_a1)) = q(i,k,chemistryIndex(l_so4_a1))         &
-               + gasLost(i,k,COND_VAP_H2SO4)*(1.0_r8-fracNucl(i,k,COND_VAP_H2SO4))
+          q(icol,ilev,chemistryIndex(l_so4_a1)) = q(icol,ilev,chemistryIndex(l_so4_a1))         &
+               + gasLost(icol,ilev,COND_VAP_H2SO4)*(1.0_r8-fracNucl(icol,ilev,COND_VAP_H2SO4))
 
           !Add nucleated mass to soa_na mode
-          q(i,k,chemistryIndex(l_soa_na)) =  q(i,k,chemistryIndex(l_soa_na))       &
-               + gasLost(i,k,COND_VAP_ORG_LV)*fracNucl(i,k,COND_VAP_ORG_LV)
+          q(icol,ilev,chemistryIndex(l_soa_na)) =  q(icol,ilev,chemistryIndex(l_soa_na))       &
+               + gasLost(icol,ilev,COND_VAP_ORG_LV)*fracNucl(icol,ilev,COND_VAP_ORG_LV)
 
           !Organic condensate (from both soa_lv and soa_sv) goes to the soaCondensateReceiver tracer (cka)
-          q(i,k,chemistryIndex(l_soa_a1)) = q(i,k,chemistryIndex(l_soa_a1))         &
-               + gasLost(i,k,COND_VAP_ORG_SV)                             &           ! "semi volatile" can not nucleate
-               + gasLost(i,k,COND_VAP_ORG_LV)*(1.0_r8-fracNucl(i,k,COND_VAP_ORG_LV))  ! part of low volatile which does not nucleate
+          q(icol,ilev,chemistryIndex(l_soa_a1)) = q(icol,ilev,chemistryIndex(l_soa_a1)) &
+               + gasLost(icol,ilev,COND_VAP_ORG_SV)                                     &           ! "semi volatile" can not nucleate
+               + gasLost(icol,ilev,COND_VAP_ORG_LV)*(1.0_r8-fracNucl(icol,ilev,COND_VAP_ORG_LV))  ! part of low volatile which does not nucleate
 
           !condenseable vapours
-          q(i,k,chemistryIndex(l_h2so4))  = intermediateConcentration(i,k,COND_VAP_H2SO4)
-          q(i,k,chemistryIndex(l_soa_lv)) = intermediateConcentration(i,k,COND_VAP_ORG_LV)
-          q(i,k,chemistryIndex(l_soa_sv)) = intermediateConcentration(i,k,COND_VAP_ORG_SV)
+          q(icol,ilev,chemistryIndex(l_h2so4))  = intermediateConcentration(icol,ilev,COND_VAP_H2SO4)
+          q(icol,ilev,chemistryIndex(l_soa_lv)) = intermediateConcentration(icol,ilev,COND_VAP_ORG_LV)
+          q(icol,ilev,chemistryIndex(l_soa_sv)) = intermediateConcentration(icol,ilev,COND_VAP_ORG_SV)
 
 
           !Condensation transfers mass from externally mixed to internally mixed modes
@@ -512,13 +513,13 @@ contains
              do cond_vap_idx = 1, N_COND_VAP
                 !Add up volume shell for this condenseable vapour
                 volume_shell = volume_shell                                          &
-                     + condensationSinkFraction(i,k,iDonor,cond_vap_idx)             & ![frc]
-                     * gasLost(i,k,cond_vap_idx)*(1.0_r8-fracNucl(i,k,cond_vap_idx)) & ![kg/kg]
+                     + condensationSinkFraction(icol,ilev,iDonor,cond_vap_idx)             & ![frc]
+                     * gasLost(icol,ilev,cond_vap_idx)*(1.0_r8-fracNucl(icol,ilev,cond_vap_idx)) & ![kg/kg]
                      * invRhoPart(physicsIndex(cond_vap_map(cond_vap_idx)))          & !*[m3/kg] ==> [m3/kg_{air}
-                     * rhoAir(i,k)                                                     !*[kg/m3] ==> m3/m3
+                     * rhoAir(icol,ilev)                                                     !*[kg/m3] ==> m3/m3
              end do
 
-             area_core=numberConcentrationExtMix(i,k,iDonor)*numberToSurface(mode_index_donor)   !#/m3 * m2/# ==> m2/m3
+             area_core=numberConcentrationExtMix(icol,ilev,iDonor)*numberToSurface(mode_index_donor)   !#/m3 * m2/# ==> m2/m3
              vol_monolayer=area_core*dr_so4_monolayers_age
 
              ! Small fraction retained to avoid numerical irregularities
@@ -534,32 +535,32 @@ contains
                 l_donor    = tracer_index(mode_index_donor, tracerIndex)
                 l_receiver = lifeCycleReceiver(l_donor)
 
-                if( l_receiver .le. 0)then
+                if( l_receiver <= 0)then
                    stop !something wrong
                 endif
 
                 !Transfer from donor to receiver takes into account
                 !fraction transferred
-                totalLoss(i,k,l_donor) = frac_transfer*q(i,k,l_donor)
-                q(i,k,l_donor) = q(i,k,l_donor) - totalLoss(i,k,l_donor)
-                q(i,k,l_receiver) = q(i,k,l_receiver) + totalLoss(i,k,l_donor)
+                totalLoss(icol,ilev,l_donor) = frac_transfer*q(icol,ilev,l_donor)
+                q(icol,ilev,l_donor) = q(icol,ilev,l_donor) - totalLoss(icol,ilev,l_donor)
+                q(icol,ilev,l_receiver) = q(icol,ilev,l_receiver) + totalLoss(icol,ilev,l_donor)
              end do !tracers in mode
           end do    !loop over receivers
-       end do !physical index k
-    end do    !physical index i
+       end do !physical index ilev
+    end do    !physical index icol
 
     !Output for diagnostics
     call phys_getopts(history_aerosol_out = history_aerosol)
 
     if(history_aerosol)then
        coltend(:ncol,:) = 0.0_r8
-       do i=1,gas_pcnst
+       do icol=1,gas_pcnst
           !Check if species contributes to condensation
-          if(lifeCycleReceiver(i) .gt. 0)then
+          if(lifeCycleReceiver(icol) > 0)then
              !Loss from the donor specie
-             tracer_coltend(:ncol) = sum(totalLoss(:ncol, :,i)*pdel(:ncol,:),2)/gravit/dt
-             coltend(:ncol,i) = coltend(:ncol,i) - tracer_coltend(:ncol) !negative (loss for donor)
-             coltend(:ncol,lifeCycleReceiver(i)) = coltend(:ncol,lifeCycleReceiver(i)) + tracer_coltend(:ncol)
+             tracer_coltend(:ncol) = sum(totalLoss(:ncol, :,icol)*pdel(:ncol,:),2)/gravit/dt
+             coltend(:ncol,icol) = coltend(:ncol,icol) - tracer_coltend(:ncol) !negative (loss for donor)
+             coltend(:ncol,lifeCycleReceiver(icol)) = coltend(:ncol,lifeCycleReceiver(icol)) + tracer_coltend(:ncol)
           endif
        end do
 
@@ -595,12 +596,12 @@ contains
             gasLost(:ncol,:,COND_VAP_ORG_SV)*pdel(:ncol,:) , 2 &
             )/gravit/dt
 
-       do i=1,gas_pcnst
-          if(lifeCycleReceiver(i) .gt. 0 )then
-             long_name= trim(solsym(i))//"condTend"
-             call outfld(long_name, coltend(:,i), pcols, lchnk)
-             long_name= trim(solsym(lifeCycleReceiver(i)))//"condTend"
-             call outfld(long_name, coltend(:,lifeCycleReceiver(i)),pcols,lchnk)
+       do icol=1,gas_pcnst
+          if(lifeCycleReceiver(icol) > 0 )then
+             long_name= trim(solsym(icol))//"condTend"
+             call outfld(long_name, coltend(:,icol), pcols, lchnk)
+             long_name= trim(solsym(lifeCycleReceiver(icol)))//"condTend"
+             call outfld(long_name, coltend(:,lifeCycleReceiver(icol)),pcols,lchnk)
           end if
        end do
        long_name=trim(solsym(chemistryIndex(l_so4_a1)))//"condTend"
@@ -653,7 +654,7 @@ contains
     real(r8), parameter   :: org_dens=2000._r8         ! density of organics [kg m-3], based on RM assumptions
     !cka -
 
-    integer               :: i,k
+    integer               :: icol,ilev
     real(r8)              :: qs(pcols,pver)            ! Saturation specific humidity
     real(r8)              :: relhum(pcols,pver)        ! Relative humidity
     real(r8)              :: h2so4(pcols,pver)         ! Sulphuric acid concentration [#/cm3]
@@ -697,8 +698,8 @@ contains
     formrate_bin(:,:)=0._r8
     formrate_pbl(:,:)=0._r8
     !-- The highest level in planetary boundary layer
-    do i=1,ncol
-       pblht_lim(i)=MIN(MAX(pblht(i),500._r8),7000._r8)
+    do icol=1,ncol
+       pblht_lim(icol)=MIN(MAX(pblht(icol),500._r8),7000._r8)
     end do
 
     !-- Get molecular mass of h2so4 and soa_lv (cka)
@@ -710,35 +711,35 @@ contains
 
     !-- Conversion of H2SO4 from kg/kg to #/cm3
     !-- and calculation of relative humidity (needed by binary nucleation parameterization)
-    do k=1,pver
-       do i=1,ncol
-          rhoair(i,k)=pmid(i,k)/(t(i,k)*rair)
+    do ilev=1,pver
+       do icol=1,ncol
+          rhoair(icol,ilev)=pmid(icol,ilev)/(t(icol,ilev)*rair)
           !avogad*1.e-3_r8 to get molec/mol instead of molec/kmol
-          h2so4(i,k)=(1.e-6_r8*h2so4pc(i,k)*avogad*1.e-3_r8*rhoair(i,k))/(molmass_h2so4*1.E-3_r8)
-          orgforgrowth(i,k)=(1.e-6_r8*oxidorg(i,k)*avogad*1.e-3_r8*rhoair(i,k))/(molmass_soa*1.E-3_r8)
-          orgforgrowth(i,k)=MAX(MIN(orgforgrowth(i,k),1.E10_r8),0._r8)
+          h2so4(icol,ilev)=(1.e-6_r8*h2so4pc(icol,ilev)*avogad*1.e-3_r8*rhoair(icol,ilev))/(molmass_h2so4*1.E-3_r8)
+          orgforgrowth(icol,ilev)=(1.e-6_r8*oxidorg(icol,ilev)*avogad*1.e-3_r8*rhoair(icol,ilev))/(molmass_soa*1.E-3_r8)
+          orgforgrowth(icol,ilev)=MAX(MIN(orgforgrowth(icol,ilev),1.E10_r8),0._r8)
 
-          call qsat_water(t(i,k), pmid(i,k), dummy, qs(i,k))
+          call qsat_water(t(icol,ilev), pmid(icol,ilev), dummy, qs(icol,ilev))
 
-          relhum(i,k) = h2ommr(i,k)/qs(i,k)
-          relhum(i,k) = max(relhum(i,k),0.0_r8)
-          relhum(i,k) = min(relhum(i,k),1.0_r8)
+          relhum(icol,ilev) = h2ommr(icol,ilev)/qs(icol,ilev)
+          relhum(icol,ilev) = max(relhum(icol,ilev),0.0_r8)
+          relhum(icol,ilev) = min(relhum(icol,ilev),1.0_r8)
        end do !ncol
     end do     !layers
 
     !-- Binary sulphuric acid-water nucleation rate
     if(atm_nucleation .EQ. 1) then
-       do k=1,pver
-          do i=1,ncol
+       do ilev=1,pver
+          do icol=1,ncol
 
              ! Calculate nucleation only for valid thermodynamic conditions:
-             zrhoa = max(h2so4(i,k),1.E+4_r8)
+             zrhoa = max(h2so4(icol,ilev),1.E+4_r8)
              zrhoa = min(zrhoa,1.E11_r8)
 
-             zrh   = max(relhum(i,k),1.E-4_r8)
+             zrh   = max(relhum(icol,ilev),1.E-4_r8)
              zrh   = min(zrh,1.0_r8)
 
-             zt    = max(t(i,k),190.15_r8)
+             zt    = max(t(icol,ilev),190.15_r8)
              zt    = min(zt,300.15_r8)
 
              zt2 = zt*zt
@@ -882,8 +883,8 @@ contains
 
              ! limitation to 1E+10 [1/cm3s]
 
-             nuclrate_bin(i,k)=MAX(MIN(zjnuc,1.E10_r8),0._r8)
-             nuclsize_bin(i,k)=MAX(MIN(zrc,1.E2_r8),0.01_r8)
+             nuclrate_bin(icol,ilev)=MAX(MIN(zjnuc,1.E10_r8),0._r8)
+             nuclsize_bin(icol,ilev)=MAX(MIN(zrc,1.E2_r8),0.01_r8)
 
           end do
        end do
@@ -893,79 +894,81 @@ contains
     end if
 
     !-- Boundary layer nucleation
-    do k=1,pver
-       do i=1,ncol
+    do ilev=1,pver
+       do icol=1,ncol
 
           !-- Nucleation rate #/cm3/s
-          if(pblht_lim(i)>zm(i,k) .AND. pbl_nucleation>0) then
+          if(pblht_lim(icol)>zm(icol,ilev) .AND. pbl_nucleation>0) then
 
              if(pbl_nucleation .EQ. 1) then
 
                 !-- Paasonen et al. (2010), eqn 10, Table 4
-                nuclrate_pbl(i,k)=(1.7E-6_r8)*h2so4(i,k)
+                nuclrate_pbl(icol,ilev)=(1.7E-6_r8)*h2so4(icol,ilev)
 
              else if(pbl_nucleation .EQ. 2) then
 
                 !-- Paasonen et al. (2010)
                 !values from Table 3 in Paasonen et al (2010), modified version of eqn 14
-                nuclrate_pbl(i,k)=(6.1E-7_r8)*h2so4(i,k)+(0.39E-7_r8)*orgforgrowth(i,k)
+                nuclrate_pbl(icol,ilev)=(6.1E-7_r8)*h2so4(icol,ilev)+(0.39E-7_r8)*orgforgrowth(icol,ilev)
 
              end if
 
-             nuclrate_pbl(i,k)=MAX(MIN(nuclrate_pbl(i,k),1.E10_r8),0._r8)
+             nuclrate_pbl(icol,ilev)=MAX(MIN(nuclrate_pbl(icol,ilev),1.E10_r8),0._r8)
 
           else !Not using PBL-nucleation
-             nuclrate_pbl(i,k)=0._r8
+             nuclrate_pbl(icol,ilev)=0._r8
           end if
           !Size [nm] of particles in PBL
-          nuclsize_pbl(i,k)=2._r8
+          nuclsize_pbl(icol,ilev)=2._r8
 
        end do !horizontal points
     end do     !levels
 
     !-- Calculate total nucleated mass
-    do k=1,pver
-       do i=1,ncol
+    do ilev=1,pver
+       do icol=1,ncol
 
           !   Molecular speed and growth rate: H2SO4. Eq. 21 in Kerminen and Kulmala 2002
-          vmolh2so4=SQRT(8._r8*gasconst_R*t(i,k)/(pi*molmass_h2so4*1.E-3_r8))
-          grh2so4(i,k)=(3.E-9_r8/h2so4_dens)*(vmolh2so4*molmass_h2so4*h2so4(i,k))
-          grh2so4(i,k)=MAX(MIN(grh2so4(i,k),10000._r8),1.E-10_r8)
+          vmolh2so4=SQRT(8._r8*gasconst_R*t(icol,ilev)/(pi*molmass_h2so4*1.E-3_r8))
+          grh2so4(icol,ilev)=(3.E-9_r8/h2so4_dens)*(vmolh2so4*molmass_h2so4*h2so4(icol,ilev))
+          grh2so4(icol,ilev)=MAX(MIN(grh2so4(icol,ilev),10000._r8),1.E-10_r8)
 
           !   Molecular speed and growth rate: ORG. Eq. 21 in Kerminen and Kulmala 2002
-          vmolorg=SQRT(8._r8*gasconst_R*t(i,k)/(pi*molmass_soa*1.E-3_r8))
-          grorg(i,k)=(3.E-9_r8/org_dens)*(vmolorg*molmass_soa*orgforgrowth(i,k))
-          grorg(i,k)=MAX(MIN(grorg(i,k),10000._r8),1.E-10_r8)
+          vmolorg=SQRT(8._r8*gasconst_R*t(icol,ilev)/(pi*molmass_soa*1.E-3_r8))
+          grorg(icol,ilev)=(3.E-9_r8/org_dens)*(vmolorg*molmass_soa*orgforgrowth(icol,ilev))
+          grorg(icol,ilev)=MAX(MIN(grorg(icol,ilev),10000._r8),1.E-10_r8)
 
           ! Combined growth rate (cka)
-          gr(i,k)=grh2so4(i,k)+grorg(i,k)
+          gr(icol,ilev)=grh2so4(icol,ilev)+grorg(icol,ilev)
 
           !-- Lehtinen 2007 parameterization for apparent formation rate
           !   diameters in nm, growth rate in nm h-1, coagulation in s-1
 
-          call appformrate(nuclsize_bin(i,k), d_form*1.E9_r8, nuclrate_bin(i,k), formrate_bin(i,k), coagnuc(i,k), gr(i,k))
-          call appformrate(nuclsize_pbl(i,k), d_form*1.E9_r8, nuclrate_pbl(i,k), formrate_pbl(i,k), coagnuc(i,k), gr(i,k))
+          call appformrate(nuclsize_bin(icol,ilev), d_form*1.E9_r8, nuclrate_bin(icol,ilev), &
+               formrate_bin(icol,ilev), coagnuc(icol,ilev), gr(icol,ilev))
+          call appformrate(nuclsize_pbl(icol,ilev), d_form*1.E9_r8, nuclrate_pbl(icol,ilev), &
+               formrate_pbl(icol,ilev), coagnuc(icol,ilev), gr(icol,ilev))
 
-          formrate_bin(i,k)=MAX(MIN(formrate_bin(i,k),1.E3_r8),0._r8)
-          formrate_pbl(i,k)=MAX(MIN(formrate_pbl(i,k),1.E3_r8),0._r8)
+          formrate_bin(icol,ilev)=MAX(MIN(formrate_bin(icol,ilev),1.E3_r8),0._r8)
+          formrate_pbl(icol,ilev)=MAX(MIN(formrate_pbl(icol,ilev),1.E3_r8),0._r8)
 
           !   Number of mol nucleated per g air per second.
-          nuclvolume(i,k) = (formrate_bin(i,k) + formrate_pbl(i,k)) & ![particles/cm3]
-               *1.0e6_r8                                 & !==> [particles / m3 /]
-               /volumeToNumber(MODE_IDX_SO4SOA_AIT)   & !==> [m3_{aer} / m3_{air} / sec]
-               / rhoair(i,k)                            !==> m3_{aer} / kg_{air} /sec
+          nuclvolume(icol,ilev) = (formrate_bin(icol,ilev) + formrate_pbl(icol,ilev)) & ![particles/cm3]
+               *1.0e6_r8                                                              & !==> [particles / m3 /]
+               /volumeToNumber(MODE_IDX_SO4SOA_AIT)                                   & !==> [m3_{aer} / m3_{air} / sec]
+               / rhoair(icol,ilev)                                                      !==> m3_{aer} / kg_{air} /sec
 
           !Estimate how much is organic based on growth-rate
-          if(gr(i,k)>1.E-10_r8) then
-             frach2so4=grh2so4(i,k)/gr(i,k)
+          if(gr(icol,ilev)>1.E-10_r8) then
+             frach2so4=grh2so4(icol,ilev)/gr(icol,ilev)
           else
              frach2so4=1._r8
           end if
 
           ! Nucleated so4 and soa mass mixing ratio per second [kg kg-1 s-1]
           ! used density of particle phase, not of condensing gas
-          nuclso4(i,k)=rhopart(l_so4_na)*nuclvolume(i,k)*frach2so4
-          nuclorg(i,k)=rhopart(l_soa_na)*nuclvolume(i,k)*(1.0_r8-frach2so4)
+          nuclso4(icol,ilev)=rhopart(l_so4_na)*nuclvolume(icol,ilev)*frach2so4
+          nuclorg(icol,ilev)=rhopart(l_soa_na)*nuclvolume(icol,ilev)*(1.0_r8-frach2so4)
 
        end do
     end do

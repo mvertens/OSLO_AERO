@@ -310,12 +310,12 @@ contains
 
     ! return true if tracer is a "process mode"
     answer = .false.
-    if(l_index_phys .eq. l_so4_a1 .or. &
-         l_index_phys .eq. l_so4_a2 .or. &
-         l_index_phys .eq. l_so4_ac .or. &
-         l_index_phys .eq. l_bc_ac  .or. &
-         l_index_phys .eq. l_om_ac  .or. &
-         l_index_phys .eq. l_soa_a1 ) then
+    if(l_index_phys == l_so4_a1 .or. &
+         l_index_phys == l_so4_a2 .or. &
+         l_index_phys == l_so4_ac .or. &
+         l_index_phys == l_bc_ac  .or. &
+         l_index_phys == l_om_ac  .or. &
+         l_index_phys == l_soa_a1 ) then
        answer = .true.
     endif
   end function is_process_mode
@@ -333,7 +333,7 @@ contains
     use physics_buffer,  only: pbuf_add_field, dtype_r8
     use ppgrid,          only: pcols, pver, pverp
 
-    integer :: idx_dum, l,m,mm
+    integer :: idx_dum, itrac, imode, mm, icnst
     logical :: isAlreadyCounted(pcnst)
 
     ! register the species
@@ -401,9 +401,9 @@ contains
     rhopart(:)= 1000.0_r8
 
     ! assign values based on aerosol type
-    do m=0,nmodes
-       do l=1,n_tracers_in_mode(m)
-          mm= getTracerIndex(m,l,.false.)
+    do imode=0,nmodes
+       do itrac=1,n_tracers_in_mode(imode)
+          mm= getTracerIndex(imode,itrac,.false.)
           osmoticCoefficient(mm)  = aerosol_type_osmotic_coefficient(aerosolType(mm))
           rhopart(mm)             = aerosol_type_density(aerosolType(mm))
           solubleMassFraction(mm) = aerosol_type_soluble_mass_fraction(aerosolType(mm))
@@ -427,11 +427,11 @@ contains
 
     !Set process mode sizes
     tracerInProcessMode = (/l_so4_a1, l_so4_a2, l_so4_ac, l_om_ac, l_bc_ac, l_soa_a1 /)
-    processModeMap(:)=-99 !Force error if using unset values
-    do l =1,pcnst
-       do m=1,numberOfProcessModeTracers
-          if(tracerInProcessMode(m) .eq. l)then
-             processModeMap(l)=m
+    processModeMap(:) = -99 !Force error if using unset values
+    do icnst = 1,pcnst
+       do itrac = 1,numberOfProcessModeTracers
+          if(tracerInProcessMode(itrac) == icnst)then
+             processModeMap(icnst) = itrac
           end if
        end do
     end do
@@ -442,9 +442,9 @@ contains
     !Add the cloud-tracers
     isAlreadyCounted(:) = .false.
     cloudTracerIndex(:) = -1
-    do m=1,nmodes
-       do l=1,n_tracers_in_mode(m)
-          mm= getTracerIndex(m,l,.false.)
+    do imode=1,nmodes
+       do itrac=1,n_tracers_in_mode(imode)
+          mm= getTracerIndex(imode,itrac,.false.)
           if(.not. isAlreadyCounted(mm))then
              cloudTracerName(mm) = trim(cnst_name(mm))//"_OCW"
              call pbuf_add_field(trim(cloudTracerName(mm)), 'global', dtype_r8, (/pcols,pver/), idx_dum)
@@ -459,9 +459,9 @@ contains
     !Find out how many aerosol-tracers we carry
     isAlreadyCounted(:) = .false.
     n_aerosol_tracers = 0
-    do m=1,nmodes
-       do l=1,n_tracers_in_mode(m)
-          mm=getTracerIndex(m,l,.false.)
+    do imode=1,nmodes
+       do itrac=1,n_tracers_in_mode(imode)
+          mm=getTracerIndex(imode,itrac,.false.)
           if(.not. isAlreadyCounted(mm))then
              n_aerosol_tracers = n_aerosol_tracers + 1
              isAlreadyCounted(mm)=.true.
@@ -499,7 +499,7 @@ contains
     integer, intent(in) :: phys_index
     logical answer
     answer=.FALSE.
-    if(aerosolType(phys_index) .gt. 0)then
+    if(aerosolType(phys_index) > 0)then
        answer = .TRUE.
     endif
   end function isAerosol
@@ -568,11 +568,11 @@ contains
   end function getCloudTracerIndexDirect
 
   !===============================================================================
-  function getDryDensity(m,l) RESULT(density)
-    integer, intent(in) :: m !mode index
-    integer, intent(in) :: l !tracer index
+  function getDryDensity(imode,itrac) RESULT(density)
+    integer, intent(in) :: imode !mode index
+    integer, intent(in) :: itrac !tracer index
     real(r8) :: density
-    density =  rhopart(tracer_in_mode(m,l))
+    density =  rhopart(tracer_in_mode(imode,itrac))
   end function getDryDensity
 
   !===============================================================================
@@ -586,15 +586,15 @@ contains
   subroutine fillAerosolTracerList(aerosolTracerList)
     integer, dimension (:), intent(out) :: aerosolTracerList
     logical, dimension(pcnst)          :: alreadyFound
-    integer :: m,l,mm,nTracer
+    integer :: imode,itrac,mm,nTracer
     alreadyFound(:) = .FALSE.
     nTracer = 0
-    do m=1,nmodes
-       do l=1,n_tracers_in_mode(m)
-          mm=getTracerIndex(m,l,.FALSE.)
+    do imode = 1,nmodes
+       do itrac = 1,n_tracers_in_mode(imode)
+          mm = getTracerIndex(imode,itrac,.FALSE.)
           if(.NOT.alreadyFound(mm))then
              nTracer = nTracer + 1
-             alreadyFound(mm) = .TRUE.
+             alreadyFound(mm)  = .TRUE.
              aerosolTracerList(nTracer) = mm
           end if
        end do
@@ -606,11 +606,11 @@ contains
     integer, dimension(:), intent(in)  :: aerosolTracerList
     integer, intent(in)                :: n_aerosol_tracers
     integer, dimension(pcnst), intent(out) :: inverseAerosolTracerList
-    integer                                :: i
+    integer :: itrac
 
     inverseAerosolTracerList(:) = -99
-    do i=1,n_aerosol_tracers
-       inverseAerosolTracerList(aerosolTracerList(i)) = i
+    do itrac = 1,n_aerosol_tracers
+       inverseAerosolTracerList(aerosolTracerList(itrac)) = itrac
     end do
   end subroutine fillInverseAerosolTracerList
 
@@ -679,12 +679,12 @@ contains
     integer, intent(in) :: modeIndex
     integer, intent(in) :: constituentIndex
 
-    integer             :: i
+    integer             :: itrac
     logical             :: answer
 
     answer = .FALSE.
-    do i=1,n_tracers_in_mode(modeIndex)
-       if(tracer_in_mode(modeIndex,i) == constituentIndex)then
+    do itrac = 1,n_tracers_in_mode(modeIndex)
+       if(tracer_in_mode(modeIndex,itrac) == constituentIndex)then
           answer = .TRUE.
           exit
        endif
@@ -696,37 +696,37 @@ contains
 
     ! Tables for hygroscopic growth
 
-    integer :: i
+    integer :: imode
     real(r8) :: rr0ss(10),rr0so4(10),rr0bcoc(10)
 
-    data rr0ss / 1.00_r8, 1.00_r8, 1.02_r8, 1.57_r8, 1.88_r8, 1.97_r8, 2.12_r8, 2.35_r8, 2.88_r8, 3.62_r8 /
-    data rr0so4 / 1.00_r8, 1.34_r8, 1.39_r8, 1.52_r8, 1.62_r8, 1.69_r8, 1.78_r8, 1.92_r8, 2.22_r8, 2.79_r8 /
+    data rr0ss   / 1.00_r8, 1.00_r8, 1.02_r8, 1.57_r8, 1.88_r8, 1.97_r8, 2.12_r8, 2.35_r8, 2.88_r8, 3.62_r8 /
+    data rr0so4  / 1.00_r8, 1.34_r8, 1.39_r8, 1.52_r8, 1.62_r8, 1.69_r8, 1.78_r8, 1.92_r8, 2.22_r8, 2.79_r8 /
     data rr0bcoc / 1.00_r8, 1.02_r8, 1.03_r8, 1.12_r8, 1.17_r8, 1.20_r8, 1.25_r8, 1.31_r8, 1.46_r8, 1.71_r8 /
 
     rdivr0(:,:)=1._r8
 
-    do i=1,10
-       rdivr0(i,l_so4_na)=rr0so4(i)
-       rdivr0(i,l_so4_a1)=rr0so4(i)
-       rdivr0(i,l_so4_a2)=rr0so4(i)
-       rdivr0(i,l_so4_ac)=rr0so4(i)
-       rdivr0(i,l_so4_pr)=rr0so4(i)
+    do imode=1,10
+       rdivr0(imode,l_so4_na)=rr0so4(imode)
+       rdivr0(imode,l_so4_a1)=rr0so4(imode)
+       rdivr0(imode,l_so4_a2)=rr0so4(imode)
+       rdivr0(imode,l_so4_ac)=rr0so4(imode)
+       rdivr0(imode,l_so4_pr)=rr0so4(imode)
 
-       rdivr0(i,l_bc_a)=rr0bcoc(i)
+       rdivr0(imode,l_bc_a)=rr0bcoc(imode)
 
-       rdivr0(i,l_bc_ni)=rr0bcoc(i)
-       rdivr0(i,l_bc_ai)=rr0bcoc(i)
-       rdivr0(i,l_bc_ac)=rr0bcoc(i)
+       rdivr0(imode,l_bc_ni)=rr0bcoc(imode)
+       rdivr0(imode,l_bc_ai)=rr0bcoc(imode)
+       rdivr0(imode,l_bc_ac)=rr0bcoc(imode)
 
-       rdivr0(i,l_om_ni)=rr0bcoc(i)
-       rdivr0(i,l_om_ai)=rr0bcoc(i)
-       rdivr0(i,l_om_ac)=rr0bcoc(i)
+       rdivr0(imode,l_om_ni)=rr0bcoc(imode)
+       rdivr0(imode,l_om_ai)=rr0bcoc(imode)
+       rdivr0(imode,l_om_ac)=rr0bcoc(imode)
 
-       rdivr0(i,l_ss_a1)=rr0ss(i)
-       rdivr0(i,l_ss_a2)=rr0ss(i)
-       rdivr0(i,l_ss_a3)=rr0ss(i)
+       rdivr0(imode,l_ss_a1)=rr0ss(imode)
+       rdivr0(imode,l_ss_a2)=rr0ss(imode)
+       rdivr0(imode,l_ss_a3)=rr0ss(imode)
 
-       rdivr0(i,l_soa_na)=rr0bcoc(i)
+       rdivr0(imode,l_soa_na)=rr0bcoc(imode)
     end do
   end subroutine inittabrh
 
@@ -766,24 +766,25 @@ contains
     real(r8) , intent(out) :: numberConcentration(pcols,pver,0:nmodes) ![#/m3] number concentration
 
     ! local variables
-    integer :: m, l, mm, k
+    integer :: imode, itrac, mm, ilev
 
     numberConcentration(:,:,:) = 0.0_r8
-    do m = 0, nmodes
-       do l=1,getNumberOfBackgroundTracersInMode(m)
-          mm = getTracerIndex(m,l,.false.)
-          do k=1,pver
-             numberConcentration(:ncol,k,m) = numberConcentration(:ncol,k,m) &
-                  + ( q(:ncol,k,mm) / getDryDensity(m,l))  !Volume of this tracer
+    do imode = 0, nmodes
+       do itrac=1,getNumberOfBackgroundTracersInMode(imode)
+          mm = getTracerIndex(imode,itrac,.false.)
+          do ilev=1,pver
+             numberConcentration(:ncol,ilev,imode) = numberConcentration(:ncol,ilev,imode) &
+                  + ( q(:ncol,ilev,mm) / getDryDensity(imode,itrac))  !Volume of this tracer
           end do
        end do
     end do
 
     ! until now, the variable "numberConcentration" actually contained "volume mixing ratio"
     ! the next couple of lines fixes this!
-    do m= 0, nmodes
-       do k=1,pver
-          numberConcentration(:ncol,k,m) = numberConcentration(:ncol,k,m) * rho_air(:ncol,k) * volumeToNumber(m)
+    do imode= 0, nmodes
+       do ilev=1,pver
+          numberConcentration(:ncol,ilev,imode) = &
+               numberConcentration(:ncol,ilev,imode) * rho_air(:ncol,ilev) * volumeToNumber(imode)
        end do
     end do
 
@@ -800,17 +801,17 @@ contains
     integer  , intent(in)  :: ncol                                       !number of columns used
     real(r8) , intent(out) :: numberMedianRadius(pcols,pver,nmodes)      ![m]
 
-    integer :: n,k
+    integer :: imode,ilev
 
-    do n=1,nmodes
-       do k=1,pver
-          where(volumeConcentration(:ncol,k,n) .gt. 1.e-20_r8)
-             numberMedianRadius(:ncol, k, n) = 0.5_r8 &                  !diameter ==> radius
-                  * (volumeConcentration(:ncol,k,n)       &              !conversion formula
-                  * 6.0_r8/pi/numberConcentration(:ncol,k,n) &
-                  *DEXP(-4.5_r8*lnsigma(:ncol,k,n)*lnsigma(:ncol,k,n)))**aThird
+    do imode=1,nmodes
+       do ilev=1,pver
+          where(volumeConcentration(:ncol,ilev,imode) > 1.e-20_r8)
+             numberMedianRadius(:ncol, ilev, imode) = 0.5_r8 &                  !diameter ==> radius
+                  * (volumeConcentration(:ncol,ilev,imode)       &              !conversion formula
+                  * 6.0_r8/pi/numberConcentration(:ncol,ilev,imode) &
+                  *DEXP(-4.5_r8*lnsigma(:ncol,ilev,imode)*lnsigma(:ncol,ilev,imode)))**aThird
           elsewhere
-             numberMedianRadius(:ncol,k,n) = originalNumberMedianRadius(n)
+             numberMedianRadius(:ncol,ilev,imode) = originalNumberMedianRadius(imode)
           end where
        end do
     end do
@@ -837,27 +838,27 @@ contains
     real(r8) :: sumMass
     real(r8) :: dN, dNdLogR, dLogR
     real(r8) :: densityBin
-    integer  :: i
+    integer  :: ibin
 
     sumVolume = 0.0_r8
     sumMass   = 0.0_r8
-    do i=1, nbinsTab
-       dLogR = log(rBinEdge(i+1)/rBinEdge(i))
-       dNdLogR = calculatedNdLogR(rBinMidPoint(i), modeNumberMedianRadius, modeStandardDeviation)
+    do ibin=1, nbinsTab
+       dLogR = log(rBinEdge(ibin+1)/rBinEdge(ibin))
+       dNdLogR = calculatedNdLogR(rBinMidPoint(ibin), modeNumberMedianRadius, modeStandardDeviation)
 
        !Equivalent density (decreases with size since larger particles are long "hair like" threads..)
-       if (rBinMidPoint(i) < emissionRadius)then
+       if (rBinMidPoint(ibin) < emissionRadius)then
           densityBin = emissionDensity
        else
-          densityBin = emissionDensity*(emissionRadius/rBinMidPoint(i))**(3.0 - fractalDimension)
+          densityBin = emissionDensity*(emissionRadius/rBinMidPoint(ibin))**(3.0 - fractalDimension)
        endif
 
        !number concentration in this bin
        dN = dNdLogR * dLogR
 
        !sum up volume and mass (factor of 4*pi/3 omitted since in both numerator and nominator)
-       sumVolume = sumVolume + dN * (rBinMidPoint(i)**3)
-       sumMass   = sumMass + dN * densityBin * (rBinMidPoint(i)**3)
+       sumVolume = sumVolume + dN * (rBinMidPoint(ibin)**3)
+       sumMass   = sumMass + dN * densityBin * (rBinMidPoint(ibin)**3)
     end do
 
     ! Equivalent density is mass by volume
@@ -950,9 +951,9 @@ contains
     do kcomp=1,4
        cate(kcomp,1)=1.e-10_r8
        do i=2,16
-          if(kcomp.eq.1.or.kcomp.eq.2) then
+          if(kcomp == 1.or.kcomp == 2) then
              cate(kcomp,i)=10.0_r8**((i-1)/3.0_r8-6.222_r8)
-          elseif(kcomp.eq.3) then
+          elseif(kcomp == 3) then
              cate(kcomp,i)=1.0e-10_r8  ! not used
           else
              cate(kcomp,i)=10.0_r8**((i-1)/3.0_r8-4.301_r8)
@@ -962,15 +963,15 @@ contains
     do kcomp=5,10
        cat(kcomp,1) =1.e-10_r8
        do i=2,6
-          if(kcomp.eq.5) then
+          if(kcomp == 5) then
              cat(kcomp,i)=10.0_r8**((i-1)-3.824_r8)
-          elseif(kcomp.eq.6) then
+          elseif(kcomp == 6) then
              cat(kcomp,i)=10.0_r8**((i-1)-3.523_r8)
-          elseif(kcomp.eq.7) then
+          elseif(kcomp == 7) then
              cat(kcomp,i)=10.0_r8**((i-1)-3.699_r8)
-          elseif(kcomp.eq.8) then
+          elseif(kcomp == 8) then
              cat(kcomp,i)=10.0_r8**((i-1)-4.921_r8)
-          elseif(kcomp.eq.9) then
+          elseif(kcomp == 9) then
              cat(kcomp,i)=10.0_r8**((i-1)-3.301_r8)
           else
              cat(kcomp,i)=10.0_r8**((i-1)-3.699_r8)

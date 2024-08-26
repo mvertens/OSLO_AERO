@@ -214,7 +214,7 @@ contains
 
     ! local workspace
     ! all units mks unless otherwise stated
-    integer :: i, k, m
+    integer :: icol, ilev, m
     integer :: itim_old
     type(physics_state) :: state1                             ! Local copy of state variable
     type(physics_ptend) :: ptend_loc
@@ -306,9 +306,9 @@ contains
     end if
 
     ! initialize time-varying parameters
-    do k = top_lev, pver
-       do i = 1, ncol
-          rho(i,k) = state1%pmid(i,k)/(rair*state1%t(i,k))
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          rho(icol,ilev) = state1%pmid(icol,ilev)/(rair*state1%t(icol,ilev))
        end do
     end do
 
@@ -335,29 +335,29 @@ contains
     wsub(:ncol,:top_lev-1)  = 0.20_r8
     wsubi(:ncol,:top_lev-1) = 0.001_r8
 
-    do k = top_lev, pver
-       do i = 1, ncol
+    do ilev = top_lev, pver
+       do icol = 1, ncol
 
           select case (trim(eddy_scheme))
           case ('diag_TKE', 'CLUBB_SGS')
-             wsub(i,k) = sqrt(0.5_r8*(tke(i,k) + tke(i,k+1))*(2._r8/3._r8))
-             wsub(i,k) = min(wsub(i,k),10._r8)
+             wsub(icol,ilev) = sqrt(0.5_r8*(tke(icol,ilev) + tke(icol,ilev+1))*(2._r8/3._r8))
+             wsub(icol,ilev) = min(wsub(icol,ilev),10._r8)
           case default
              ! get sub-grid vertical velocity from diff coef.
              ! following morrison et al. 2005, JAS
              ! assume mixing length of 30 m
-             dum = (kvh(i,k) + kvh(i,k+1))/2._r8/30._r8
+             dum = (kvh(icol,ilev) + kvh(icol,ilev+1))/2._r8/30._r8
              ! use maximum sub-grid vertical vel of 10 m/s
              dum = min(dum, 10._r8)
              ! set wsub to value at current vertical level
-             wsub(i,k)  = dum
+             wsub(icol,ilev)  = dum
           end select
 
-          wsubi(i,k) = max(0.001_r8, wsub(i,k))
+          wsubi(icol,ilev) = max(0.001_r8, wsub(icol,ilev))
           if (.not. use_preexisting_ice) then
-             wsubi(i,k) = min(wsubi(i,k), 0.2_r8)
+             wsubi(icol,ilev) = min(wsubi(icol,ilev), 0.2_r8)
           endif
-          wsub(i,k)  = max(0.20_r8, wsub(i,k))
+          wsub(icol,ilev)  = max(0.20_r8, wsub(icol,ilev))
 
        end do
     end do
@@ -384,9 +384,9 @@ contains
     call physics_update(state1, ptend_loc, deltatin)
 
     ! get liquid cloud fraction, check for minimum
-    do k = top_lev, pver
-       do i = 1, ncol
-          lcldm(i,k) = max(ast(i,k), mincld)
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          lcldm(icol,ilev) = max(ast(icol,ilev), mincld)
        end do
     end do
     call t_stopf('oslo_microp_ice_nucleation')
@@ -400,13 +400,13 @@ contains
     lcldn = 0._r8
     lcldo = 0._r8
     cldliqf = 0._r8
-    do k = top_lev, pver
-       do i = 1, ncol
-          qcld = state1%q(i,k,cldliq_idx) + state1%q(i,k,cldice_idx)
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          qcld = state1%q(icol,ilev,cldliq_idx) + state1%q(icol,ilev,cldice_idx)
           if (qcld > qsmall) then
-             lcldn(i,k)   = cldn(i,k)*state1%q(i,k,cldliq_idx)/qcld
-             lcldo(i,k)   = cldo(i,k)*state1%q(i,k,cldliq_idx)/qcld
-             cldliqf(i,k) = state1%q(i,k,cldliq_idx)/qcld
+             lcldn(icol,ilev)   = cldn(icol,ilev)*state1%q(icol,ilev,cldliq_idx)/qcld
+             lcldo(icol,ilev)   = cldo(icol,ilev)*state1%q(icol,ilev,cldliq_idx)/qcld
+             cldliqf(icol,ilev) = state1%q(icol,ilev,cldliq_idx)/qcld
           end if
        end do
     end do
@@ -451,17 +451,17 @@ contains
 
     ! Contact freezing  (-40<T<-3 C) (Young, 1974) with hooks into simulated dust
     ! estimate rndst and nanco for 4 dust bins here to pass to MG microphysics
-    do k = top_lev, pver
-       do i = 1, ncol
-          if (state1%t(i,k) < 269.15_r8) then
-             !fxm: I think model uses bins, not modes.. But to get it
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          if (state1%t(icol,ilev) < 269.15_r8) then
+             !fxm: ICOL think model uses bins, not modes.. But to get it
              !approximately correct, use mode radius in first version
-             nacon(i,k,2) = numberConcentration(i,k,MODE_IDX_DST_A2)
-             nacon(i,k,3) = numberConcentration(i,k,MODE_IDX_DST_A3)
-             rndst(i,k,2) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A2)
-             rndst(i,k,3) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A3)
-             nacon(i,k,1) = 0.0_r8 !Set to zero to make sure
-             nacon(i,k,4) = 0.0_r8 !Set to zero to make sure
+             nacon(icol,ilev,2) = numberConcentration(icol,ilev,MODE_IDX_DST_A2)
+             nacon(icol,ilev,3) = numberConcentration(icol,ilev,MODE_IDX_DST_A3)
+             rndst(icol,ilev,2) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A2)
+             rndst(icol,ilev,3) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A3)
+             nacon(icol,ilev,1) = 0.0_r8 !Set to zero to make sure
+             nacon(icol,ilev,4) = 0.0_r8 !Set to zero to make sure
           end if
        end do
     end do

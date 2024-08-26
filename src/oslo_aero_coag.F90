@@ -135,7 +135,7 @@ contains
     character(8)                   :: unit
     logical                        :: history_aerosol
     logical                        :: isAlreadyOnList(gas_pcnst)
-    integer                        :: mind,tind
+    integer                        :: imode,itrac
 
     !-------------------------------------
     ! Initialize coagulation receivers
@@ -279,11 +279,11 @@ contains
     end do    !receiver modes
 
     nsiz=1
-    do while (rBinMidPoint(nsiz).lt.rcoagdroplet.and.nsiz.lt.nBinsTab)
+    do while (rBinMidPoint(nsiz) < rcoagdroplet.and.nsiz < nBinsTab)
        nsiz=nsiz+1
     end do
 
-    if (abs(rBinMidPoint(nsiz-1)-rcoagdroplet).lt.abs(rBinMidPoint(nsiz)-rcoagdroplet)) then
+    if (abs(rBinMidPoint(nsiz-1)-rcoagdroplet) < abs(rBinMidPoint(nsiz)-rcoagdroplet)) then
        tableindexcloud=nsiz-1
     else
        tableindexcloud=nsiz
@@ -307,7 +307,7 @@ contains
     isAlreadyOnList(:) = .FALSE.
     do iChem = 1,gas_pcnst
        !Does this tracer have a receiver? If yes: It contributes to coagulation
-       if(lifeCycleReceiver(iChem) .gt. 0)then
+       if(lifeCycleReceiver(iChem) > 0)then
           unit = "kg/m2/s"
           fieldname_donor = trim(solsym(iChem))//"coagTend"
           fieldname_receiver    = trim(solsym(lifeCycleReceiver(iChem)))//"coagTend"
@@ -325,7 +325,7 @@ contains
 
     isAlreadyOnList(:) = .FALSE.
     do iChem = 1,gas_pcnst
-       if(CloudAerReceiver(iChem) .gt. 0)then
+       if(CloudAerReceiver(iChem) > 0)then
           unit = "kg/m2/s"
           fieldname_donor = trim(solsym(iChem))//"clcoagTend"
           fieldname_receiver    = trim(solsym(CloudAerReceiver(iChem)))//"_OCWclcoagTend"
@@ -345,10 +345,10 @@ contains
     ! Initialize module variables for performance
     !-------------------------------------
 
-    do mind = 0,nmodes
-       do tind=1,n_tracers_in_mode(mind)
-          tracer_index(mind,tind) = getTracerIndex(mind,tind,.true.)
-          in_process_mode(tracer_index(mind,tind)) = is_process_mode(tracer_index(mind,tind), .true.)
+    do imode = 0,nmodes
+       do itrac=1,n_tracers_in_mode(imode)
+          tracer_index(imode,itrac) = getTracerIndex(imode,itrac,.true.)
+          in_process_mode(tracer_index(imode,itrac)) = is_process_mode(tracer_index(imode,itrac), .true.)
        end do
     end do
 
@@ -395,7 +395,7 @@ contains
 
        g12=sqrt(g1**2+g2**2)
 
-       !Coagulation coefficient of receiver size "ibin" with the coagulating mode "kcomp"
+       !Coagulation coefficient of receiver size "ibin" with the coagulating mode "imode"
        CoagulationCoefficient(ibin) =  &
             4.0_r8*pi*(rBinMidPoint(ibin)+modeRadius)*(diff1+diff2)          &
             /((rBinMidPoint(ibin)+modeRadius)/(rBinMidPoint(ibin)+modeRadius+g12)         &
@@ -423,9 +423,9 @@ contains
     integer, intent(in)     :: lchnk            ! [] chnk id needed for output
 
     ! local
-    integer           :: klev                ! level counter
+    integer           :: ilev                ! level counter
     integer           :: icol                ! column counter
-    integer           :: tind                ! species index
+    integer           :: itrac                ! species index
     integer           :: iCoagulator         !counter for species coagulating
     integer           :: iReceiver           !counter for species receiving coagulate
     integer           :: iSpecie             !counter for species in mode
@@ -447,11 +447,11 @@ contains
 
     call phys_getopts(history_aerosol_out = history_aerosol)
 
-    do klev = 1,pver
+    do ilev = 1,pver
        do icol = 1,ncol
 
           !Air density
-          rhoAir = pmid(icol,klev)/rair/temperature(icol,klev)
+          rhoAir = pmid(icol,ilev)/rair/temperature(icol,ilev)
 
           !Initialize number concentration for all receivers
           numberConcentration(:) = 0.0_r8
@@ -469,7 +469,7 @@ contains
                 if (.NOT. in_process_mode(l_index_receiver)) then
                    !Add up the number concentration of the receiving mode
                    numberConcentration(iReceiver) = numberConcentration(iReceiver) & !previous value
-                        + q(icol,klev,l_index_receiver)                            & !kg/kg
+                        + q(icol,ilev,l_index_receiver)                            & !kg/kg
                         / rhopart(physicsIndex(l_index_receiver))                  & !*[m3/kg] ==> m3/kg
                         * volumeToNumber(receiverMode(ireceiver))                  & ![#/m3] ==> #/kg
                         * rhoAir                                                     !#/kg ==> #/m3
@@ -515,20 +515,20 @@ contains
                      modeIndexCoagulator == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
 
                    !Done summing total loss of this coagulating specie
-                   totalLoss(icol,klev,l_index_donor) = coagulationSink & !loss rate for a mode in [1/s] summed over all receivers
-                        * q(icol,klev,l_index_donor)                    & !* mixing ratio ==> MMR/s
+                   totalLoss(icol,ilev,l_index_donor) = coagulationSink & !loss rate for a mode in [1/s] summed over all receivers
+                        * q(icol,ilev,l_index_donor)                    & !* mixing ratio ==> MMR/s
                         / delt_inverse                                    ! seconds ==> MMR
 
                    !Can not loose more than we have
-                   totalLoss(icol,klev,l_index_donor) = min(totalLoss(icol,klev,l_index_donor), &
-                                                            q(icol,klev,l_index_donor))
+                   totalLoss(icol,ilev,l_index_donor) = min(totalLoss(icol,ilev,l_index_donor), &
+                                                            q(icol,ilev,l_index_donor))
 
                 end if !check on process modes
              end do    !species in mode
 
           end do !coagulator mode
        end do ! icol
-    end do ! klev
+    end do ! ilev
 
 
     ! UPDATE THE TRACERS AND DO DIAGNOSTICS
@@ -546,13 +546,13 @@ contains
              !index of mode gaining mass (l_so4_ac, l_om_ac, l_bc_ac), coagulate
              l_index_receiver = lifeCycleReceiver(l_index_donor)
 
-             do klev = 1,pver
+             do ilev = 1,pver
                 !Loose mass from tracer in donor mode
-                q(:ncol,klev,l_index_donor) = q(:ncol,klev,l_index_donor) - totalLoss(:ncol,klev,l_index_donor)
+                q(:ncol,ilev,l_index_donor) = q(:ncol,ilev,l_index_donor) - totalLoss(:ncol,ilev,l_index_donor)
 
                 !Give mass to tracer in receiver mode
-                q(:ncol,klev,l_index_receiver) = q(:ncol,klev,l_index_receiver) + totalLoss(:ncol,klev,l_index_donor)
-             end do !klev
+                q(:ncol,ilev,l_index_receiver) = q(:ncol,ilev,l_index_receiver) + totalLoss(:ncol,ilev,l_index_donor)
+             end do !ilev
 
           endif
        end do
@@ -561,21 +561,21 @@ contains
     !Output for diagnostics
     if(history_aerosol)then
        coltend(:ncol,:) = 0.0_r8
-       do tind=1,gas_pcnst
+       do itrac=1,gas_pcnst
           !Check if species contributes to coagulation
-          if(lifeCycleReceiver(tind) .gt. 0)then
+          if(lifeCycleReceiver(itrac) > 0)then
              !Loss from the donor specie
-             tracer_coltend(:ncol) = sum(totalLoss(:ncol, :,tind)*pdel(:ncol,:),2)/gravit*delt_inverse
-             coltend(:ncol,tind) = coltend(:ncol,tind) - tracer_coltend(:ncol) !negative, loss for donor
-             coltend(:ncol,lifeCycleReceiver(tind)) = coltend(:ncol,lifeCycleReceiver(tind)) + tracer_coltend(:ncol)
+             tracer_coltend(:ncol) = sum(totalLoss(:ncol, :,itrac)*pdel(:ncol,:),2)/gravit*delt_inverse
+             coltend(:ncol,itrac) = coltend(:ncol,itrac) - tracer_coltend(:ncol) !negative, loss for donor
+             coltend(:ncol,lifeCycleReceiver(itrac)) = coltend(:ncol,lifeCycleReceiver(itrac)) + tracer_coltend(:ncol)
           endif
        end do
-       do tind=1,gas_pcnst
-          if(lifeCycleReceiver(tind) .gt. 0)then
-             long_name= trim(solsym(tind))//"coagTend"
-             call outfld(long_name, coltend(:ncol,tind), ncol, lchnk)
-             long_name= trim(solsym(lifeCycleReceiver(tind)))//"coagTend"
-             call outfld(long_name, coltend(:ncol,lifeCycleReceiver(tind)),ncol,lchnk)
+       do itrac=1,gas_pcnst
+          if(lifeCycleReceiver(itrac) > 0)then
+             long_name= trim(solsym(itrac))//"coagTend"
+             call outfld(long_name, coltend(:ncol,itrac), ncol, lchnk)
+             long_name= trim(solsym(lifeCycleReceiver(itrac)))//"coagTend"
+             call outfld(long_name, coltend(:ncol,lifeCycleReceiver(itrac)),ncol,lchnk)
           end if
        end do
     endif
@@ -602,9 +602,9 @@ contains
     type(physics_buffer_desc), pointer :: pbuf(:)
 
     ! local
-    integer           :: klev                            ! level counter
+    integer           :: ilev                            ! level counter
     integer           :: icol                            ! horizontal counter
-    integer           :: tind                            ! species index
+    integer           :: itrac                            ! species index
     integer           :: iCoagulator                     !counter for species coagulating
     integer           :: iReceiver                       !counter for species receiving coagulate
     integer           :: iSpecie                         !counter for species in mode
@@ -625,10 +625,10 @@ contains
     call phys_getopts(history_aerosol_out = history_aerosol)
 
     cloudLoss(:,:,:)=0.0_r8
-    do klev = 1,pver
+    do ilev = 1,pver
        do icol = 1,ncol
-          if (cldfrc(icol,klev) > 1.e-2) then
-             rhoAir = pmid(icol,klev)/rair/temperature(icol,klev)
+          if (cldfrc(icol,ilev) > 1.e-2) then
+             rhoAir = pmid(icol,ilev)/rair/temperature(icol,ilev)
 
              !Go through all coagulating modes
              do iCoagulator = 1, numberOfCoagulatingModes
@@ -644,7 +644,7 @@ contains
                 !Sum up coagulation sink for this coagulating species (for all receiving modes)
                 coagulationSink =   &                               ![1/s]
                      NCloudCoagulationSink(modeIndexCoagulator) &   ![m3/#/s]
-                     * (rhoair*cldnum(icol,klev)/cldfrc(icol,klev)) ![kg/m3*#/kg]
+                     * (rhoair*cldnum(icol,ilev)/cldfrc(icol,ilev)) ![kg/m3*#/kg]
 
                 !Each coagulating mode can contain several species
                 do ispecie = 1, n_tracers_in_mode(modeIndexCoagulator)
@@ -660,22 +660,22 @@ contains
                         modeIndexCoagulator == MODE_IDX_OMBC_INTMIX_COAT_AIT) ) then
 
                       !Done summing total loss of this coagulating specie
-                      cloudLoss(icol,klev,l_index_donor) = coagulationSink       & !loss rate for a mode in [1/s] summed over all receivers
-                           * cldfrc(icol,klev)*q(icol,klev,l_index_donor)        & !* mixing ratio ==> MMR/s
+                      cloudLoss(icol,ilev,l_index_donor) = coagulationSink       & !loss rate for a mode in [1/s] summed over all receivers
+                           * cldfrc(icol,ilev)*q(icol,ilev,l_index_donor)        & !* mixing ratio ==> MMR/s
                            / delt_inverse                                          !/ seconds ==> MMR
 
                       !Can not loose more than we have
                       ! At present day assumed lost within the cloud
-                      cloudLoss(icol,klev,l_index_donor) = min(cloudLoss(icol,klev,l_index_donor), &
-                                                            cldfrc(icol,klev)*q(icol,klev,l_index_donor))
+                      cloudLoss(icol,ilev,l_index_donor) = min(cloudLoss(icol,ilev,l_index_donor), &
+                                                            cldfrc(icol,ilev)*q(icol,ilev,l_index_donor))
 
                    end if !check on process modes
                 end do    !species in mode
 
              end do !coagulator mode
-          end if ! cldfrc .gt. 0.01
+          end if ! cldfrc > 0.01
        end do ! icol
-    end do ! klev
+    end do ! ilev
 
     ! UPDATE THE TRACERS AND DO DIAGNOSTICS
     do iCoagulator = 1, numberOfCoagulatingModes
@@ -692,15 +692,15 @@ contains
              l_index_receiver = CloudAerReceiver(l_index_donor)
              fldcw => qqcw_get_field(pbuf, CloudAerReceiver(l_index_donor)+im)
 
-             do klev = 1,pver
+             do ilev = 1,pver
                 !Loose mass from tracer in donor mode
-                q(:ncol,klev,l_index_donor) = q(:ncol,klev,l_index_donor) - cloudLoss(:ncol,klev,l_index_donor)
+                q(:ncol,ilev,l_index_donor) = q(:ncol,ilev,l_index_donor) - cloudLoss(:ncol,ilev,l_index_donor)
 
                 !Give mass to tracer in receiver mode
                 if (associated(fldcw)) then
-                   fldcw(:ncol,klev) = fldcw(:ncol,klev) + cloudLoss(:ncol,klev,l_index_donor)
+                   fldcw(:ncol,ilev) = fldcw(:ncol,ilev) + cloudLoss(:ncol,ilev,l_index_donor)
                 end if
-             end do !klev
+             end do !ilev
 
           endif
        end do
@@ -709,21 +709,21 @@ contains
     ! Output for diagnostics
     if (history_aerosol)then
        coltend(:ncol,:) = 0.0_r8
-       do tind = 1,gas_pcnst
+       do itrac = 1,gas_pcnst
           !Check if species contributes to coagulation
-          if(CloudAerReceiver(tind) .gt. 0)then
+          if(CloudAerReceiver(itrac) > 0)then
              !Loss from the donor specie
-             tracer_coltend(:ncol) = sum(cloudLoss(:ncol,:,tind)*pdel(:ncol,:),2)/gravit*delt_inverse
-             coltend(:ncol,tind) = coltend(:ncol,tind) - tracer_coltend(:ncol) !negative, loss for donor
-             coltend(:ncol,CloudAerReceiver(tind)) = coltend(:ncol,CloudAerReceiver(tind)) + tracer_coltend(:ncol)
+             tracer_coltend(:ncol) = sum(cloudLoss(:ncol,:,itrac)*pdel(:ncol,:),2)/gravit*delt_inverse
+             coltend(:ncol,itrac) = coltend(:ncol,itrac) - tracer_coltend(:ncol) !negative, loss for donor
+             coltend(:ncol,CloudAerReceiver(itrac)) = coltend(:ncol,CloudAerReceiver(itrac)) + tracer_coltend(:ncol)
           endif
        end do
-       do tind = 1,gas_pcnst
-          if(CloudAerReceiver(tind) .gt. 0)then
-             long_name= trim(solsym(tind))//"clcoagTend"
-             call outfld(long_name, coltend(:ncol,tind), ncol, lchnk)
-             long_name= trim(solsym(CloudAerReceiver(tind)))//"_OCWclcoagTend"
-             call outfld(long_name, coltend(:ncol,CloudAerReceiver(tind)),ncol,lchnk)
+       do itrac = 1,gas_pcnst
+          if(CloudAerReceiver(itrac) > 0)then
+             long_name= trim(solsym(itrac))//"clcoagTend"
+             call outfld(long_name, coltend(:ncol,itrac), ncol, lchnk)
+             long_name= trim(solsym(CloudAerReceiver(itrac)))//"_OCWclcoagTend"
+             call outfld(long_name, coltend(:ncol,CloudAerReceiver(itrac)),ncol,lchnk)
           end if
        end do
     endif

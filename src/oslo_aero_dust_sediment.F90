@@ -34,7 +34,7 @@ contains
   subroutine oslo_aero_dust_sediment_vel(ncol, icefrac, landfrac, ocnfrac, pmid, pdel, t, dustmr, pvdust)
 
     ! Compute gravitational sedimentation velocities for dust
-    ! note that pvel is at the interfaces (loss from cell is based on pvel(k+1))
+    ! note that pvel is at the interfaces (loss from cell is based on pvel(ilev+1))
 
     ! Arguments
     integer,  intent(in)  :: ncol                 ! number of colums to process
@@ -50,17 +50,17 @@ contains
     ! Local variables
     real (r8) :: rho(pcols,pver)                    ! air density in kg/m3
     real (r8) :: vfall(pcols)                       ! settling velocity of dust particles (m/s)
-    integer   :: i,k
+    integer   :: icol,ilev
     real (r8) :: lbound, ac, bc, cc
 
     ! dust fall velocity
-    do k = 1,pver
-       do i = 1,ncol
+    do ilev = 1,pver
+       do icol = 1,ncol
           ! merge the dust fall velocities for land and ocean (cm/s) SHOULD ALSO ACCOUNT FOR ICEFRAC
-          vfall(i) = vland*landfrac(i) + vocean*(1._r8-landfrac(i))
+          vfall(icol) = vland*landfrac(icol) + vocean*(1._r8-landfrac(icol))
 
           ! fall velocity (assume positive downward)
-          pvdust(i,k+1) = vfall(i)
+          pvdust(icol,ilev+1) = vfall(icol)
        end do
     end do
   end subroutine oslo_aero_dust_sediment_vel
@@ -71,7 +71,7 @@ contains
 
     !----------------------------------------------------------------------
     !  Apply Particle Gravitational Sedimentation
-    ! -> note that pvel is at the interfaces (loss from cell is based on pvel(k+1))
+    ! -> note that pvel is at the interfaces (loss from cell is based on pvel(ilev+1))
     !----------------------------------------------------------------------
 
     ! Arguments
@@ -80,14 +80,14 @@ contains
     real(r8), intent(in)  :: pint(pcols,pverp)         ! interfaces pressure (Pa)
     real(r8), intent(in)  :: pmid(pcols,pver)          ! midpoint pressures (Pa)
     real(r8), intent(in)  :: pdel(pcols,pver)          ! pressure diff across layer (Pa)
-    real(r8), intent(in)  :: t(pcols,pver)             ! temperature (K)
+    real(r8), intent(in)  :: t(pcols,pver)             ! temperature (
     real(r8), intent(in)  :: dustmr(pcols,pver)        ! dust (kg/kg)
     real(r8), intent(in)  :: pvdust (pcols,pverp)      ! vertical velocity of dust drops  (Pa/s)
     real(r8), intent(out) :: dusttend(pcols,pver)      ! dust tend
     real(r8), intent(out) :: sfdust(pcols)             ! surface flux of dust (rain, kg/m/s)
 
     ! Local variables
-    integer  :: i,k
+    integer  :: icol,ilev
     real(r8) :: fxdust(pcols,pverp)                     ! fluxes at the interfaces, dust (positive = down)
     !----------------------------------------------------------------------
 
@@ -100,15 +100,15 @@ contains
     call getflx(ncol, pint, dustmr, pvdust, dtime, fxdust)
 
     ! calculate fluxes at boundaries
-    do i = 1,ncol
-       fxdust(i,1) = 0
+    do icol = 1,ncol
+       fxdust(icol,1) = 0
        ! surface flux by upstream scheme
-       fxdust(i,pverp) = dustmr(i,pver) * pvdust(i,pverp) * dtime
+       fxdust(icol,pverp) = dustmr(icol,pver) * pvdust(icol,pverp) * dtime
     end do
 
     ! filter out any negative fluxes from the getflx routine
-    do k = 2,pver
-       fxdust(:ncol,k) = max(0._r8, fxdust(:ncol,k))
+    do ilev = 2,pver
+       fxdust(:ncol,ilev) = max(0._r8, fxdust(:ncol,ilev))
     end do
 
     ! Limit the flux out of the bottom of each cell to the water content in each phase.
@@ -116,17 +116,17 @@ contains
     ! NOTE, REMOVED CLOUD FACTOR FROM AVAILABLE WATER. ALL CLOUD WATER IS IN CLOUDS.
     ! ***Should we include the flux in the top, to allow for thin surface layers?
     ! ***Requires simple treatment of cloud overlap, already included below.
-    do k = 1,pver
-       do i = 1,ncol
-          fxdust(i,k+1) = min( fxdust(i,k+1), mxsedfac * dustmr(i,k) * pdel(i,k) )
+    do ilev = 1,pver
+       do icol = 1,ncol
+          fxdust(icol,ilev+1) = min( fxdust(icol,ilev+1), mxsedfac * dustmr(icol,ilev) * pdel(icol,ilev) )
        end do
     end do
 
     ! Now calculate the tendencies
-    do k = 1,pver
-       do i = 1,ncol
+    do ilev = 1,pver
+       do icol = 1,ncol
           ! net flux into cloud changes cloud dust/ice (all flux is out of cloud)
-          dusttend(i,k)  = (fxdust(i,k) - fxdust(i,k+1)) / (dtime * pdel(i,k))
+          dusttend(icol,ilev)  = (fxdust(icol,ilev) - fxdust(icol,ilev+1)) / (dtime * pdel(icol,ilev))
        end do
     end do
 
@@ -151,8 +151,8 @@ contains
     real(r8), intent(in)  :: deltat
 
     ! local variables
-    integer   :: i
-    integer   :: k
+    integer   :: icol
+    integer   :: ilev
     real (r8) :: psi(pcols,pverp)
     real (r8) :: phi(pcols,pverp-1)
     real (r8) :: fdot(pcols,pverp)
@@ -162,18 +162,18 @@ contains
     real (r8) :: psistar(pcols)
     real (r8) :: xxk(pcols,pver)
 
-    do i = 1,ncol
+    do icol = 1,ncol
        ! integral of phi
-       psi(i,1) = 0._r8
+       psi(icol,1) = 0._r8
        ! fluxes at boundaries
-       flux(i,1) = 0
-       flux(i,pverp) = 0._r8
+       flux(icol,1) = 0
+       flux(icol,pverp) = 0._r8
     end do
 
     ! integral function
-    do k = 2,pverp
-       do i = 1,ncol
-          psi(i,k) = phi(i,k-1)*(xw(i,k)-xw(i,k-1)) + psi(i,k-1)
+    do ilev = 2,pverp
+       do icol = 1,ncol
+          psi(icol,ilev) = phi(icol,ilev-1)*(xw(icol,ilev)-xw(icol,ilev-1)) + psi(icol,ilev-1)
        end do
     end do
 
@@ -181,15 +181,15 @@ contains
     call cfdotmc_pro (ncol, xw, psi, fdot)
 
     ! calculate fluxes at interior pts
-    do k = 2,pver
-       do i = 1,ncol
-          xxk(i,k) = xw(i,k)-vel(i,k)*deltat
+    do ilev = 2,pver
+       do icol = 1,ncol
+          xxk(icol,ilev) = xw(icol,ilev)-vel(icol,ilev)*deltat
        end do
     end do
-    do k = 2,pver
-       call cfint2(ncol, xw, psi, fdot, xxk(1,k), fxdot, fxdd, psistar)
-       do i = 1,ncol
-          flux(i,k) = (psi(i,k)-psistar(i))
+    do ilev = 2,pver
+       call cfint2(ncol, xw, psi, fdot, xxk(1,ilev), fxdot, fxdd, psistar)
+       do icol = 1,ncol
+          flux(icol,ilev) = (psi(icol,ilev)-psistar(icol))
        end do
     end do
 
@@ -209,8 +209,8 @@ contains
     real (r8) , intent(out) :: psistar(pcols)
 
     ! local variables
-    integer   :: i
-    integer   :: k
+    integer   :: icol
+    integer   :: ilev
     integer   :: intz(pcols)
     real (r8) :: dx
     real (r8) :: s
@@ -229,56 +229,56 @@ contains
     minmod(a,b) = 0.5_r8*(sign(1._r8,a) + sign(1._r8,b))*min(abs(a),abs(b))
     medan(a,b,c) = a + minmod(b-a,c-a)
 
-    do i = 1,ncol
-       xins(i) = medan(x(i,1), xin(i), x(i,pverp))
-       intz(i) = 0
+    do icol = 1,ncol
+       xins(icol) = medan(x(icol,1), xin(icol), x(icol,pverp))
+       intz(icol) = 0
     end do
 
     ! first find the interval
-    do k =  1,pverp-1
-       do i = 1,ncol
-          if ((xins(i)-x(i,k))*(x(i,k+1)-xins(i)).ge.0._r8) then
-             intz(i) = k
+    do ilev =  1,pverp-1
+       do icol = 1,ncol
+          if ((xins(icol)-x(icol,ilev))*(x(icol,ilev+1)-xins(icol)).ge.0._r8) then
+             intz(icol) = ilev
           endif
        end do
     end do
 
-    do i = 1,ncol
-       if (intz(i).eq.0) then
-          write(iulog,*) ' interval was not found for col i ', i
+    do icol = 1,ncol
+       if (intz(icol).eq.0) then
+          write(iulog,*) ' interval was not found for col icol ', icol
           call endrun('DUST_SEDIMENT_MOD:cfint2 -- interval was not found ')
        endif
     end do
 
     ! now interpolate
-    do i = 1,ncol
-       k = intz(i)
-       dx = (x(i,k+1)-x(i,k))
-       s = (f(i,k+1)-f(i,k))/dx
-       c2 = (3*s-2*fdot(i,k)-fdot(i,k+1))/dx
-       c3 = (fdot(i,k)+fdot(i,k+1)-2*s)/dx**2
-       xx = (xins(i)-x(i,k))
-       fxdot(i) =  (3*c3*xx + 2*c2)*xx + fdot(i,k)
-       fxdd(i) = 6*c3*xx + 2*c2
-       cfint = ((c3*xx + c2)*xx + fdot(i,k))*xx + f(i,k)
+    do icol = 1,ncol
+       ilev = intz(icol)
+       dx = (x(icol,ilev+1)-x(icol,ilev))
+       s = (f(icol,ilev+1)-f(icol,ilev))/dx
+       c2 = (3*s-2*fdot(icol,ilev)-fdot(icol,ilev+1))/dx
+       c3 = (fdot(icol,ilev)+fdot(icol,ilev+1)-2*s)/dx**2
+       xx = (xins(icol)-x(icol,ilev))
+       fxdot(icol) =  (3*c3*xx + 2*c2)*xx + fdot(icol,ilev)
+       fxdd(icol) = 6*c3*xx + 2*c2
+       cfint = ((c3*xx + c2)*xx + fdot(icol,ilev))*xx + f(icol,ilev)
 
        ! limit the interpolant
-       psi1 = f(i,k)+(f(i,k+1)-f(i,k))*xx/dx
-       if (k.eq.1) then
-          psi2 = f(i,1)
+       psi1 = f(icol,ilev)+(f(icol,ilev+1)-f(icol,ilev))*xx/dx
+       if (ilev.eq.1) then
+          psi2 = f(icol,1)
        else
-          psi2 = f(i,k) + (f(i,k)-f(i,k-1))*xx/(x(i,k)-x(i,k-1))
+          psi2 = f(icol,ilev) + (f(icol,ilev)-f(icol,ilev-1))*xx/(x(icol,ilev)-x(icol,ilev-1))
        endif
-       if (k+1.eq.pverp) then
-          psi3 = f(i,pverp)
+       if (ilev+1.eq.pverp) then
+          psi3 = f(icol,pverp)
        else
-          psi3 = f(i,k+1) - (f(i,k+2)-f(i,k+1))*(dx-xx)/(x(i,k+2)-x(i,k+1))
+          psi3 = f(icol,ilev+1) - (f(icol,ilev+2)-f(icol,ilev+1))*(dx-xx)/(x(icol,ilev+2)-x(icol,ilev+1))
        endif
        psim = medan(psi1, psi2, psi3)
        cfnew = medan(cfint, psi1, psim)
        if (abs(cfnew-cfint)/(abs(cfnew)+abs(cfint)+1.e-36_r8)  .gt..03_r8) then
        endif
-       psistar(i) = cfnew
+       psistar(icol) = cfnew
     end do
 
   end subroutine cfint2
@@ -311,7 +311,7 @@ contains
     real (r8) , intent(out) :: fdot(pcols, pverp) ! derivative at nodes
 
     ! local variables
-    integer  :: i,k
+    integer  :: icol,ilev
     real(r8) :: a,b,c            ! work vars
     real(r8) :: s(pcols,pverp)   ! first divided differences at nodes
     real(r8) :: sh(pcols,pverp)  ! first divided differences between nodes
@@ -335,81 +335,83 @@ contains
     minmod(a,b) = 0.5_r8*(sign(1._r8,a) + sign(1._r8,b))*min(abs(a),abs(b))
     medan(a,b,c) = a + minmod(b-a,c-a)
 
-    do k = 1,pver
+    do ilev = 1,pver
        ! first divided differences between nodes
-       do i = 1, ncol
-          delxh(i,k) = (x(i,k+1)-x(i,k))
-          sh(i,k) = (f(i,k+1)-f(i,k))/delxh(i,k)
+       do icol = 1, ncol
+          delxh(icol,ilev) = (x(icol,ilev+1)-x(icol,ilev))
+          sh(icol,ilev) = (f(icol,ilev+1)-f(icol,ilev))/delxh(icol,ilev)
        end do
 
        ! first and second divided differences at nodes
-       if (k.ge.2) then
-          do i = 1,ncol
-             d(i,k) = (sh(i,k)-sh(i,k-1))/(x(i,k+1)-x(i,k-1))
-             s(i,k) = minmod(sh(i,k),sh(i,k-1))
+       if (ilev.ge.2) then
+          do icol = 1,ncol
+             d(icol,ilev) = (sh(icol,ilev)-sh(icol,ilev-1))/(x(icol,ilev+1)-x(icol,ilev-1))
+             s(icol,ilev) = minmod(sh(icol,ilev),sh(icol,ilev-1))
           end do
        endif
     end do
 
     ! second and third divided diffs between nodes
-    do k = 2,pver-1
-       do i = 1, ncol
-          eh(i,k) = (d(i,k+1)-d(i,k))/(x(i,k+2)-x(i,k-1))
-          dh(i,k) = minmod(d(i,k),d(i,k+1))
+    do ilev = 2,pver-1
+       do icol = 1, ncol
+          eh(icol,ilev) = (d(icol,ilev+1)-d(icol,ilev))/(x(icol,ilev+2)-x(icol,ilev-1))
+          dh(icol,ilev) = minmod(d(icol,ilev),d(icol,ilev+1))
        end do
     end do
 
     ! treat the boundaries
-    do i = 1,ncol
-       e(i,2) = eh(i,2)
-       e(i,pver) = eh(i,pver-1)
+    do icol = 1,ncol
+       e(icol,2) = eh(icol,2)
+       e(icol,pver) = eh(icol,pver-1)
        !  outside level
-       fdot(i,1) = sh(i,1) - d(i,2)*delxh(i,1) - eh(i,2)*delxh(i,1)*(x(i,1)-x(i,3))
-       fdot(i,1) = minmod(fdot(i,1),3*sh(i,1))
-       fdot(i,pverp) = sh(i,pver) + d(i,pver)*delxh(i,pver) + eh(i,pver-1)*delxh(i,pver)*(x(i,pverp)-x(i,pver-1))
-       fdot(i,pverp) = minmod(fdot(i,pverp),3*sh(i,pver))
+       fdot(icol,1) = sh(icol,1) - d(icol,2)*delxh(icol,1) - eh(icol,2)*delxh(icol,1)*(x(icol,1)-x(icol,3))
+       fdot(icol,1) = minmod(fdot(icol,1),3*sh(icol,1))
+       fdot(icol,pverp) = sh(icol,pver) + d(icol,pver)*delxh(icol,pver) &
+            + eh(icol,pver-1)*delxh(icol,pver)*(x(icol,pverp)-x(icol,pver-1))
+       fdot(icol,pverp) = minmod(fdot(icol,pverp),3*sh(icol,pver))
 
        ! one in from boundary
-       fdot(i,2) = sh(i,1) + d(i,2)*delxh(i,1) - eh(i,2)*delxh(i,1)*delxh(i,2)
-       fdot(i,2) = minmod(fdot(i,2),3*s(i,2))
-       fdot(i,pver) = sh(i,pver) - d(i,pver)*delxh(i,pver) - eh(i,pver-1)*delxh(i,pver)*delxh(i,pver-1)
-       fdot(i,pver) = minmod(fdot(i,pver),3*s(i,pver))
+       fdot(icol,2) = sh(icol,1) + d(icol,2)*delxh(icol,1) - eh(icol,2)*delxh(icol,1)*delxh(icol,2)
+       fdot(icol,2) = minmod(fdot(icol,2),3*s(icol,2))
+       fdot(icol,pver) = sh(icol,pver) - d(icol,pver)*delxh(icol,pver) &
+            - eh(icol,pver-1)*delxh(icol,pver)*delxh(icol,pver-1)
+       fdot(icol,pver) = minmod(fdot(icol,pver),3*s(icol,pver))
     end do
 
-    do k = 3,pver-1
-       do i = 1,ncol
-          e(i,k) = minmod(eh(i,k),eh(i,k-1))
+    do ilev = 3,pver-1
+       do icol = 1,ncol
+          e(icol,ilev) = minmod(eh(icol,ilev),eh(icol,ilev-1))
        end do
     end do
 
-    do k = 3,pver-1
-       do i = 1,ncol
-          ! p prime at k-0.5
-          ppl(i,k)=sh(i,k-1) + dh(i,k-1)*delxh(i,k-1)
+    do ilev = 3,pver-1
+       do icol = 1,ncol
+          ! p prime at ilev-0.5
+          ppl(icol,ilev)=sh(icol,ilev-1) + dh(icol,ilev-1)*delxh(icol,ilev-1)
 
-          ! p prime at k+0.5
-          ppr(i,k)=sh(i,k)   - dh(i,k)  *delxh(i,k)
-          t = minmod(ppl(i,k),ppr(i,k))
+          ! p prime at ilev+0.5
+          ppr(icol,ilev)=sh(icol,ilev)   - dh(icol,ilev)  *delxh(icol,ilev)
+          t = minmod(ppl(icol,ilev),ppr(icol,ilev))
 
-          ! derivate from parabola thru f(i,k-1), f(i,k), and f(i,k+1)
-          pp = sh(i,k-1) + d(i,k)*delxh(i,k-1)
+          ! derivate from parabola thru f(icol,ilev-1), f(icol,ilev), and f(icol,ilev+1)
+          pp = sh(icol,ilev-1) + d(icol,ilev)*delxh(icol,ilev-1)
 
           ! quartic estimate of fdot
-          fdot(i,k) = pp - delxh(i,k-1)*delxh(i,k)*(eh(i,k-1)*(x(i,k+2)-x(i,k)) &
-               + eh(i,k  )*(x(i,k  )-x(i,k-2)))/(x(i,k+2)-x(i,k-2))
+          fdot(icol,ilev) = pp - delxh(icol,ilev-1)*delxh(icol,ilev)*(eh(icol,ilev-1)*(x(icol,ilev+2)-x(icol,ilev)) &
+               + eh(icol,ilev  )*(x(icol,ilev  )-x(icol,ilev-2)))/(x(icol,ilev+2)-x(icol,ilev-2))
 
           ! now limit it
-          qpl = sh(i,k-1) + delxh(i,k-1)*minmod(d(i,k-1)+ e(i,k-1)*(x(i,k)-x(i,k-2)), &
-               d(i,k) - e(i,k)*delxh(i,k))
-          qpr = sh(i,k) + delxh(i,k  )*minmod(d(i,k) + e(i,k)*delxh(i,k-1), &
-               d(i,k+1)+e(i,k+1)*(x(i,k)-x(i,k+2)))
+          qpl = sh(icol,ilev-1) + delxh(icol,ilev-1)*minmod(d(icol,ilev-1)+ e(icol,ilev-1)*(x(icol,ilev)-x(icol,ilev-2)), &
+               d(icol,ilev) - e(icol,ilev)*delxh(icol,ilev))
+          qpr = sh(icol,ilev) + delxh(icol,ilev  )*minmod(d(icol,ilev) + e(icol,ilev)*delxh(icol,ilev-1), &
+               d(icol,ilev+1)+e(icol,ilev+1)*(x(icol,ilev)-x(icol,ilev+2)))
 
-          fdot(i,k) = medan(fdot(i,k), qpl, qpr)
+          fdot(icol,ilev) = medan(fdot(icol,ilev), qpl, qpr)
 
           ttt = minmod(qpl, qpr)
-          tmin = min(0._r8,3*s(i,k),1.5_r8*t,ttt)
-          tmax = max(0._r8,3*s(i,k),1.5_r8*t,ttt)
-          fdot(i,k) = fdot(i,k) + minmod(tmin-fdot(i,k), tmax-fdot(i,k))
+          tmin = min(0._r8,3*s(icol,ilev),1.5_r8*t,ttt)
+          tmax = max(0._r8,3*s(icol,ilev),1.5_r8*t,ttt)
+          fdot(icol,ilev) = fdot(icol,ilev) + minmod(tmin-fdot(icol,ilev), tmax-fdot(icol,ilev))
        end do
     end do
 
