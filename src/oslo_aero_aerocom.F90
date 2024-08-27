@@ -154,7 +154,7 @@ contains
     do imode=1,nbmodes
        modeString="  "
        write(modeString,"(I2)"),imode
-       if(imode.lt.10) modeString="0"//adjustl(modeString)
+       if(imode<10) modeString="0"//adjustl(modeString)
        varName = "Camrel"//trim(modeString)
        if(imode.ne.3) call outfld(varName,Camrel(:,:,imode),pcols,lchnk)
     enddo
@@ -162,7 +162,7 @@ contains
     do imode=1,nbmodes
        modeString="  "
        write(modeString,"(I2)"),imode
-       if(imode.lt.10) modeString="0"//adjustl(modeString)
+       if(imode<10) modeString="0"//adjustl(modeString)
        varName = "Cxsrel"//trim(modeString)
        if(imode.ne.3) call outfld(varName,cxsmrel(:,imode),pcols,lchnk)
     enddo

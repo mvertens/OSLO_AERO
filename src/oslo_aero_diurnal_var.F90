@@ -387,7 +387,7 @@ contains
     ! leap years are divisible by 4, except for centurial years not divisible by 400.
 
     !	year = real (iyear)
-    !	if ((amod(year,4.) == 0.0) .and. (amod(year,100.) /= 0.0)) &
+    !	if ((amod(year,4.) == 0.0) .and. (amod(year,100.) .ne. 0.0)) &
     !     	  leapyr = 1
     !	if(amod(year,400.) == 0.0) leapyr = 1
 
