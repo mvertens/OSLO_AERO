@@ -662,7 +662,7 @@ contains
 
     do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,ilev,kcomp).gt.0) then
+          if(Nnatk(icol,ilev,kcomp)>0) then
              bext440(icol,ilev,kcomp)=bex440
              babs440(icol,ilev,kcomp)=bax440
              bext500(icol,ilev,kcomp)=bex500
@@ -837,7 +837,7 @@ contains
 
     do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,ilev,kc10).gt.0) then
+          if(Nnatk(icol,ilev,kc10)>0) then
 
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
@@ -1081,7 +1081,7 @@ contains
 
     do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,ilev,kc10).gt.0) then
+          if(Nnatk(icol,ilev,kc10)>0) then
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
 
@@ -1315,7 +1315,7 @@ contains
 
     do ilev=1,pver
        do icol=1,ncol
-          if(Nnatk(icol,ilev,kc10).gt.0) then
+          if(Nnatk(icol,ilev,kc10)>0) then
              ! Collect all the vector elements into temporary storage
              ! to avoid cache conflicts and excessive cross-referencing
 
@@ -1587,7 +1587,7 @@ contains
 
        do ilev=1,pver
           do icol=1,ncol
-             if(Nnatk(icol,ilev,kcomp).gt.0) then
+             if(Nnatk(icol,ilev,kcomp)>0) then
                 ! Collect all the vector elements into temporary storage
                 ! to avoid cache conflicts and excessive cross-referencing
 

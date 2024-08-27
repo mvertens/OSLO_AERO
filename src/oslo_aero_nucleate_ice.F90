@@ -180,7 +180,7 @@ contains
     call cnst_get_ind('NUMICE', numice_idx)
     qsatfac_idx = pbuf_get_index('QSATFAC', ierr)
 
-    if (((nucleate_ice_subgrid .eq. -1._r8) .or. (nucleate_ice_subgrid_strat .eq. -1._r8)) .and. (qsatfac_idx .eq. -1)) then
+    if (((nucleate_ice_subgrid == -1._r8) .or. (nucleate_ice_subgrid_strat == -1._r8)) .and. (qsatfac_idx == -1)) then
        call endrun(routine//': ERROR qsatfac is required when subgrid = -1 or subgrid_strat = -1')
     end if
 
@@ -382,7 +382,7 @@ contains
     ! tropopause level so that the cold point tropopause will use the stratospheric values.
     call tropopause_findChemTrop(state, troplev)
 
-    if ((nucleate_ice_subgrid .eq. -1._r8) .or. (nucleate_ice_subgrid_strat .eq. -1._r8)) then
+    if ((nucleate_ice_subgrid == -1._r8) .or. (nucleate_ice_subgrid_strat == -1._r8)) then
        call pbuf_get_field(pbuf, qsatfac_idx, qsatfac)
     end if
 
@@ -393,13 +393,13 @@ contains
           trop_pd(icol, troplev(icol)) = 1._r8
 
           if (ilev <= troplev(icol)) then
-             if (nucleate_ice_subgrid_strat .eq. -1._r8) then
+             if (nucleate_ice_subgrid_strat == -1._r8) then
                 subgrid(icol, ilev) = 1._r8 / qsatfac(icol, ilev)
              else
                 subgrid(icol, ilev) = nucleate_ice_subgrid_strat
              end if
           else
-             if (nucleate_ice_subgrid .eq. -1._r8) then
+             if (nucleate_ice_subgrid == -1._r8) then
                 subgrid(icol, ilev) = 1._r8 / qsatfac(icol, ilev)
              else
                 subgrid(icol, ilev) = nucleate_ice_subgrid
@@ -488,7 +488,7 @@ contains
 
                 !Assume the coarse aerosols were activated first
                 !so only remove small ones if more than large ones are activated
-                if(odst_num .gt. dst_num*dust_coarse_fraction)then
+                if(odst_num > dst_num*dust_coarse_fraction)then
 
                    !A2-mode
                    numberFromSmallDustMode = odst_num - dst_num*dust_coarse_fraction
@@ -568,15 +568,15 @@ contains
                 nimey(icol,ilev) = nimey(icol,ilev)*rho(icol,ilev)/dtime
 
                 if (use_preexisting_ice) then
-                   INnso4(icol,ilev)   = so4_num*1e6_r8            ! (convert from #/cm3 -> #/m3)
+                   INnso4(icol,ilev)   = so4_num*1e6_r8                        ! (convert from #/cm3 -> #/m3)
                    INnbc(icol,ilev)    = soot_num*1e6_r8
                    INndust(icol,ilev)  = dst_num*1e6_r8
                    INondust(icol,ilev) = odst_num*1e6_r8
-                   INFreIN(icol,ilev)  = 1.0_r8                    ! 1,ice nucleation occur
+                   INFreIN(icol,ilev)  = 1.0_r8                                ! 1,ice nucleation occur
                    INhet(icol,ilev)    = (niimm(icol,ilev) + nidep(icol,ilev)) ! #/m3, nimey not in cirrus
-                   INhom(icol,ilev)    = nihf(icol,ilev)                 ! #/m3
-                   if (INhom(icol,ilev).gt.1e3_r8)   then          ! > 1/L
-                      INFrehom(icol,ilev)=1.0_r8                   ! 1, hom freezing occur
+                   INhom(icol,ilev)    = nihf(icol,ilev)                       ! #/m3
+                   if (INhom(icol,ilev) > 1e3_r8)   then                       ! > 1/L
+                      INFrehom(icol,ilev)=1.0_r8                               ! 1, hom freezing occur
                    endif
 
                    ! exclude  no ice nucleaton

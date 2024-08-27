@@ -83,7 +83,7 @@ contains
           end if
        else
           trise = 0._r8
-          if (abs(deglat+solardec) .ge. 90._r8) then
+          if (abs(deglat+solardec) >= 90._r8) then
              tset = 1._r8
           else
              tset = 0._r8
@@ -93,7 +93,7 @@ contains
 
        ! if all day or all night (or very close to it), set fdiurn = 1.0
        ! Also in periods with all night, we put the mean value for all night steps
-       if ((tlight .ge. 0.99_r8) .or. (tlight .le. 0.01_r8)) then
+       if ((tlight >= 0.99_r8) .or. (tlight <= 0.01_r8)) then
           fdiurn_oxid = 1._r8
           fdiurn_no3oxid = 1._r8  !++IH
           ! otherwise determine overlap between current timestep and daylight times
@@ -189,18 +189,18 @@ contains
     !   need xlong between -180 and +180
     xlongb = xlong
 
-    if (xlongb .lt. -180.) then
+    if (xlongb < -180.) then
        xlongb = xlongb + 360._r8
-    else if (xlongb .gt. 180._r8) then
+    else if (xlongb > 180._r8) then
        xlongb = xlongb - 360._r8
     end if
 
     call srisesetxx( iyear, imonth, iday, ylat, xlongb, iriseset,sunrise, sunset, ap_dec)
 
     iflag = iriseset
-    if (iflag .eq. 0) then
+    if (iflag == 0) then
        iflag = 1
-       if (abs(sunrise+100_r8) .le. 0.01_r8) iflag = 0
+       if (abs(sunrise+100_r8) <= 0.01_r8) iflag = 0
     end if
     trise = sunrise
     tset  = sunset
@@ -358,8 +358,8 @@ contains
     iriseset = 0
 
     ! check latitude, longitude, dates for proper range before calculating dates.
-    if (((rlat .lt. -90._r8) .or. (rlat .gt. 90._r8)) .or. &
-        ((rlong .lt. -180._r8) .or. (rlong .gt. 180._r8))) then
+    if (((rlat < -90._r8) .or. (rlat > 90._r8)) .or. &
+        ((rlong < -180._r8) .or. (rlong > 180._r8))) then
        iriseset = -1
        return
     end if
@@ -367,12 +367,12 @@ contains
     ! Year assumed to be betweeen 1950 and 2049. As the model is outside these
     !  	boundary in many cases. year 2000 is assumed for this version of the
     !  	model
-    !  	if (iyear .lt. 1950 .or. iyear .gt. 2049) then
+    !  	if (iyear < 1950 .or. iyear > 2049) then
     !		iriseset = -1
     !		return
     !	end if
-    !        if (((month .lt. 1) .or. (month .gt. 12)) .or. &
-    !           ((iday .lt. 0) .or. (iday .gt. 32))) then
+    !        if (((month < 1) .or. (month > 12)) .or. &
+    !           ((iday < 0) .or. (iday > 32))) then
     !     		iriseset = -1
     !		return
     !	end if
@@ -380,19 +380,19 @@ contains
 
     ! there is no year 0 in the Gregorian calendar and the leap year cycle
     ! changes for earlier years.
-    !	if (iyear .lt. 1) then
+    !	if (iyear < 1) then
     !		iriseset = -1
     !		return
     !	end if
     ! leap years are divisible by 4, except for centurial years not divisible by 400.
 
     !	year = real (iyear)
-    !	if ((amod(year,4.) .eq. 0.0) .and. (amod(year,100.) .ne. 0.0)) &
+    !	if ((amod(year,4.) == 0.0) .and. (amod(year,100.) .ne. 0.0)) &
     !     	  leapyr = 1
-    !	if(amod(year,400.) .eq. 0.0) leapyr = 1
+    !	if(amod(year,400.) == 0.0) leapyr = 1
 
     jday = iimonth(month) + iday
-    !	if ((leapyr .eq. 1) .and. (month .gt. 2)) jday = jday + 1
+    !	if ((leapyr == 1) .and. (month > 2)) jday = jday + 1
 
     ! construct Julian centuries since J2000 at 0 hours UT of date,
     ! days.fraction since J2000, and UT hours.
@@ -400,7 +400,7 @@ contains
 
     ! delta_days is days from 2000/01/00 (1900's are negative).
     delta_days = delta_years * 365._r8 + delta_years / 4._r8 + jday
-    if (iyear .gt. 2000) delta_days = delta_days + 1._r8
+    if (iyear > 2000) delta_days = delta_days + 1._r8
 
     ! J2000 is 2000/01/01.5
     days_j2000 = delta_days - 1.5_r8
@@ -421,7 +421,7 @@ contains
     f_ap_ra = atan2(cos(mean_obliquity) * sin(ecliptic_long), cos(ecliptic_long))
 
    ! change range of ap_ra from -pi -> pi to 0 -> 2 pi.
-    if (f_ap_ra .lt. 0.0) f_ap_ra = f_ap_ra + twopi
+    if (f_ap_ra < 0.0) f_ap_ra = f_ap_ra + twopi
 
    ! put ap_ra in the range 0 -> 24 hours.
     ap_ra = (f_ap_ra / twopi - int(f_ap_ra /twopi)) * 24._r8
@@ -436,19 +436,19 @@ contains
    ! convert gmst0h from seconds to hours and put in the range 0 -> 24.
     ! 24 hours = 86400 seconds
     gmst0h = (f_gmst0h / 86400._r8 - int(f_gmst0h / 86400._r8)) * 24._r8
-    if (gmst0h .lt. 0._r8) gmst0h = gmst0h + 24._r8
+    if (gmst0h < 0._r8) gmst0h = gmst0h + 24._r8
 
    ! convert latitude to radians.
     rlat_r =  rlat * deg_rad
 
    ! avoid tangent overflow at +-90 degrees.
     ! 1.57079615 radians is equal to 89.99999 degrees.
-    if (abs(rlat_r) .lt. 1.57079615_r8) then
+    if (abs(rlat_r) < 1.57079615_r8) then
        tan_lat = tan(rlat_r)
     else
        tan_lat = 6.0e6_r8
     end if
-    if (abs(ap_dec) .lt. 1.57079615_r8) then
+    if (abs(ap_dec) < 1.57079615_r8) then
        tan_dec = tan(ap_dec)
     else
        tan_dec = 6.0e6_r8
@@ -457,7 +457,7 @@ contains
    ! compute UTs of sunrise and sunset.
     ! A. A. 1990, A12.
     tangterm = tan_lat * tan_dec
-    if (abs(tangterm) .gt. 1.0_r8) then
+    if (abs(tangterm) > 1.0_r8) then
        sunrise = -100._r8
        sunset = -100._r8
     else
@@ -470,11 +470,11 @@ contains
        ! put sunrise and sunset in the range 0 to 24 hours.
        !ec inserted following statement since in some latitudes timeterm
        !ec minus tangterm is less than -25
-       if (sunrise .le. -24._r8) sunrise = sunrise + 48._r8
-       if (sunrise .lt. 0._r8) sunrise = sunrise + 24._r8
-       if (sunrise .ge. 24._r8) sunrise = sunrise - 24._r8
-       if (sunset .lt. 0._r8) sunset = sunset + 24._r8
-       if (sunset .ge. 24._r8) sunset = sunset - 24._r8
+       if (sunrise <= -24._r8) sunrise = sunrise + 48._r8
+       if (sunrise < 0._r8   ) sunrise = sunrise + 24._r8
+       if (sunrise >= 24._r8 ) sunrise = sunrise - 24._r8
+       if (sunset < 0._r8    ) sunset = sunset + 24._r8
+       if (sunset >= 24._r8  ) sunset = sunset - 24._r8
 
        ! mean sidereal day is 0.99727 mean solar days.
        sunrise = sunrise * 0.99727_r8
@@ -482,7 +482,7 @@ contains
     end if
     ! convert ap_dec to degrees.
     ap_dec = ap_dec * rad_deg
-    return
+
   end subroutine srisesetxx
 
 end module oslo_aero_diurnal_var

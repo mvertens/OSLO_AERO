@@ -125,7 +125,7 @@ contains
 
     ! Filter away unreasonable values for soil erodibility
     ! (using low values e.g. gives emissions in greenland..)
-    where(soil_erodibility(:,lchnk) .lt. 0.1_r8)
+    where(soil_erodibility(:,lchnk) < 0.1_r8)
        soil_erod_tmp(:)=0.0_r8
     elsewhere
        soil_erod_tmp(:)=soil_erodibility(:,lchnk)

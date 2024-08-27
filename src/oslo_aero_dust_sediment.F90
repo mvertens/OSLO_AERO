@@ -237,14 +237,14 @@ contains
     ! first find the interval
     do ilev =  1,pverp-1
        do icol = 1,ncol
-          if ((xins(icol)-x(icol,ilev))*(x(icol,ilev+1)-xins(icol)).ge.0._r8) then
+          if ((xins(icol)-x(icol,ilev))*(x(icol,ilev+1)-xins(icol)) >= 0._r8) then
              intz(icol) = ilev
           endif
        end do
     end do
 
     do icol = 1,ncol
-       if (intz(icol).eq.0) then
+       if (intz(icol) == 0) then
           write(iulog,*) ' interval was not found for col icol ', icol
           call endrun('DUST_SEDIMENT_MOD:cfint2 -- interval was not found ')
        endif
@@ -264,19 +264,19 @@ contains
 
        ! limit the interpolant
        psi1 = f(icol,ilev)+(f(icol,ilev+1)-f(icol,ilev))*xx/dx
-       if (ilev.eq.1) then
+       if (ilev == 1) then
           psi2 = f(icol,1)
        else
           psi2 = f(icol,ilev) + (f(icol,ilev)-f(icol,ilev-1))*xx/(x(icol,ilev)-x(icol,ilev-1))
        endif
-       if (ilev+1.eq.pverp) then
+       if (ilev+1 == pverp) then
           psi3 = f(icol,pverp)
        else
           psi3 = f(icol,ilev+1) - (f(icol,ilev+2)-f(icol,ilev+1))*(dx-xx)/(x(icol,ilev+2)-x(icol,ilev+1))
        endif
        psim = medan(psi1, psi2, psi3)
        cfnew = medan(cfint, psi1, psim)
-       if (abs(cfnew-cfint)/(abs(cfnew)+abs(cfint)+1.e-36_r8)  .gt..03_r8) then
+       if (abs(cfnew-cfint)/(abs(cfnew)+abs(cfint)+1.e-36_r8)  > .03_r8) then
        endif
        psistar(icol) = cfnew
     end do
@@ -343,7 +343,7 @@ contains
        end do
 
        ! first and second divided differences at nodes
-       if (ilev.ge.2) then
+       if (ilev >= 2) then
           do icol = 1,ncol
              d(icol,ilev) = (sh(icol,ilev)-sh(icol,ilev-1))/(x(icol,ilev+1)-x(icol,ilev-1))
              s(icol,ilev) = minmod(sh(icol,ilev),sh(icol,ilev-1))

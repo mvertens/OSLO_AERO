@@ -620,7 +620,8 @@ contains
     tracer_in_mode(:,:) = -1 !undefined
 
     !externally mixed bc
-    tracer_in_mode(MODE_IDX_BC_EXT_AC, 1:n_tracers_in_mode(MODE_IDX_BC_EXT_AC)) = (/l_bc_ax/)
+    tracer_in_mode(MODE_IDX_BC_EXT_AC, 1:n_tracers_in_mode(MODE_IDX_BC_EXT_AC)) = &
+         (/l_bc_ax/)
 
     !sulphate + soa, sulfate condensate.
     tracer_in_mode(MODE_IDX_SO4SOA_AIT, 1:n_tracers_in_mode(MODE_IDX_SO4SOA_AIT) ) = &

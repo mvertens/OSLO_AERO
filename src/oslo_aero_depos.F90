@@ -130,11 +130,9 @@ contains
 
     do imode = 0,nmodes
        num_tracers_in_mode(imode) = getNumberOfTracersInMode(imode)
-    end do
-    do imode = 0,nmodes
-      do itrac = 1,num_tracers_in_mode(imode)
-        tracer_index(imode,itrac) = getTracerIndex(imode,itrac,.false.)
-      end do
+       do itrac = 1,num_tracers_in_mode(imode)
+          tracer_index(imode,itrac) = getTracerIndex(imode,itrac,.false.)
+       end do
     end do
 
     ! Mode 0 is not subject to wet deposition? (check noresm1 code..)
@@ -202,7 +200,7 @@ contains
           endif
 
           ! some tracers are not in cloud water
-          if(getCloudTracerIndexDirect(tracerIndex) .lt. 0)then
+          if(getCloudTracerIndexDirect(tracerIndex) < 0)then
              cycle
           endif
 
@@ -369,13 +367,13 @@ contains
 
              ! rad_aer = volume mean wet radius (imode)
              ! dgncur_awet = geometric mean wet diameter for number distribution (imode)
-             if(top_lev .gt. 1) then
+             if(top_lev > 1) then
                 rad_aer(1:ncol,:top_lev-1) = 0._r8
              end if
              rad_aer(1:ncol,top_lev:) = 0.5_r8*dgncur_awet(1:ncol,top_lev:,imode)*exp(1.5_r8*(logSigma**2))
 
              ! dens_aer(1:ncol,:) = wet density (kg/m3)
-             if(top_lev.gt.1)then
+             if(top_lev>1)then
                 dens_aer(1:ncol,:top_lev-1) = 0._r8
              end if
              dens_aer(1:ncol,top_lev:) = wetdens(1:ncol,top_lev:,imode)
@@ -405,7 +403,7 @@ contains
                 if ( is_process_mode(itrac, .false.) ) then
                    jvlc = 1
                    logSigma = log(processModeSigma(processModeMap(itrac)))
-                   if(top_lev.gt.1)then
+                   if(top_lev>1)then
                       rad_aer(1:ncol, top_lev-1) = 0.0_r8
                    end if
                    rad_aer(1:ncol,top_lev:) = &
@@ -902,7 +900,7 @@ contains
     real(r8) :: lnsig                     ! ln(sig_part)
     real(r8) :: dispersion                ! accounts for influence of size dist dispersion on bulk settling velocity
     ! assuming radius_part is number mode radius * exp(1.5 ln(sigma))
-    integer  :: lt
+    integer  :: ltype
     real(r8) :: lnd_frc
     real(r8) :: wrk1, wrk2, wrk3
 
@@ -946,7 +944,7 @@ contains
 
     !------------------------------------------------------------------------
 
-    if(top_lev.gt.1) then
+    if(top_lev>1) then
        vlc_grv(:ncol,:top_lev-1) = 0._r8
        vlc_dry(:ncol,:top_lev-1) = 0._r8
     endif
@@ -988,22 +986,22 @@ contains
 
        wrk2 = 0._r8
        wrk3 = 0._r8
-       do lt = 1,n_land_type
-          lnd_frc = fraction_landuse(icol,lt,lchnk)
+       do ltype = 1,n_land_type
+          lnd_frc = fraction_landuse(icol,ltype,lchnk)
           if ( lnd_frc /= 0._r8 ) then
-             brownian = shm_nbr**(-gamma(lt))
-             if (radius_collector(lt) > 0.0_r8) then
+             brownian = shm_nbr**(-gamma(ltype))
+             if (radius_collector(ltype) > 0.0_r8) then
                 !       vegetated surface
-                stk_nbr = vlc_grv(icol,ilev) * fv(icol) / (gravit*radius_collector(lt))
-                interception = 2.0_r8*(radius_moment(icol,ilev)/radius_collector(lt))**2.0_r8
+                stk_nbr = vlc_grv(icol,ilev) * fv(icol) / (gravit*radius_collector(ltype))
+                interception = 2.0_r8*(radius_moment(icol,ilev)/radius_collector(ltype))**2.0_r8
              else
                 !       non-vegetated surface
                 stk_nbr = vlc_grv(icol,ilev) * fv(icol) * fv(icol) / (gravit*vsc_knm_atm(icol,ilev))  ![frc] SeP97 p.965
                 interception = 0.0_r8
              endif
-             impaction = (stk_nbr/(alpha(lt)+stk_nbr))**2.0_r8
+             impaction = (stk_nbr/(alpha(ltype)+stk_nbr))**2.0_r8
 
-             if (iwet(lt) > 0) then
+             if (iwet(ltype) > 0) then
                 stickfrac = 1.0_r8
              else
                 stickfrac = exp(-sqrt(stk_nbr))
@@ -1176,7 +1174,7 @@ contains
 
     do icol = 1,ncol
        z=pdel(icol)*rair*t(icol)/pmid(icol)/gravit/2.0_r8   !use half the layer height like Ganzefeld and Lelieveld, 1995
-       if(obklen(icol).eq.0) then
+       if(obklen(icol) == 0) then
           psi=0._r8
           psi0=0._r8
        else
@@ -1185,7 +1183,7 @@ contains
        endif
        temp=z/zzocen
        if(icefrac(icol) > 0.5_r8) then
-          if(obklen(icol).gt.0) then
+          if(obklen(icol)>0) then
              psi0=min(max(zzsice/obklen(icol),-1.0_r8),1.0_r8)
           else
              psi0=0.0_r8
@@ -1407,11 +1405,11 @@ contains
           sumpppr_st(icol) = sumpppr_st(icol) + lprecp_st
 
           rain(icol,ilev) = 0._r8
-          if(t(icol,ilev) .gt. tmelt) then
+          if(t(icol,ilev) > tmelt) then
              rho = pmid(icol,ilev)/(rair*t(icol,ilev))
              vfall = convfw/sqrt(rho)
              rain(icol,ilev) = sumppr(icol)/(rho*vfall)
-             if (rain(icol,ilev).lt.1.e-14_r8) rain(icol,ilev) = 0._r8
+             if (rain(icol,ilev)<1.e-14_r8) rain(icol,ilev) = 0._r8
           endif
        end do
     end do
@@ -1706,7 +1704,7 @@ contains
           ! make sure we dont take out more than is there
           ! ratio of amount available to amount removed
           rat(icol) = tracer(icol,ilev)/max(deltat*(srcc(icol)+srcs(icol)),1.e-36_r8)
-          if (rat(icol).lt.1._r8) then
+          if (rat(icol)<1._r8) then
              srcs(icol) = srcs(icol)*rat(icol)
              srcc(icol) = srcc(icol)*rat(icol)
           endif
@@ -1761,7 +1759,7 @@ contains
 
        if ( found ) then
           do icol = 1,ncol
-             if (dblchek(icol) .lt. 0._r8) then
+             if (dblchek(icol) < 0._r8) then
                 write(iulog,*) ' wetdapa: negative value ', icol, ilev, tracer(icol,ilev), &
                      dblchek(icol), scavt(icol,ilev), srct(icol), rat(icol), fracev(icol)
              endif
@@ -1934,7 +1932,7 @@ contains
           precxx = max (precxx,0.0_r8)
 
           ! flux of tracer by below cloud processes
-          if (tc.gt.0) then
+          if (tc > 0) then
              scavbc = precxx*mplb ! if liquid
           else
              precxx2=max(precxx,1.e-36_r8)
