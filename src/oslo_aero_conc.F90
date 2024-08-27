@@ -240,7 +240,7 @@ contains
     do imode=1,nmodes
        do ilev=1,pver
           do icol=1,ncol
-             if (numberConcentration(icol,ilev,imode) .gt. smallNumber) then
+             if (numberConcentration(icol,ilev,imode) > smallNumber) then
                 hasAerosol(icol,ilev,imode)= .true.
              else
                 hasAerosol(icol,ilev,imode) = .false.
@@ -381,7 +381,7 @@ contains
 
           do icol = 1,ncol
              if (hasAerosol(icol,ilev,imode)) then
-                if (VolumeCoat(icol,ilev,imode) .gt. 1.e-30_r8) then
+                if (VolumeCoat(icol,ilev,imode) > 1.e-30_r8) then
                    !If there is enough soluble material, a coating will be formed: In that case, the
                    !volume of the aerosol in question is only the volume of the coating!
                    hygroscopicityCoat(icol,ilev) = molecularWeightWater*hygroscopicityCoat(icol,ilev) &
@@ -406,7 +406,7 @@ contains
                      / numberConcentration(icol,ilev,imode)*(6.0_r8/pi))**athird
 
                 ! use one or the other hygroscopicity based on coating
-                if ( averageRadiusTotal(icol,ilev) - averageRadiusCore(icol,ilev)  .gt. coatingLimit ) then
+                if ( averageRadiusTotal(icol,ilev) - averageRadiusCore(icol,ilev)  > coatingLimit ) then
                    hygroscopicity(icol,ilev,imode) = hygroscopicityCoat(icol,ilev)
                 else
                    hygroscopicity(icol,ilev,imode) = hygroscopicityAvg(icol,ilev)
@@ -441,7 +441,7 @@ contains
     integer  :: icol ! counter for columns
 
     ! Only tracers more soluble than 20% can add to the coating volume
-    if(solubleMassFraction(tracerIndex) .gt. solubleMassFractionCoatingLimit)then
+    if(solubleMassFraction(tracerIndex) > solubleMassFractionCoatingLimit)then
        massFractionInCoating = 1.0_r8 !all volume goes to coating
     else
        massFractionInCoating = 0.0_r8 !zero volume goes to coating
