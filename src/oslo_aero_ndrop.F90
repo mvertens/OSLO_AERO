@@ -50,11 +50,9 @@ module oslo_aero_ndrop
   real(r8) :: third, twothird, sixth, zero
   real(r8) :: sq2, sqpi
 
-  integer,  parameter :: psat=7    ! number of supersaturations to calc ccn concentration
-
   ! supersaturation (%) to determine ccn concentration
+  integer,  parameter :: psat=7    ! number of supersaturations to calc ccn concentration
   real(r8), parameter :: supersat(psat)= (/ 0.02_r8, 0.05_r8, 0.1_r8, 0.15_r8, 0.2_r8, 0.5_r8, 1.0_r8 /)
-
   character(len=8) :: ccn_name(psat)= (/'CCN1','CCN2','CCN3','CCN4','CCN5','CCN6','CCN7'/)
 
   ! indices in state and pbuf structures
@@ -77,9 +75,6 @@ module oslo_aero_ndrop
   ! local indexing for MAM
   integer, allocatable :: mam_idx(:,:)        ! table for local indexing of modal aero number and mmr
   integer :: ncnst_tot                        ! total number of mode number conc + mode species
-
-  ! Indices for MAM species in the ptend%q array.  Needed for prognostic aerosol case.
-  integer, allocatable :: mam_cnst_idx(:,:)
 
   integer  :: tracer_index(0:nmodes,max_tracers_per_mode)  ! tracer index
   real(r8) :: sumFraction2(pcnst,pver)
@@ -168,7 +163,7 @@ contains
       end do
     end do
 
-    ! Init the table for local indexing of mam number conc and mmr.
+    ! Init the table for local indexing of mam number conc
     ! This table uses species index 0 for the number conc.
 
     ! Find max number of species in all the modes, and the total
@@ -181,7 +176,6 @@ contains
     end do
 
     allocate(mam_idx(ntot_amode,0:nspec_max))
-    allocate(mam_cnst_idx(ntot_amode,0:nspec_max))
     allocate(fieldname(ncnst_tot))
     allocate(fieldname_cw(ncnst_tot))
 
@@ -387,8 +381,8 @@ contains
     real(r8) :: alogarg
     real(r8) :: overlapp(pver), overlapm(pver)  ! cloud overlap below, cloud overlap above
     real(r8) :: nsource(pcols,pver)             ! droplet number source (#/kg/s)
-    real(r8) :: ndropmix(pcols,pver)            ! droplet number mixing (#/kg/s)
-    real(r8) :: ndropcol(pcols)                 ! column droplet number (#/m2)
+    real(r8) :: ndropmix(pcols,pver)            ! droplet number mixing (#/kg/s) (diagnostic)
+    real(r8) :: ndropcol(pcols)                 ! column droplet number (#/m2) (diagnostic)
     real(r8) :: cldo_tmp, cldn_tmp
     real(r8) :: tau_cld_regenerate
     real(r8) :: tau_cld_regenerate_exp
@@ -529,7 +523,7 @@ contains
        do ispec = 1, nspec_amode(imode)
           tracerIndex =  tracer_index(imode,ispec)           !Index in q
           cloud_tracer_index = cloudTracerIndex(tracerIndex) !Index in phys-buffer
-          mm =  mam_idx(imode,ispec)                         !Index in raer/qqcw
+          mm = mam_idx(imode,ispec)                          !Index in raer/qqcw
           raer(mm)%fld =>  state%q(:,:,tracerIndex)          !NOTE: These are total fields (for example condensate)
           call pbuf_get_field(pbuf, cloud_tracer_index, qqcw(mm)%fld) !NOTE: These are total fields (for example condensate)
        enddo
@@ -540,7 +534,8 @@ contains
          fluxn_tmp(ntot_amode), &
          fluxm_tmp(ntot_amode))
 
-    wtke = 0._r8
+    ! Initialize turbulent vertical velocity at base of layers (m/s)
+    wtke(:,:) = 0._r8
 
     ! aerosol tendencies
     call physics_ptend_init(ptend, state%psetcols, 'ndrop', lq=lq)
@@ -632,8 +627,8 @@ contains
              csbot_cscen(ilev) = 1.0_r8
           end if
 
-          ! rce-comment - define wtke at layer centers for new-cloud activation
-          !    and at layer boundaries for old-cloud activation
+          ! define wtke at layer centers for new-cloud activation
+          ! and at layer boundaries for old-cloud activation
           wtke_cen(icol,ilev) = wsub(icol,ilev)
           wtke(icol,ilev)     = wsub(icol,ilev)
           wtke_cen(icol,ilev) = max(wtke_cen(icol,ilev), wmixmin)
@@ -725,7 +720,7 @@ contains
        end do
        call t_stopf('ndrop_getConstituentFraction_check_trackerNormalization1')
 
-       call t_startf('ndrop_getConstituentFraction_check_trackerNormalization3')
+       call t_startf('ndrop_getConstituentFraction_check_trackerNormalization2')
        do ilev=top_lev, pver
          do itrac=1,pcnst
            if (sumFraction(itrac,ilev) > 1.e-2_r8) then
@@ -742,10 +737,9 @@ contains
            endif
          end do !tracers
        end do  !levels
-       call t_stopf('ndrop_getConstituentFraction_check_trackerNormalization3')
+       call t_stopf('ndrop_getConstituentFraction_check_trackerNormalization2')
 
        call t_stopf('ndrop_getConstituentFraction')
-       !debug sum fraction for "icol" done
 
        call t_startf('ndrop_getNumberConc')
        do imode = 1, nmodes ! Number of modes
@@ -754,7 +748,7 @@ contains
           do ilev= top_lev,pver
              raercol(ilev,mm,nsav) = numberConcentration(icol,ilev,imode)/cs(icol,ilev) !#/kg air
              !In oslo model, number concentrations are diagnostics, so
-             !Approximate number concentration in each mode by total
+             !approximate number concentration in each mode by total
              !cloud number concentration scaled by how much is available of
              !each mode
              raercol_cw(ilev,mm,nsav) = ncldwtr(icol,ilev)*numberConcentration(icol,ilev,imode) &
@@ -835,7 +829,7 @@ contains
           if (cldn_tmp < cldo_tmp) then
              !  droplet loss in decaying cloud
              nsource(icol,ilev) = nsource(icol,ilev) + qcld(ilev)*(cldn_tmp - cldo_tmp)/cldo_tmp*cldliqf(icol,ilev)*dtinv
-             qcld(ilev)      = qcld(ilev)*(1._r8 + (cldn_tmp - cldo_tmp)/cldo_tmp)
+             qcld(ilev) = qcld(ilev)*(1._r8 + (cldn_tmp - cldo_tmp)/cldo_tmp)
 
              ! convert activated aerosol to interstitial in decaying cloud
              dumc = (cldn_tmp - cldo_tmp)/cldo_tmp * cldliqf(icol,ilev)
@@ -987,18 +981,16 @@ contains
              if (lcldn(icol,ilev) - lcldn(icol,kp1) > 0.01_r8 .or. ilev == pver) then
 
                 ! cloud base
-
                 ! ekd(ilev) = wtke(icol,ilev)*dz(icol,ilev)/sq2pi
-                ! rce-comments
-                !   first, should probably have 1/zs(ilev) here rather than dz(icol,ilev) because
-                !      the turbulent flux is proportional to ekd(ilev)*zs(ilev),
-                !      while the dz(icol,ilev) is used to get flux divergences
-                !      and mixing ratio tendency/change
-                !   second and more importantly, using a single updraft velocity here
-                !      means having monodisperse turbulent updraft and downdrafts.
-                !      The sq2pi factor assumes a normal draft spectrum.
-                !      The fluxn/fluxm from activate must be consistent with the
-                !      fluxes calculated in explmix.
+                ! first, should probably have 1/zs(ilev) here rather than dz(icol,ilev) because
+                !    the turbulent flux is proportional to ekd(ilev)*zs(ilev),
+                !    while the dz(icol,ilev) is used to get flux divergences
+                !    and mixing ratio tendency/change
+                ! second and more importantly, using a single updraft velocity here
+                !    means having monodisperse turbulent updraft and downdrafts.
+                !    The sq2pi factor assumes a normal draft spectrum.
+                !    The fluxn/fluxm from activate must be consistent with the
+                !    fluxes calculated in explmix.
                 ekd(ilev) = wbar/zs(ilev)
 
                 alogarg = max(1.e-20_r8, 1._r8/lcldn(icol,ilev) - 1._r8)
@@ -1137,21 +1129,19 @@ contains
 
              ! no liquid cloud
              nsource(icol,ilev) = nsource(icol,ilev) - qcld(ilev)*dtinv
-             qcld(ilev)      = 0.0_r8
+             qcld(ilev) = 0.0_r8
 
              if (cldn(icol,ilev) < 0.01_r8) then
                 ! no ice cloud either
-
                 ! convert activated aerosol to interstitial in decaying cloud
-
                 do imode = 1, ntot_amode
                    mm = mam_idx(imode,0)
-                   raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) + raercol_cw(ilev,mm,nsav)  ! cloud-borne aerosol
+                   raercol(ilev,mm,nsav) = raercol(ilev,mm,nsav) + raercol_cw(ilev,mm,nsav)  ! cloud-borne aerosol
                    raercol_cw(ilev,mm,nsav) = 0._r8
 
                    do ispec = 1, nspec_amode(imode)
                       mm = mam_idx(imode,ispec)
-                      raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) + raercol_cw(ilev,mm,nsav) ! cloud-borne aerosol
+                      raercol(ilev,mm,nsav) = raercol(ilev,mm,nsav) + raercol_cw(ilev,mm,nsav) ! cloud-borne aerosol
                       raercol_cw(ilev,mm,nsav) = 0._r8
                    end do
                 end do
@@ -1170,33 +1160,30 @@ contains
        ! load new droplets in layers above, below clouds
        dtmin = dtmicro
        ekk(top_lev-1) = 0.0_r8
-       ekk(pver) = 0.0_r8
        do ilev = top_lev, pver-1
-          ! rce-comment -- ekd(ilev) is eddy-diffusivity at ilev/ilev+1 interface
-          !   want ekk(ilev) = ekd(ilev) * (density at ilev/ilev+1 interface)
-          !   so use pint(icol,ilev+1) as pint is 1:pverp
-          !           ekk(ilev)=ekd(ilev)*2.*pint(icol,ilev)/(rair*(temp(icol,ilev)+temp(icol,ilev+1)))
-          !           ekk(ilev)=ekd(ilev)*2.*pint(icol,ilev+1)/(rair*(temp(icol,ilev)+temp(icol,ilev+1)))
+          ! ekd(ilev) is eddy-diffusivity at ilev/ilev+1 interface
+          ! want ekk(ilev) = ekd(ilev) * (density at ilev/ilev+1 interface)
           ekk(ilev) = ekd(ilev)*csbot(ilev)
        end do
+       ekk(pver) = 0.0_r8
 
        do ilev = top_lev, pver
-          km1     = max0(ilev-1, top_lev)
+          km1 = max0(ilev-1, top_lev)
           ekkp(ilev) = zn(ilev)*ekk(ilev)*zs(ilev)
           ekkm(ilev) = zn(ilev)*ekk(ilev-1)*zs(km1)
           tinv    = ekkp(ilev) + ekkm(ilev)
-
-          ! rce-comment -- tinv is the sum of all first-order-loss-rates
-          !    for the layer.  for most layers, the activation loss rate
-          !    (for interstitial particles) is accounted for by the loss by
-          !    turb-transfer to the layer above.
-          !    ilev=pver is special, and the loss rate for activation within
-          !    the layer must be added to tinv.  if not, the time step
-          !    can be too big, and explmix can produce negative values.
-          !    the negative values are reset to zero, resulting in an
-          !    artificial source.
-          if (ilev == pver) tinv = tinv + taumix_internal_pver_inv
-
+          ! tinv is the sum of all first-order-loss-rates
+          ! for the layer.  for most layers, the activation loss rate
+          ! (for interstitial particles) is accounted for by the loss by
+          ! turb-transfer to the layer above.
+          ! ilev=pver is special, and the loss rate for activation within
+          ! the layer must be added to tinv.  if not, the time step
+          ! can be too big, and explmix can produce negative values.
+          ! the negative values are reset to zero, resulting in an
+          ! artificial source.
+          if (ilev == pver) then
+             tinv = tinv + taumix_internal_pver_inv
+          end if
           if (tinv > 1.e-6_r8) then
              dtt   = 1._r8/tinv
              dtmin = min(dtmin, dtt)
@@ -1395,11 +1382,10 @@ contains
 
        do ilev = top_lev, pver
           ndropmix(icol,ilev) = (qcld(ilev) - ncldwtr(icol,ilev))*dtinv - nsource(icol,ilev)
-          tendnd(icol,ilev)   = (max(qcld(ilev), 1.e-6_r8) - ncldwtr(icol,ilev))*dtinv
-          ndropcol(icol)   = ndropcol(icol) + ncldwtr(icol,ilev)*pdel(icol,ilev)
+          tendnd(icol,ilev) = (max(qcld(ilev), 1.e-6_r8) - ncldwtr(icol,ilev))*dtinv
+          ndropcol(icol) = ndropcol(icol) + ncldwtr(icol,ilev)*pdel(icol,ilev)
        end do
        ndropcol(icol) = ndropcol(icol)/gravit
-
 
        raertend = 0._r8
        qqcwtend = 0._r8

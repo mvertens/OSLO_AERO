@@ -539,7 +539,7 @@ contains
 
     ! This should not happen since there are only production terms for these gases! !
     do cond_vap_idx=1,N_COND_VAP
-       where(mmr_cond_vap_gasprod(:ncol,:,cond_vap_idx).lt. 0.0_r8)
+       where(mmr_cond_vap_gasprod(:ncol,:,cond_vap_idx) < 0.0_r8)
           mmr_cond_vap_gasprod(:ncol,:,cond_vap_idx) = 0.0_r8
        end where
     end do

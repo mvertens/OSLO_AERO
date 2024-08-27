@@ -202,12 +202,12 @@ subroutine rad_rrtmg_sw(lchnk,ncol       ,rrtmg_levs   ,r_state      , &
 
    real(r8) :: tauc_sw(nbndsw, pcols, rrtmg_levs-1)         ! cloud optical depth
    real(r8) :: ssac_sw(nbndsw, pcols, rrtmg_levs-1)         ! cloud single scat. albedo
-   real(r8) :: asmc_sw(nbndsw, pcols, rrtmg_levs-1)         ! cloud asymmetry parameter
+   real(r8) :: asmc_sw(nbndsw, pcols, rrtmg_levs-1)         ! cloud asymetry parameter
    real(r8) :: fsfc_sw(nbndsw, pcols, rrtmg_levs-1)         ! cloud forward scattering fraction
 
    real(r8) :: tau_aer_sw(pcols, rrtmg_levs-1, nbndsw)      ! aer optical depth
    real(r8) :: ssa_aer_sw(pcols, rrtmg_levs-1, nbndsw)      ! aer single scat. albedo
-   real(r8) :: asm_aer_sw(pcols, rrtmg_levs-1, nbndsw)      ! aer asymmetry parameter
+   real(r8) :: asm_aer_sw(pcols, rrtmg_levs-1, nbndsw)      ! aer asymetry parameter
 
    real(r8) :: cld_stosw(nsubcsw, pcols, rrtmg_levs-1)      ! stochastic cloud fraction
    real(r8) :: rei_stosw(pcols, rrtmg_levs-1)               ! stochastic ice particle size
@@ -216,7 +216,7 @@ subroutine rad_rrtmg_sw(lchnk,ncol       ,rrtmg_levs   ,r_state      , &
    real(r8) :: cliqwp_stosw(nsubcsw, pcols, rrtmg_levs-1)   ! stochastic cloud liquid wter path
    real(r8) :: tauc_stosw(nsubcsw, pcols, rrtmg_levs-1)     ! stochastic cloud optical depth (optional)
    real(r8) :: ssac_stosw(nsubcsw, pcols, rrtmg_levs-1)     ! stochastic cloud single scat. albedo (optional)
-   real(r8) :: asmc_stosw(nsubcsw, pcols, rrtmg_levs-1)     ! stochastic cloud asymmetry parameter (optional)
+   real(r8) :: asmc_stosw(nsubcsw, pcols, rrtmg_levs-1)     ! stochastic cloud asymetry parameter (optional)
    real(r8) :: fsfc_stosw(nsubcsw, pcols, rrtmg_levs-1)     ! stochastic cloud forward scattering fraction (optional)
 
    real(r8), parameter :: dps = 1._r8/86400._r8 ! Inverse of seconds per day
@@ -247,10 +247,10 @@ subroutine rad_rrtmg_sw(lchnk,ncol       ,rrtmg_levs   ,r_state      , &
    real(r8) :: tauxcl(pcols,0:pver) ! water cloud extinction optical depth
    real(r8) :: tauxci(pcols,0:pver) ! ice cloud extinction optical depth
    real(r8) :: wcl(pcols,0:pver) ! liquid cloud single scattering albedo
-   real(r8) :: gcl(pcols,0:pver) ! liquid cloud asymmetry parameter
+   real(r8) :: gcl(pcols,0:pver) ! liquid cloud asymetry parameter
    real(r8) :: fcl(pcols,0:pver) ! liquid cloud forward scattered fraction
    real(r8) :: wci(pcols,0:pver) ! ice cloud single scattering albedo
-   real(r8) :: gci(pcols,0:pver) ! ice cloud asymmetry parameter
+   real(r8) :: gci(pcols,0:pver) ! ice cloud asymetry parameter
    real(r8) :: fci(pcols,0:pver) ! ice cloud forward scattered fraction
 
    ! Aerosol radiative property arrays

@@ -1265,7 +1265,6 @@ subroutine radiation_tend( &
               volc_ext_sun, volc_omega_sun, volc_g_sun, volc_ext_earth, volc_omega_earth, &
               aodvis, absvis)
 
-         !TODO (mvertens): should the following be added here?
          rd%cld_tau_cloudsim(:ncol,:) = cld_tau(rrtmg_sw_cloudsim_band,:ncol,:)
          rd%aer_tau550(:ncol,:)       = aer_tau(:ncol,:,idx_sw_diag)
          rd%aer_tau400(:ncol,:)       = aer_tau(:ncol,:,idx_sw_diag+1)
@@ -1337,7 +1336,7 @@ subroutine radiation_tend( &
                   cam_out%solld, fns, fcns, Nday, Nnite,                     &
                   IdxDay, IdxNite, su, sd, E_cld_tau=c_cld_tau,              &
                   E_cld_tau_w=c_cld_tau_w, E_cld_tau_w_g=c_cld_tau_w_g,      &
-                  E_cld_tau_w_f=c_cld_tau_w_f, old_convert=.false.)
+                  E_cld_tau_w_f=c_cld_tau_w_f, old_convert=.false., idrf=.false.)
                ! OSLO_AERO end
 
                ! Output net fluxes at 200 mb
