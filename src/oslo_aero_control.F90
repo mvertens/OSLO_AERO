@@ -23,8 +23,11 @@ module oslo_aero_control
   integer,           parameter :: unset_int = huge(1)
   integer, parameter, public   :: dir_string_length=256
 
-  ! Namelist variables:
-  real(r8)  :: volc_fraction_coarse = 0.0_r8  !Fraction of volcanic aerosols in coarse mode
+  ! Public Namelist variables:
+  logical, public   :: use_aerocom = .false. ! If true, turn on aerocom output
+
+  ! Private Namelist variables:
+  real(r8)          :: volc_fraction_coarse = 0.0_r8  !Fraction of volcanic aerosols in coarse mode
   character(len=dir_string_length) :: aerotab_table_dir = unset_str
 
   ! DMS/Ocean namelist variables
@@ -53,7 +56,8 @@ contains
 
     namelist /oslo_ctl_nl/ volc_fraction_coarse, aerotab_table_dir, dms_source, &
                            dms_source_type, opom_source, opom_source_type, &
-                           ocean_filename, ocean_filepath, dms_cycle_year, opom_cycle_year
+                           ocean_filename, ocean_filepath, dms_cycle_year, opom_cycle_year, &
+                           use_aerocom
     !-----------------------------------------------------------------------------
 
     if (masterproc) then
@@ -69,6 +73,9 @@ contains
     end if
 
     ! Broadcast namelist variables
+    call mpi_bcast(use_aerocom, 1 , mpi_logical, mstrid, mpicom, ierr)
+    if (ierr /= mpi_success) call endrun(subname//" mpi_bcast: volc_fraction_coarse")
+
     call mpi_bcast(volc_fraction_coarse, 1 , mpi_real8, mstrid, mpicom, ierr)
     if (ierr /= mpi_success) call endrun(subname//" mpi_bcast: volc_fraction_coarse")
     call mpi_bcast(aerotab_table_dir, len(aerotab_table_dir) , mpi_character, mstrid, mpicom, ierr)

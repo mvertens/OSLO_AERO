@@ -43,7 +43,7 @@ module aero_model
   use oslo_aero_share,          only: lifeCycleNumberMedianRadius, rhopart, lifeCycleSigma
   use oslo_aero_share,          only: l_so4_a2, l_bc_n, l_bc_ax
   use oslo_aero_share,          only: MODE_IDX_BC_NUC, MODE_IDX_BC_EXT_AC
-  use oslo_aero_control,        only: oslo_aero_ctl_readnl
+  use oslo_aero_control,        only: oslo_aero_ctl_readnl, use_aerocom
   use oslo_aero_depos,          only: oslo_aero_depos_init
   use oslo_aero_depos,          only: oslo_aero_depos_dry, oslo_aero_depos_wet, oslo_aero_wetdep_init
   use oslo_aero_coag,           only: initializeCoagulation, coagtend, clcoag
@@ -153,10 +153,10 @@ contains
     call init_interp_constants() ! table initialization constants
     call initopt()               ! table initialization
     call initlogn()              ! table initialization
-#ifdef AEROCOM
-    call initdry()               ! table initialization
-    call initaeropt()            ! table initialization
-#endif
+    if (use_aerocom) then
+       call initdry()               ! table initialization
+       call initaeropt()            ! table initialization
+    end if
     call initializeCondensation()
     call oslo_aero_ocean_init()
     call oslo_aero_depos_init(pbuf2d)
