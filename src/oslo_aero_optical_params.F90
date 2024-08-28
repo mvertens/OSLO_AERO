@@ -18,6 +18,7 @@ module oslo_aero_optical_params
   use oslo_aero_conc,      only: calculateBulkProperties, partitionMass
   use oslo_aero_sw_tables, only: interpol0, interpol1, interpol2to3, interpol4, interpol5to10
   use oslo_aero_aerocom,   only: aerocom1, aerocom2
+  use oslo_aero_control,   only: use_aerocom
   use perf_mod,            only: t_startf, t_stopf
 
   implicit none
@@ -153,19 +154,21 @@ contains
     end do
 
     ! interpol-calculations only when daylight or not:
-#ifdef AEROCOM                   ! always calculate optics (also at (polar) night)
-    do icol=1,ncol
-       daylight(icol) = .true.
-    end do
-#else                            ! calculate optics only in daytime
-    do icol=1,ncol
-       if (coszrs(icol) > 0.0_r8) then
+    if (use_aerocom) then
+       ! always calculate optics (also at (polar) night)
+       do icol=1,ncol
           daylight(icol) = .true.
-       else
-          daylight(icol) = .false.
-       endif
-    end do
-#endif
+       end do
+    else
+       ! calculate optics only in daytime
+       do icol=1,ncol
+          if (coszrs(icol) > 0.0_r8) then
+             daylight(icol) = .true.
+          else
+             daylight(icol) = .false.
+          endif
+       end do
+    end if
 
     ! Set SO4, BC and OC concentrations:
 
@@ -246,12 +249,12 @@ contains
          focm, fcm, xfac, ifac1, fbcm, xfbc, ifbc1, faqm, xfaq, ifaq1)
     call t_stopf('oslo_aero_input_interpol')
 
-#ifdef AEROCOM
-    call aerocom1(lchnk, ncol, Cam, Nnatk, deltah_km, &
-       xct, ict1, xfac, ifac1, xfbc, ifbc1, xfaq, ifaq1, &
-       xfbcbg, ifbcbg1, xfbcbgn, ifbcbgn1, &
-       xfombg, ifombg1, Ctotdry)
-#endif
+    if (use_aerocom) then
+       call aerocom1(lchnk, ncol, Cam, Nnatk, deltah_km, &
+            xct, ict1, xfac, ifac1, xfbc, ifbc1, xfaq, ifaq1, &
+            xfbcbg, ifbcbg1, xfbcbgn, ifbcbgn1, &
+            xfombg, ifombg1, Ctotdry)
+    end if
 
     call t_startf('oslo_aero_interpol')
     ! (Wet) Optical properties for each of the aerosol modes:
@@ -475,18 +478,18 @@ contains
        end do
     end do
 
-#ifdef AEROCOM
-    do icol=1,ncol
-       do ilev=1,pver
-          batotsw13(icol,ilev)=betot(icol,ilev,13)*(1.0_r8-ssatot(icol,ilev,13))
-          batotlw01(icol,ilev)=batotlw(icol,ilev,1)
+    if (use_aerocom) then
+       do icol=1,ncol
+          do ilev=1,pver
+             batotsw13(icol,ilev)=betot(icol,ilev,13)*(1.0_r8-ssatot(icol,ilev,13))
+             batotlw01(icol,ilev)=batotlw(icol,ilev,1)
+          end do
        end do
-    end do
-    ! These two fields should be close to equal, both representing absorption
-    ! in the 3.077-3.846 um wavelenght band (i.e., a check of LUT for LW vs. SW).
-    call outfld('BATSW13 ',batotsw13,pcols,lchnk)
-    call outfld('BATLW01 ',batotlw01,pcols,lchnk)
-#endif
+       ! These two fields should be close to equal, both representing absorption
+       ! in the 3.077-3.846 um wavelenght band (i.e., a check of LUT for LW vs. SW).
+       call outfld('BATSW13 ',batotsw13,pcols,lchnk)
+       call outfld('BATLW01 ',batotlw01,pcols,lchnk)
+    end if
 
     ! APPROXIMATE aerosol extinction and absorption at 550nm (0.442-0.625 um)
     ! (in the visible wavelength band)
@@ -561,37 +564,37 @@ contains
     call outfld('ABSVVOLC',absvisvolc ,pcols,lchnk)
     call outfld('BVISVOLC',bevisvolc  ,pcols,lchnk)
 
-#ifdef AEROCOM
-    ! Extinction and absorption for 0.55 um for the total aerosol, and AODs
-    call outfld('BETOTVIS',betotvis,pcols,lchnk)
-    call outfld('BATOTVIS',batotvis,pcols,lchnk)
-    call outfld('AIRMASSL',airmassl,pcols,lchnk)
-    call outfld('AIRMASS ',airmass ,pcols,lchnk)
+    if (use_aerocom) then
+       ! Extinction and absorption for 0.55 um for the total aerosol, and AODs
+       call outfld('BETOTVIS',betotvis,pcols,lchnk)
+       call outfld('BATOTVIS',batotvis,pcols,lchnk)
+       call outfld('AIRMASSL',airmassl,pcols,lchnk)
+       call outfld('AIRMASS ',airmass ,pcols,lchnk)
 
-    ! Mass concentration (ug/m3) and mmr (kg/kg) of aerosol condensed water
-    ! Condensed water mmr (kg/kg)
-    do ilev=1,pver
-       do icol=1,ncol
-          Cwater(icol,ilev) = Ctot(icol,ilev) - Ctotdry(icol,ilev)
-          mmr_aerh2o(icol,ilev)=1.e-9_r8*Cwater(icol,ilev)/rhoda(icol,ilev)
+       ! Mass concentration (ug/m3) and mmr (kg/kg) of aerosol condensed water
+       ! Condensed water mmr (kg/kg)
+       do ilev=1,pver
+          do icol=1,ncol
+             Cwater(icol,ilev) = Ctot(icol,ilev) - Ctotdry(icol,ilev)
+             mmr_aerh2o(icol,ilev)=1.e-9_r8*Cwater(icol,ilev)/rhoda(icol,ilev)
+          end do
+       enddo
+       call outfld('MMR_AH2O',mmr_aerh2o, pcols, lchnk)
+
+       ! Condensed water loading (mg_m2)
+       daerh2o(:) = 0.0_r8
+       do ilev=1,pver
+          do icol=1,ncol
+             daerh2o(icol) = daerh2o(icol) + Cwater(icol,ilev)*deltah_km(icol,ilev)
+          end do
        end do
-    enddo
-    call outfld('MMR_AH2O',mmr_aerh2o, pcols, lchnk)
+       call outfld('DAERH2O ',daerh2o ,pcols,lchnk)
 
-    ! Condensed water loading (mg_m2)
-    daerh2o(:) = 0.0_r8
-    do ilev=1,pver
-       do icol=1,ncol
-          daerh2o(icol) = daerh2o(icol) + Cwater(icol,ilev)*deltah_km(icol,ilev)
-       end do
-    end do
-    call outfld('DAERH2O ',daerh2o ,pcols,lchnk)
-
-    ! Aerocom second phase
-    call aerocom2(lchnk, ncol, Nnatk, pint, deltah_km, faitbc, f_soana, fnbc, rhoda, v_soana, &
-         xct, ict1, xfac, ifac1, xfbc, ifbc1, xfaq, ifaq1, xfbcbg, ifbcbg1, xfbcbgn, ifbcbgn1, &
-         xfombg, ifombg1, xrh, irh1)
-#endif
+       ! Aerocom second phase
+       call aerocom2(lchnk, ncol, Nnatk, pint, deltah_km, faitbc, f_soana, fnbc, rhoda, v_soana, &
+            xct, ict1, xfac, ifac1, xfbc, ifbc1, xfaq, ifaq1, xfbcbg, ifbcbg1, xfbcbgn, ifbcbgn1, &
+            xfombg, ifombg1, xrh, irh1)
+    end if
 
     call t_stopf('oslo_aero_optical_params')
 

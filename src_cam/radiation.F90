@@ -46,9 +46,8 @@ use cam_logfile,         only: iulog
 use prescribed_volcaero,      only: has_prescribed_volcaero
 use oslo_aero_optical_params, only: oslo_aero_optical_params_calc
 use oslo_aero_share,          only: nmodes_oslo=>nmodes
-#ifdef AEROCOM
+use oslo_aero_control,        only: use_aerocom
 use oslo_aero_aerocom,        only: dod440, dod550, dod870, abs550, abs550alt
-#endif
 ! OSLO_AERO end
 
 implicit none
@@ -1317,13 +1316,13 @@ subroutine radiation_tend( &
                call outfld('FSNS_DRF',fsns     , pcols, lchnk)
                call outfld('FSNTCDRF',rd%fsntc , pcols, lchnk)
                call outfld('FSNSCDRF',rd%fsnsc , pcols, lchnk)
-#ifdef AEROCOM
-               call outfld('FSUTADRF',rd%fsutoa(:) , pcols, lchnk)
-               call outfld('FSDS_DRF',fsds(:)      , pcols, lchnk)
-               ftem_1d(1:ncol) = fsds(1:ncol)-fsns(1:ncol)
-               call outfld('FSUS_DRF',ftem_1d      , pcols, lchnk)
-               call outfld('FSDSCDRF',rd%fsdsc(:)  , pcols, lchnk)
-#endif
+               if (use_aerocom) then
+                  call outfld('FSUTADRF',rd%fsutoa(:) , pcols, lchnk)
+                  call outfld('FSDS_DRF',fsds(:)      , pcols, lchnk)
+                  ftem_1d(1:ncol) = fsds(1:ncol)-fsns(1:ncol)
+                  call outfld('FSUS_DRF',ftem_1d      , pcols, lchnk)
+                  call outfld('FSDSCDRF',rd%fsdsc(:)  , pcols, lchnk)
+               end if
 
                call rad_rrtmg_sw( &
                   lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,          &
