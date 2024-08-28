@@ -385,35 +385,35 @@ contains
     ! only consider flat surfaces due to uncertainty of curved surfaces
 
     cos_angle = COS(theta_imm_bc*pi/180._r8)
-    f_imm_bc = (2+cos_angle)*(1-cos_angle)**2/4._r8
+    f_imm_bc = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
     if (.not. pdf_imm_in) then
        cos_angle = COS(theta_imm_dust*pi/180._r8)
-       f_imm_dust_a1 = (2+cos_angle)*(1-cos_angle)**2/4._r8
+       f_imm_dust_a1 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
 
        cos_angle = COS(theta_imm_dust*pi/180._r8)
-       f_imm_dust_a3 = (2+cos_angle)*(1-cos_angle)**2/4._r8
+       f_imm_dust_a3 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
     end if
 
 
     ! form factor
     cos_angle = COS(theta_dep_bc*pi/180._r8)
-    f_dep_bc = (2+cos_angle)*(1-cos_angle)**2/4._r8
+    f_dep_bc = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
 
     cos_angle = COS(theta_dep_dust*pi/180._r8)
-    f_dep_dust_a1 = (2+cos_angle)*(1-cos_angle)**2/4._r8
+    f_dep_dust_a1 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
 
     cos_angle = COS(theta_dep_dust*pi/180._r8)
-    f_dep_dust_a3 = (2+cos_angle)*(1-cos_angle)**2/4._r8
+    f_dep_dust_a3 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
 
     ! form factor
     cos_angle = COS(theta_dep_bc*pi/180._r8)
-    f_cnt_bc = (2+cos_angle)*(1-cos_angle)**2/4._r8
+    f_cnt_bc = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
 
     cos_angle = COS(theta_dep_dust*pi/180._r8)
-    f_cnt_dust_a1 = (2+cos_angle)*(1-cos_angle)**2/4._r8
+    f_cnt_dust_a1 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
 
     cos_angle = COS(theta_dep_dust*pi/180._r8)
-    f_cnt_dust_a3 = (2+cos_angle)*(1-cos_angle)**2/4._r8
+    f_cnt_dust_a3 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
 
     sqroot_f_imm_bc = SQRT(f_imm_bc)
     sqroot_dim_f_imm_dust_a1(i1:i2) = SQRT(dim_f_imm_dust_a1(i1:i2))
@@ -476,7 +476,7 @@ contains
     real(r8), pointer :: frzdep(:,:) ! output shared with the microphysics via the pbuf
     real(r8), pointer :: ast(:,:)
     integer  :: itim_old
-    integer  :: icol, ilev, cos_angle, kk
+    integer  :: icol, ilev, cos_angle
     real(r8) :: rho(pcols,pver)          ! air density (kg m-3)
     real(r8) :: lcldm(pcols,pver)
     real(r8) :: fn(3)
@@ -965,7 +965,7 @@ contains
        total_cloudborne_aer_num, errstring)
 
     real(r8), intent(in) :: deltat                        ! timestep [s]
-    real(r8), intent(in) :: t                             ! temperature [ILEV]
+    real(r8), intent(in) :: t                             ! temperature [K]
     real(r8), intent(in) :: p                             ! pressure [Pa]
     real(r8), intent(in) :: supersatice                   ! supersaturation ratio wrt ice at 100%rh over water [ ]
     real(r8), intent(in) :: eswtr                         ! saturation vapor pressure water [Pa]
@@ -1144,7 +1144,7 @@ contains
     if (.not. pdf_imm_in) then
        ! 1/sqrt(f)
        ! the expression of Chen et al. (sqrt(f)) may however lead to unphysical
-       ! behavior as it implies J->0 when f->0 (icol.e. ice nucleation would be
+       ! behavior as it implies J->0 when f->0 (i.e. ice nucleation would be
        ! more difficult on easily wettable materials).
        Jimm_dust_a1 = Aimm_dust_a1*r_dust_a1**2/sqroot_f_imm_dust_a1*EXP((-dga_imm_dust-f_imm_dust_a1*dg0imm_dust_a1)/(kboltz*T))
        Jimm_dust_a3 = Aimm_dust_a3*r_dust_a3**2/sqroot_f_imm_dust_a3*EXP((-dga_imm_dust-f_imm_dust_a3*dg0imm_dust_a3)/(kboltz*T))
@@ -1343,7 +1343,7 @@ contains
     ! Modifications: Yong Wang and Xiaohong Liu, UWyo, 12/2012
     !-----------------------------------------------------------------------
 
-    real(r8), intent(in) :: t                ! temperature [ILEV]
+    real(r8), intent(in) :: t                ! temperature [K]
     real(r8), intent(in) :: pres             ! pressure [Pa]
     real(r8), intent(in) :: eswtr            ! saturation vapor pressure of water [Pa]
     real(r8), intent(in) :: r3lx             ! volume mean drop radius [m]
@@ -1379,7 +1379,7 @@ contains
     real(r8) :: Tdiff_cotton ! temperature difference between droplet and environment [K]
     real(r8) :: K_brownian,K_thermo_cotton,K_diffusio_cotton   ! collision kernels [m3 s-1]
     real(r8) :: K_total     ! total collision kernel [cm3 s-1]
-    integer  :: icol
+    integer  :: imode
     !------------------------------------------------------------------------------------------------
 
     Kcoll_bc      = 0._r8
@@ -1428,10 +1428,10 @@ contains
 
     ! variables depending on aerosol radius
     ! loop over 3 aerosol modes
-    do icol = 1, 3
-       if (icol == 1) r_a = r_bc
-       if (icol == 2) r_a = r_dust_a1
-       if (icol == 3) r_a = r_dust_a3
+    do imode = 1, 3
+       if (imode == 1) r_a = r_bc
+       if (imode == 2) r_a = r_dust_a1
+       if (imode == 3) r_a = r_dust_a3
        ! Knudsen number (Seinfeld & Pandis 8.1)
        Kn = lambda/r_a
        ! aerosol diffusivity
@@ -1443,8 +1443,8 @@ contains
        K_brownian = 4*pi*r3lx*Daer*(1 + 0.3_r8*Re**0.5_r8*Sc**0.33_r8)
 
        ! thermal conductivities from Seinfeld & Pandis, Table 8.6
-       if (icol == 1) Ktherm = 4.2_r8 ! Carbon
-       if (icol == 2 .or. icol == 3) Ktherm = 0.72_r8 ! clay
+       if (imode == 1) Ktherm = 4.2_r8 ! Carbon
+       if (imode == 2 .or. imode == 3) Ktherm = 0.72_r8 ! clay
 
        ! form factor
        f_t = 0.4_r8*(1._r8 + 1.45_r8*Kn + 0.4_r8*Kn*EXP(-1._r8/Kn))      &
@@ -1461,9 +1461,9 @@ contains
        ! set K to 0 if negative
        if (K_total < 0._r8) K_total = 0._r8
 
-       if (icol == 1) Kcoll_bc = K_total
-       if (icol == 2) Kcoll_dust_a1 = K_total
-       if (icol == 3) Kcoll_dust_a3 = K_total
+       if (imode == 1) Kcoll_bc = K_total
+       if (imode == 2) Kcoll_dust_a1 = K_total
+       if (imode == 3) Kcoll_dust_a3 = K_total
     end do
 
   end subroutine collkernel

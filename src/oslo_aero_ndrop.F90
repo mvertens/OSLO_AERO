@@ -522,7 +522,7 @@ contains
        !NOTE: SEVERAL POINTERS POINT TO SAME FIELD, E.G. CONDENSATE WHICH IS IN SEVERAL MODES
        do ispec = 1, nspec_amode(imode)
           tracerIndex =  tracer_index(imode,ispec)           !Index in q
-          cloud_tracer_index = cloudTracerIndex(tracerIndex) !Index in phys-buffer
+          cloud_tracer_index = CloudTracerIndex(tracerIndex) !Index in phys-buffer
           mm = mam_idx(imode,ispec)                          !Index in raer/qqcw
           raer(mm)%fld =>  state%q(:,:,tracerIndex)          !NOTE: These are total fields (for example condensate)
           call pbuf_get_field(pbuf, cloud_tracer_index, qqcw(mm)%fld) !NOTE: These are total fields (for example condensate)
@@ -579,8 +579,7 @@ contains
        enddo
     enddo
     if (alert)then
-       print*,"strange number concentration "
-       call endrun()
+       call endrun("strange number concentration")
     endif
 
     ! tau_cld_regenerate = time scale for regeneration of cloudy air
@@ -770,7 +769,7 @@ contains
                    tracerIndex = tracer_index(imode,ispec)
                    componentFraction = componentFractionOK(imode,tracerIndex,ilev)
                 endif
-                !Assign to the components used here icol.e. distribute condensate/coagulate to modes
+                !Assign to the components used here i.e. distribute condensate/coagulate to modes
                 raercol_cw(ilev,mm,nsav) = qqcw(mm)%fld(icol,ilev)*componentFraction
                 raercol(ilev,mm,nsav)    = raer(mm)%fld(icol,ilev)*componentFraction
              enddo ! ilev (levels)
@@ -1093,7 +1092,7 @@ contains
                 !    it is forced to be >= 0
                 !
                 ! steve --
-                !    you will likely want to change this.  il did not really understand
+                !    you will likely want to change this.  i did not really understand
                 !       what was previously being done in ilev=pver
                 !    in the cam3_5_3 code, wtke(icol,pver) appears to be equal to the
                 !       droplet deposition velocity which is quite small
@@ -1125,7 +1124,7 @@ contains
                 nsource(icol,ilev) = nsource(icol,ilev) + fluxntot/(cs(icol,ilev)*dz(icol,ilev))
              endif  ! (cldn(icol,ilev) - cldn(icol,kp1) > 0.01 .or. ilev == pver)
 
-          else  ! icol.e: cldn(icol,ilev) < 0.01_r8
+          else  ! i.e: cldn(icol,ilev) < 0.01_r8
 
              ! no liquid cloud
              nsource(icol,ilev) = nsource(icol,ilev) - qcld(ilev)*dtinv
@@ -1591,7 +1590,7 @@ contains
     real(r8) , intent(in) :: wdiab         ! diabatic vertical velocity (0 if adiabatic)
     real(r8) , intent(in) :: wminf         ! minimum updraft velocity for integration (m/s)
     real(r8) , intent(in) :: wmaxf         ! maximum updraft velocity for integration (m/s)
-    real(r8) , intent(in) :: tair          ! air temperature (ILEV)
+    real(r8) , intent(in) :: tair          ! air temperature (K)
     real(r8) , intent(in) :: rhoair        ! air density (kg/m3)
     real(r8) , intent(in) :: na(:)         ! aerosol number concentration (/m3)
     integer  , intent(in) :: nmode         ! number of aerosol modes
@@ -2023,7 +2022,7 @@ contains
     real(r8) :: exp45logsig_var   ! mathematical constants
     integer  :: lsat,imode,icol,ilev        ! mathematical constants
     real(r8) :: smcoefcoef,smcoef ! mathematical constants
-    real(r8), pointer   :: tair(:,:)        ! air temperature (ILEV)
+    real(r8), pointer   :: tair(:,:)        ! air temperature (K)
     real(r8), parameter :: twothird=2.0_r8/3.0_r8
     real(r8), parameter :: sq2=sqrt(2.0_r8)
     real(r8), parameter :: surften=0.076_r8 !surface tension of water (J/m2)

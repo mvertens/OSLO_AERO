@@ -102,7 +102,7 @@ contains
   subroutine initopt()
 
     ! Local variables
-    integer  :: kcomp, iwl, irelh, ictot, ifac, ifbc, ifaq, iband, irf
+    integer  :: kcomp, iwl, irelh, ictot, ifac, ifbc, ifaq, irf
     integer  :: ifombg, ifbcbg
     integer  :: ik, ic, ifil, lin, linmax
     real(r8) :: catot, relh, frac, fabc, fraq, frombg, frbcbg
@@ -1065,7 +1065,7 @@ contains
                       bex(icol,ilev,kc10,iband)=e**(a*t_xrh+b)
                    endif
 
-                end do ! iband (iband)
+                end do ! iband
 
              else  ! daylight
 

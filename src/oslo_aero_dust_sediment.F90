@@ -80,7 +80,7 @@ contains
     real(r8), intent(in)  :: pint(pcols,pverp)         ! interfaces pressure (Pa)
     real(r8), intent(in)  :: pmid(pcols,pver)          ! midpoint pressures (Pa)
     real(r8), intent(in)  :: pdel(pcols,pver)          ! pressure diff across layer (Pa)
-    real(r8), intent(in)  :: t(pcols,pver)             ! temperature (
+    real(r8), intent(in)  :: t(pcols,pver)             ! temperature (K)
     real(r8), intent(in)  :: dustmr(pcols,pver)        ! dust (kg/kg)
     real(r8), intent(in)  :: pvdust (pcols,pverp)      ! vertical velocity of dust drops  (Pa/s)
     real(r8), intent(out) :: dusttend(pcols,pver)      ! dust tend

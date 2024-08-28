@@ -454,7 +454,7 @@ contains
     do ilev = top_lev, pver
        do icol = 1, ncol
           if (state1%t(icol,ilev) < 269.15_r8) then
-             !fxm: ICOL think model uses bins, not modes.. But to get it
+             !fxm: I think model uses bins, not modes.. But to get it
              !approximately correct, use mode radius in first version
              nacon(icol,ilev,2) = numberConcentration(icol,ilev,MODE_IDX_DST_A2)
              nacon(icol,ilev,3) = numberConcentration(icol,ilev,MODE_IDX_DST_A3)

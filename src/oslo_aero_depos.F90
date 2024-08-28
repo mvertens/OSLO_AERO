@@ -1603,14 +1603,14 @@ contains
           ! unless the fraction of the area that is cloud is less than odds, in which
           ! case use the cloud fraction (assumes precabs is in kg/m2/s)
           ! is really: precabs*3/4/1000./1e-3*deltat
-          ! here ICOL use .1 from Balkanski
+          ! here I use .1 from Balkanski
           !
           ! use a local rate of convective rain production for incloud scav
           !
           ! Fraction of convective cloud water converted to rain.  This version is used
           ! in 2 of the 3 branches below before fracp is reused in the stratiform calc.
           ! NB: In below formula for fracp conicw is a LWC/IWC that has already
-          !     precipitated out, icol.e., conicw does not contain precipitation
+          !     precipitated out, i.e., conicw does not contain precipitation
 
           fracp(icol) = cmfdqr(icol,ilev)*deltat / &
                max( 1.e-12_r8, cldc(icol,ilev)*conicw(icol,ilev) + (cmfdqr(icol,ilev)+dlf(icol,ilev))*deltat )
