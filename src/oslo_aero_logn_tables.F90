@@ -317,7 +317,7 @@ contains
 
        ictot=1
        ess = xct(lon)
-       do while (ictot.lt.15 .and. (ess.lt.cate(kcomp,ictot) .or. ess.gt.cate(kcomp,ictot+1)))
+       do while (ictot<15 .and. (ess<cate(kcomp,ictot) .or. ess>cate(kcomp,ictot+1)))
           ictot=ictot+1
        enddo
        ict1=ictot
@@ -325,7 +325,7 @@ contains
 
        ifac=1
        ess = xfac(lon)
-       do while (ifac.lt.5 .and. (ess.lt.fac(ifac) .or. ess.gt.fac(ifac+1)))
+       do while (ifac<5 .and. (ess<fac(ifac) .or. ess>fac(ifac+1)))
           ifac=ifac+1
        enddo
        ifac1=ifac
@@ -436,7 +436,7 @@ contains
 
        ictot=1
        tmp = xct(lon)
-       do while (ictot.lt.15 .and. (tmp.lt.cate(kcomp,ictot) .or. tmp.gt.cate(kcomp,ictot+1)))
+       do while (ictot<15 .and. (tmp<cate(kcomp,ictot) .or. tmp>cate(kcomp,ictot+1)))
           ictot=ictot+1
        enddo
        ict1=ictot
@@ -444,7 +444,7 @@ contains
 
        ifac=1
        tmp = xfac(lon)
-       do while (ifac.lt.5 .and. (tmp.lt.fac(ifac) .or. tmp.gt.fac(ifac+1)))
+       do while (ifac<5 .and. (tmp<fac(ifac) .or. tmp>fac(ifac+1)))
           ifac=ifac+1
        enddo
        ifac1=ifac
@@ -452,7 +452,7 @@ contains
 
        ifaq=1
        tmp = xfaq(lon)
-       do while (ifaq.lt.5 .and. (tmp.lt.faq(ifaq) .or. tmp.gt.faq(ifaq+1)))
+       do while (ifaq<5 .and. (tmp<faq(ifaq) .or. tmp>faq(ifaq+1)))
           ifaq=ifaq+1
        enddo
        ifaq1=ifaq
@@ -577,7 +577,7 @@ contains
 
        ictot=1
        tmp = xct(lon)
-       do while (ictot.lt.5.and.(tmp.lt.cat(kcomp,ictot).or. tmp.gt.cat(kcomp,ictot+1)))
+       do while (ictot<5.and.(tmp<cat(kcomp,ictot).or. tmp>cat(kcomp,ictot+1)))
           ictot=ictot+1
        enddo
        ict1=ictot
@@ -585,7 +585,7 @@ contains
 
        ifac=1
        tmp = xfac(lon)
-       do while (ifac.lt.5.and.(tmp.lt.fac(ifac).or. tmp.gt.fac(ifac+1)))
+       do while (ifac<5.and.(tmp<fac(ifac).or. tmp>fac(ifac+1)))
           ifac=ifac+1
        enddo
        ifac1=ifac
@@ -593,7 +593,7 @@ contains
 
        ifbc=1
        tmp = xfbc(lon)
-       do while (ifbc.lt.5.and.(tmp.lt.fbc(ifbc).or. tmp.gt.fbc(ifbc+1)))
+       do while (ifbc<5.and.(tmp<fbc(ifbc).or. tmp>fbc(ifbc+1)))
           ifbc=ifbc+1
        enddo
        ifbc1=ifbc
@@ -601,7 +601,7 @@ contains
 
        ifaq=1
        tmp = xfaq(lon)
-       do while (ifaq.lt.5.and.(tmp.lt.faq(ifaq) .or.tmp.gt.faq(ifaq+1)))
+       do while (ifaq<5.and.(tmp<faq(ifaq) .or.tmp>faq(ifaq+1)))
           ifaq=ifaq+1
        enddo
        ifaq1=ifaq

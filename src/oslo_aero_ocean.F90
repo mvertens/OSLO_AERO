@@ -128,7 +128,7 @@ contains
 
     ! local variables
     integer  :: astat
-    integer  :: m
+    integer  :: ispec
     integer            :: cycle_yr(2)
     character(len=32)  :: data_type(2)
     character(len=16)  :: emis_species(2)
@@ -168,20 +168,20 @@ contains
     ! Setup the oceanspcs type array
     ! Add support for selective reading with saved units etc.?
     ! one for now... start with dms
-    do m = 1,n_ocean_species
-       ! oceanspcs(m)%spc_ndx = emis_indexes(m) ! physics index
-       ! oceanspcs(m)%units  = 'nmol/L'
-       oceanspcs(m)%species = emis_species(m)  ! nc var name
+    do ispec = 1,n_ocean_species
+       ! oceanspcs(ispec)%spc_ndx = emis_indexes(ispec) ! physics index
+       ! oceanspcs(ispec)%units  = 'nmol/L'
+       oceanspcs(ispec)%species = emis_species(ispec)  ! nc var name
     enddo
 
     ! Ocean concentrations are not stored in pbuf
-    do m = 1,n_ocean_species
-       allocate(oceanspcs(m)%file%in_pbuf(1))
-       oceanspcs(m)%file%in_pbuf(:) = .false.
+    do ispec = 1,n_ocean_species
+       allocate(oceanspcs(ispec)%file%in_pbuf(1))
+       oceanspcs(ispec)%file%in_pbuf(:) = .false.
 
-       call trcdata_init( oceanspcs(m)%species, filename, filelist, datapath, &
-            oceanspcs(m)%fields, oceanspcs(m)%file, rmv_file, &
-            cycle_yr(m), fixed_ymd, fixed_tod, data_type(m) )
+       call trcdata_init( oceanspcs(ispec)%species, filename, filelist, datapath, &
+            oceanspcs(ispec)%fields, oceanspcs(ispec)%file, rmv_file, &
+            cycle_yr(ispec), fixed_ymd, fixed_tod, data_type(ispec) )
     enddo
     call addfld( 'odms', horiz_only,  'A',  'nmol/L', 'DMS upper ocean concentration' )
     call add_default('odms', 1, ' ')
@@ -198,10 +198,10 @@ contains
     type(physics_buffer_desc), pointer :: pbuf2d(:,:)
 
     ! local variables
-    integer :: m
+    integer :: ispec
 
-    do m = 1,n_ocean_species
-       call advance_trcdata( oceanspcs(m)%fields, oceanspcs(m)%file, state, pbuf2d  )
+    do ispec = 1,n_ocean_species
+       call advance_trcdata( oceanspcs(ispec)%fields, oceanspcs(ispec)%file, state, pbuf2d  )
     end do
 
   endsubroutine oslo_aero_ocean_adv

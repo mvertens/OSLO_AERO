@@ -23,7 +23,7 @@ module oslo_aero_depos
   use cam_history,             only: outfld, fieldname_len, addfld, add_default, horiz_only
   use ref_pres,                only: top_lev => clim_modal_aero_top_lev
   !
-  use oslo_aero_share,         only: nmodes
+  use oslo_aero_share,         only: nmodes, max_tracers_per_mode
   use oslo_aero_share,         only: numberOfProcessModeTracers, getNumberOfTracersInMode, getTracerIndex
   use oslo_aero_share,         only: is_process_mode, processModeMap, processModeSigma, lifeCycleSigma
   use oslo_aero_share,         only: belowCloudScavengingCoefficientProcessModes, belowCloudScavengingCoefficient
@@ -92,6 +92,9 @@ module oslo_aero_depos
   integer :: nevapr_dpcu_idx = 0
   integer :: ixcldice, ixcldliq
 
+  integer :: tracer_index(0:nmodes, max_tracers_per_mode)
+  integer :: num_tracers_in_mode(0:nmodes)
+
 !===============================================================================
 contains
 !===============================================================================
@@ -104,7 +107,7 @@ contains
     type(physics_buffer_desc), pointer :: pbuf2d(:,:)
 
     ! local variables
-    integer            :: m, l, i
+    integer            :: imode, itrac
     integer            :: lchnk
     integer            :: tracerIndex
     integer            :: astat, id
@@ -125,11 +128,18 @@ contains
     drydep_lq(:) =.false.
     wetdep_lq(:) =.false.
 
-    ! Mode 0 is not subject to wet deposition? (check noresm1 code..)
-    do m=0,nmodes
-       do l=1,getNumberOfTracersInMode(m)
+    do imode = 0,nmodes
+       num_tracers_in_mode(imode) = getNumberOfTracersInMode(imode)
+       do itrac = 1,num_tracers_in_mode(imode)
+          tracer_index(imode,itrac) = getTracerIndex(imode,itrac,.false.)
+       end do
+    end do
 
-          tracerIndex = getTracerIndex(m,l,.false.)
+    ! Mode 0 is not subject to wet deposition? (check noresm1 code..)
+    do imode=0,nmodes
+       do itrac=1,num_tracers_in_mode(imode)
+
+          tracerIndex = tracer_index(imode,itrac)
           drydep_lq(tracerIndex)=.true.
           wetdep_lq(tracerIndex)=.true.
 
@@ -190,7 +200,7 @@ contains
           endif
 
           ! some tracers are not in cloud water
-          if(getCloudTracerIndexDirect(tracerIndex) .lt. 0)then
+          if(getCloudTracerIndexDirect(tracerIndex) < 0)then
              cycle
           endif
 
@@ -223,9 +233,9 @@ contains
 
     !initialize cloud concentrations (initialize cloud bourne constituents in physics buffer)
     if (is_first_step()) then
-       do i = 1, pcnst
+       do itrac = 1, pcnst
           do lchnk = begchunk, endchunk
-             qqcw => qqcw_get_field(pbuf_get_chunk(pbuf2d,lchnk), i)
+             qqcw => qqcw_get_field(pbuf_get_chunk(pbuf2d,lchnk), itrac)
              if (associated(qqcw)) then
                 qqcw = 1.e-38_r8
              end if
@@ -276,9 +286,9 @@ contains
     integer :: jvlc                      ! index for last dimension of vlc_xxx arrays
     integer :: lphase                    ! index for interstitial / cloudborne aerosol
     integer :: lspec                     ! index for aerosol number / chem-mass / water-mass
-    integer :: m                         ! aerosol mode index
-    integer :: mm                        ! tracer index
-    integer :: i
+    integer :: imode                     ! aerosol mode index
+    integer :: itrac                        ! tracer index
+    integer :: icol
 
     real(r8) :: tvs(pcols,pver)
     real(r8) :: rho(pcols,pver)          ! air density in kg/m3
@@ -322,7 +332,7 @@ contains
 
     call physics_ptend_init(ptend, psetcols, 'aero_model_drydep', lq=drydep_lq)
 
-    tvs(:ncol,:) = t(:ncol,:) !*(1+q(:ncol,k)
+    tvs(:ncol,:) = t(:ncol,:) !*(1+q(:ncol,ilev)
     rho(:ncol,:)=  pmid(:ncol,:)/(rair*t(:ncol,:))
     is_done(:,:) = .false.
 
@@ -347,28 +357,28 @@ contains
     !always follow AFTER the actual tracers!!
 
     dens_aer(:,:) = 0._r8
-    do m = 0, nmodes   ! main loop over aerosol modes
+    do imode = 0, nmodes   ! main loop over aerosol modes
 
        do lphase = 1, 2   ! loop over interstitial / cloud-borne forms
 
           if (lphase == 1) then   ! interstial aerosol - calc settling/dep velocities of mode
 
-             logSigma = log(lifeCycleSigma(m))
+             logSigma = log(lifeCycleSigma(imode))
 
-             ! rad_aer = volume mean wet radius (m)
-             ! dgncur_awet = geometric mean wet diameter for number distribution (m)
-             if(top_lev .gt. 1) then
+             ! rad_aer = volume mean wet radius (imode)
+             ! dgncur_awet = geometric mean wet diameter for number distribution (imode)
+             if(top_lev > 1) then
                 rad_aer(1:ncol,:top_lev-1) = 0._r8
              end if
-             rad_aer(1:ncol,top_lev:) = 0.5_r8*dgncur_awet(1:ncol,top_lev:,m)*exp(1.5_r8*(logSigma**2))
+             rad_aer(1:ncol,top_lev:) = 0.5_r8*dgncur_awet(1:ncol,top_lev:,imode)*exp(1.5_r8*(logSigma**2))
 
              ! dens_aer(1:ncol,:) = wet density (kg/m3)
-             if(top_lev.gt.1)then
+             if(top_lev>1)then
                 dens_aer(1:ncol,:top_lev-1) = 0._r8
              end if
-             dens_aer(1:ncol,top_lev:) = wetdens(1:ncol,top_lev:,m)
+             dens_aer(1:ncol,top_lev:) = wetdens(1:ncol,top_lev:,imode)
 
-             sg_aer(1:ncol,:) = lifecycleSigma(m)
+             sg_aer(1:ncol,:) = lifecycleSigma(imode)
 
              jvlc = 2
              call oslo_aero_depvel_part( ncol, t(:,:), pmid(:,:), ram1, fv,  &
@@ -376,13 +386,13 @@ contains
                   rad_aer(:,:), dens_aer(:,:), sg_aer(:,:), 3, lchnk)
           end if
 
-          do lspec = 1, getNumberOfTracersInMode(m)   ! loop over number + constituents
+          do lspec = 1, num_tracers_in_mode(imode)   ! loop over number + constituents
 
-             mm = getTracerIndex(m,lspec,.false.)
-             if(is_done(mm,lphase)) then
+             itrac = tracer_index(imode,lspec)
+             if(is_done(itrac,lphase)) then
                 cycle
              endif
-             is_done(mm,lphase)=.true.
+             is_done(itrac,lphase)=.true.
 
              ! Calculate sediment velocity
 
@@ -390,14 +400,14 @@ contains
                 jvlc = 2 ! mass in clean air tracers
                 !Process tracers have their own velocity based on fixed size / density
                 !Calculate the velocity to use for this specie..
-                if ( is_process_mode(mm, .false.) ) then
+                if ( is_process_mode(itrac, .false.) ) then
                    jvlc = 1
-                   logSigma = log(processModeSigma(processModeMap(mm)))
-                   if(top_lev.gt.1)then
+                   logSigma = log(processModeSigma(processModeMap(itrac)))
+                   if(top_lev>1)then
                       rad_aer(1:ncol, top_lev-1) = 0.0_r8
                    end if
                    rad_aer(1:ncol,top_lev:) = &
-                        0.5_r8*dgncur_awet_processmode(1:ncol,top_lev:,processModeMap(mm))*exp(1.5_r8*(logSigma**2))
+                        0.5_r8*dgncur_awet_processmode(1:ncol,top_lev:,processModeMap(itrac))*exp(1.5_r8*(logSigma**2))
 
                    call oslo_aero_depvel_part( ncol, t(:,:), pmid(:,:), ram1, fv,  &
                         vlc_dry(:,:,jvlc), vlc_trb(:,jvlc), vlc_grv(:,:,jvlc),  &
@@ -407,18 +417,18 @@ contains
                 jvlc = 4              !mass in cloud tracers
              endif
 
-             if (mm <= 0) cycle
+             if (itrac <= 0) cycle
 
              ! Calculate sediment tendency
 
-             if ((lphase == 1) .and. (lspec <= getNumberOfTracersInMode(m))) then
-                ptend%lq(mm) = .TRUE.
+             if ((lphase == 1) .and. (lspec <= num_tracers_in_mode(imode))) then
+                ptend%lq(itrac) = .TRUE.
 
                 ! use pvprogseasalts instead (means making the top level 0)
                 pvmzaer(:ncol,1)=0._r8
                 pvmzaer(:ncol,2:pverp) = vlc_dry(:ncol,:,jvlc)
 
-                call outfld( trim(cnst_name(mm))//'DDV', pvmzaer(:ncol,2:pverp), ncol, lchnk )
+                call outfld( trim(cnst_name(itrac))//'DDV', pvmzaer(:ncol,2:pverp), ncol, lchnk )
 
                 ! use phil's method
                 ! convert from meters/sec to pascals/sec, use density from layer above in conversion
@@ -426,28 +436,28 @@ contains
 
                 ! calculate the tendencies and sfc fluxes from the above velocities
                 call oslo_aero_dust_sediment_tend(ncol, dt, pint(:,:), pmid, pdel, t , &
-                     q(:,:,mm),  pvmzaer,  ptend%q(:,:,mm), sflx)
+                     q(:,:,itrac),  pvmzaer,  ptend%q(:,:,itrac), sflx)
 
                 ! apportion dry deposition into turb and gravitational settling for tapes
                 dep_trb = 0._r8
                 dep_grv = 0._r8
-                do i=1,ncol
-                   if (vlc_dry(i,pver,jvlc) /= 0._r8) then
-                      dep_trb(i)=sflx(i)*vlc_trb(i,jvlc)/vlc_dry(i,pver,jvlc)
-                      dep_grv(i)=sflx(i)*vlc_grv(i,pver,jvlc)/vlc_dry(i,pver,jvlc)
+                do icol=1,ncol
+                   if (vlc_dry(icol,pver,jvlc) /= 0._r8) then
+                      dep_trb(icol)=sflx(icol)*vlc_trb(icol,jvlc)/vlc_dry(icol,pver,jvlc)
+                      dep_grv(icol)=sflx(icol)*vlc_grv(icol,pver,jvlc)/vlc_dry(icol,pver,jvlc)
                    endif
                 enddo
 
-                call outfld( trim(cnst_name(mm))//'DDF', sflx(:ncol), ncol, lchnk)
-                call outfld( trim(cnst_name(mm))//'TBF', dep_trb(:ncol), ncol, lchnk )
-                call outfld( trim(cnst_name(mm))//'GVF', dep_grv(:ncol), ncol, lchnk )
-                call outfld( trim(cnst_name(mm))//'DTQ', ptend%q(:ncol,:,mm), ncol, lchnk)
-                aerdepdryis(:ncol,mm) = sflx(:ncol)
+                call outfld( trim(cnst_name(itrac))//'DDF', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(cnst_name(itrac))//'TBF', dep_trb(:ncol), ncol, lchnk )
+                call outfld( trim(cnst_name(itrac))//'GVF', dep_grv(:ncol), ncol, lchnk )
+                call outfld( trim(cnst_name(itrac))//'DTQ', ptend%q(:ncol,:,itrac), ncol, lchnk)
+                aerdepdryis(:ncol,itrac) = sflx(:ncol)
 
              else  ! lphase == 2
 
                 !Pick up the cloud tracers (oslo)
-                fldcw => qqcw_get_field(pbuf, mm)
+                fldcw => qqcw_get_field(pbuf, itrac)
                 if( .not. associated(fldcw))then
                    cycle
                 end if
@@ -468,25 +478,25 @@ contains
                 ! apportion dry deposition into turb and gravitational settling for tapes
                 dep_trb = 0._r8
                 dep_grv = 0._r8
-                do i=1,ncol
-                   if (vlc_dry(i,pver,jvlc) /= 0._r8) then
-                      dep_trb(i)=sflx(i)*vlc_trb(i,jvlc)/vlc_dry(i,pver,jvlc)
-                      dep_grv(i)=sflx(i)*vlc_grv(i,pver,jvlc)/vlc_dry(i,pver,jvlc)
+                do icol=1,ncol
+                   if (vlc_dry(icol,pver,jvlc) /= 0._r8) then
+                      dep_trb(icol)=sflx(icol)*vlc_trb(icol,jvlc)/vlc_dry(icol,pver,jvlc)
+                      dep_grv(icol)=sflx(icol)*vlc_grv(icol,pver,jvlc)/vlc_dry(icol,pver,jvlc)
                    end if
                 enddo
 
                 fldcw(1:ncol,:) = fldcw(1:ncol,:) + dqdt_tmp(1:ncol,:) * dt
 
-                call outfld( trim(getCloudTracerName(mm))//'DDF', sflx(:ncol), ncol, lchnk)
-                call outfld( trim(getCloudTracerName(mm))//'TBF', dep_trb(:ncol), ncol, lchnk )
-                call outfld( trim(getCloudTracerName(mm))//'GVF', dep_grv(:ncol), ncol, lchnk )
-                aerdepdrycw(:ncol,mm) = sflx(:ncol)
+                call outfld( trim(getCloudTracerName(itrac))//'DDF', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(getCloudTracerName(itrac))//'TBF', dep_trb(:ncol), ncol, lchnk )
+                call outfld( trim(getCloudTracerName(itrac))//'GVF', dep_grv(:ncol), ncol, lchnk )
+                aerdepdrycw(:ncol,itrac) = sflx(:ncol)
 
              endif
 
-          enddo   ! lspec = 0, nspec_amode(m)+1
+          enddo   ! lspec = 0, nspec_amode(imode)+1
        enddo   ! lphase = 1, 2
-    enddo   ! m = 1, ntot_amode
+    enddo   ! imode = 1, ntot_amode
 
     ! if the user has specified prescribed aerosol dep fluxes then
     ! do not set cam_out dep fluxes according to the prognostic aerosols
@@ -517,8 +527,8 @@ contains
     type(physics_ptend), intent(out)   :: ptend            ! indivdual parameterization tendencies
 
     ! Local variables
-    integer  :: m                             ! tracer index
-    integer  :: i,k,mm
+    integer  :: imode                             ! tracer index
+    integer  :: icol,ilev,itrac
     real(r8) :: iscavt(pcols, pver)
     real(r8) :: icscavt(pcols, pver)
     real(r8) :: isscavt(pcols, pver)
@@ -569,14 +579,14 @@ contains
     call pbuf_get_field(pbuf, fracis_idx, fracis, start=(/1,1,1/), kount=(/pcols, pver, pcnst/) )
 
     prec(:ncol)=0._r8
-    do k=1,pver
+    do ilev=1,pver
        where (prec(:ncol) >= 1.e-7_r8)
-          isprx(:ncol,k) = .true.
+          isprx(:ncol,ilev) = .true.
        elsewhere
-          isprx(:ncol,k) = .false.
+          isprx(:ncol,ilev) = .false.
        endwhere
        prec(:ncol) = prec(:ncol) + &
-            (dep_inputs%prain(:ncol,k) + dep_inputs%cmfdqr(:ncol,k) - dep_inputs%evapr(:ncol,k)) * pdel(:ncol,k)/gravit
+            (dep_inputs%prain(:ncol,ilev) + dep_inputs%cmfdqr(:ncol,ilev) - dep_inputs%evapr(:ncol,ilev)) * pdel(:ncol,ilev)/gravit
     end do
 
 
@@ -589,7 +599,7 @@ contains
 
     scavcoefnv(:,:,0) = 0.0_r8   ! below-cloud scavcoef = 0.0 for cloud-borne species
 
-    do m = 0, nmodes  ! main loop over aerosol modes
+    do imode = 0, nmodes  ! main loop over aerosol modes
 
        do lphase = 1, 2   ! loop over interstitial (1) and cloud-borne (2) forms
 
@@ -651,37 +661,37 @@ contains
              sol_factic = 0.0_r8
           endif
 
-          do lspec = 1,getNumberOfTracersInMode(m)   ! loop over number + chem constituents + water
-             mm = getTracerIndex(m,lspec,.false.)
-             if(is_done(mm,lphase)) then
+          do lspec = 1,num_tracers_in_mode(imode)   ! loop over number + chem constituents + water
+             itrac = tracer_index(imode,lspec)
+             if(is_done(itrac,lphase)) then
                 cycle
              endif
-             is_done(mm,lphase)=.true.
+             is_done(itrac,lphase)=.true.
 
              if (lphase == 1) then
                 jnv = 2
                 !Set correct below cloud scaveing coefficients
                 !Hard-coded values per mode in NorESM
-                if(is_process_mode(mm,.FALSE.))then
-                   scavcoefnv(:,:,jnv) = belowCloudScavengingCoefficientProcessModes(processModeMap(mm))
+                if(is_process_mode(itrac,.FALSE.))then
+                   scavcoefnv(:,:,jnv) = belowCloudScavengingCoefficientProcessModes(processModeMap(itrac))
                 else
-                   scavcoefnv(:,:,jnv) = belowCloudScavengingCoefficient(m)
+                   scavcoefnv(:,:,jnv) = belowCloudScavengingCoefficient(imode)
                 end if
              else
                 jnv = 0  !==> below cloud scavenging coefficients are zero (see above)
              endif
 
-             if ((lphase == 1) .and. (lspec <= getNumberOfTracersInMode(m))) then
-                ptend%lq(mm) = .TRUE.
+             if ((lphase == 1) .and. (lspec <= num_tracers_in_mode(imode))) then
+                ptend%lq(itrac) = .TRUE.
                 dqdt_tmp(:,:) = 0.0_r8
                 ! q_tmp reflects changes from modal_aero_calcsize and is the "most current" q
-                q_tmp(1:ncol,:) = q(1:ncol,:,mm) + ptend%q(1:ncol,:,mm)*dt
+                q_tmp(1:ncol,:) = q(1:ncol,:,itrac) + ptend%q(1:ncol,:,itrac)*dt
                 if(convproc_do_aer) then
                    !Feed in the saved cloudborne mixing ratios from phase 2
-                   qqcw_in(:,:) = qqcw_sav(:,:,mm)
+                   qqcw_in(:,:) = qqcw_sav(:,:,itrac)
                    !Not implemented for oslo aerosols
                 else
-                   fldcw => qqcw_get_field(pbuf, mm)
+                   fldcw => qqcw_get_field(pbuf, itrac)
                    if(.not. associated(fldcw))then
                       qqcw_in(:,:) = zeroAerosolConcentration(:,:)
                    else
@@ -694,7 +704,7 @@ contains
                      dep_inputs%evapc, dep_inputs%conicw, dep_inputs%prain, dep_inputs%qme, &
                      dep_inputs%evapr, dep_inputs%totcond, q_tmp, dt, &
                      dqdt_tmp, iscavt, dep_inputs%cldvcu, dep_inputs%cldvst, &
-                     dlf, fracis(:,:,mm), sol_factb, ncol, &
+                     dlf, fracis(:,:,itrac), sol_factb, ncol, &
                      scavcoefnv(:,:,jnv), &
                      is_strat_cloudborne=.false., &
                      qqcw=qqcw_in(:,:),  &
@@ -703,56 +713,56 @@ contains
                      convproc_do_aer=.false., rcscavt=rcscavt, rsscavt=rsscavt,  &
                      sol_facti_in=sol_facti, sol_factic_in=sol_factic )
 
-                ptend%q(1:ncol,:,mm) = ptend%q(1:ncol,:,mm) + dqdt_tmp(1:ncol,:)
+                ptend%q(1:ncol,:,itrac) = ptend%q(1:ncol,:,itrac) + dqdt_tmp(1:ncol,:)
 
-                call outfld(trim(cnst_name(mm))//'WET', dqdt_tmp(:ncol,:), ncol, lchnk)
-                call outfld(trim(cnst_name(mm))//'SIC', icscavt(:ncol,:),  ncol, lchnk)
-                call outfld(trim(cnst_name(mm))//'SIS', isscavt(:ncol,:),  ncol, lchnk)
-                call outfld(trim(cnst_name(mm))//'SBC', bcscavt(:ncol,:),  ncol, lchnk)
-                call outfld(trim(cnst_name(mm))//'SBS', bsscavt(:ncol,:),  ncol, lchnk)
-
-                sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+dqdt_tmp(i,k)*pdel(i,k)/gravit
-                   enddo
-                enddo
-                if (.not. convproc_do_aer) call outfld( trim(cnst_name(mm))//'SFWET', sflx(:ncol), ncol, lchnk)
-                aerdepwetis(:ncol,mm) = sflx(:ncol)
+                call outfld(trim(cnst_name(itrac))//'WET', dqdt_tmp(:ncol,:), ncol, lchnk)
+                call outfld(trim(cnst_name(itrac))//'SIC', icscavt(:ncol,:),  ncol, lchnk)
+                call outfld(trim(cnst_name(itrac))//'SIS', isscavt(:ncol,:),  ncol, lchnk)
+                call outfld(trim(cnst_name(itrac))//'SBC', bcscavt(:ncol,:),  ncol, lchnk)
+                call outfld(trim(cnst_name(itrac))//'SBS', bsscavt(:ncol,:),  ncol, lchnk)
 
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+icscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+dqdt_tmp(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                if (.not. convproc_do_aer) call outfld( trim(cnst_name(mm))//'SFSIC', sflx(:ncol), ncol, lchnk)
+                if (.not. convproc_do_aer) call outfld( trim(cnst_name(itrac))//'SFWET', sflx(:ncol), ncol, lchnk)
+                aerdepwetis(:ncol,itrac) = sflx(:ncol)
+
+                sflx(:)=0._r8
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+icscavt(icol,ilev)*pdel(icol,ilev)/gravit
+                   enddo
+                enddo
+                if (.not. convproc_do_aer) call outfld( trim(cnst_name(itrac))//'SFSIC', sflx(:ncol), ncol, lchnk)
                 if (convproc_do_aer) sflxic = sflx
 
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+isscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+isscavt(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(cnst_name(mm))//'SFSIS', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(cnst_name(itrac))//'SFSIS', sflx(:ncol), ncol, lchnk)
 
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+bcscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+bcscavt(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(cnst_name(mm))//'SFSBC', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(cnst_name(itrac))//'SFSBC', sflx(:ncol), ncol, lchnk)
                 if (convproc_do_aer)sflxbc = sflx
 
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+bsscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+bsscavt(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(cnst_name(mm))//'SFSBS', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(cnst_name(itrac))//'SFSBS', sflx(:ncol), ncol, lchnk)
 
              else   ! lphase == 2
 
@@ -760,14 +770,14 @@ contains
                 qqcw_tmp(:,:) = 0.0_r8    ! rce 2010/05/01
 
                 if (convproc_do_aer) then
-                   fldcw => qqcw_get_field(pbuf,mm)
+                   fldcw => qqcw_get_field(pbuf,itrac)
                    if (.not. associated(fldcw)) then
                       call endrun('attempt to access undefined qqcw_sav for fld_cw')
                    end if
-                   qqcw_sav(1:ncol,:,mm) = fldcw(1:ncol,:)
+                   qqcw_sav(1:ncol,:,itrac) = fldcw(1:ncol,:)
                    !This option yet not implemented for OSLO_AERO
                 else
-                   fldcw => qqcw_get_field(pbuf, mm)
+                   fldcw => qqcw_get_field(pbuf, itrac)
                    if(.not. associated(fldcw))then
                       cycle
                    end if
@@ -788,48 +798,48 @@ contains
                 fldcw(1:ncol,:) = fldcw(1:ncol,:) + dqdt_tmp(1:ncol,:) * dt
 
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+dqdt_tmp(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+dqdt_tmp(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(getCloudTracerName(mm))//'SFWET', sflx(:ncol), ncol, lchnk)
-                aerdepwetcw(:ncol,mm) = sflx(:ncol)
+                call outfld( trim(getCloudTracerName(itrac))//'SFWET', sflx(:ncol), ncol, lchnk)
+                aerdepwetcw(:ncol,itrac) = sflx(:ncol)
 
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+icscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+icscavt(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(getCloudTracerName(mm))//'SFSIC', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(getCloudTracerName(itrac))//'SFSIC', sflx(:ncol), ncol, lchnk)
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+isscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+isscavt(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(getCloudTracerName(mm))//'SFSIS', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(getCloudTracerName(itrac))//'SFSIS', sflx(:ncol), ncol, lchnk)
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+bcscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+bcscavt(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(getCloudTracerName(mm))//'SFSBC', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(getCloudTracerName(itrac))//'SFSBC', sflx(:ncol), ncol, lchnk)
                 sflx(:)=0._r8
-                do k=1,pver
-                   do i=1,ncol
-                      sflx(i)=sflx(i)+bsscavt(i,k)*pdel(i,k)/gravit
+                do ilev=1,pver
+                   do icol=1,ncol
+                      sflx(icol)=sflx(icol)+bsscavt(icol,ilev)*pdel(icol,ilev)/gravit
                    enddo
                 enddo
-                call outfld( trim(getCloudTracerName(mm))//'SFSBS', sflx(:ncol), ncol, lchnk)
+                call outfld( trim(getCloudTracerName(itrac))//'SFSBS', sflx(:ncol), ncol, lchnk)
 
              endif
 
-          enddo   ! lspec = 0, nspec_amode(m)+1
+          enddo   ! lspec = 0, nspec_amode(imode)+1
        enddo   ! lphase = 1, 2
-    enddo   ! m = 1, ntot_amode
+    enddo   ! imode = 1, ntot_amode
 
     ! if the user has specified prescribed aerosol dep fluxes then
     ! do not set cam_out dep fluxes according to the prognostic aerosols
@@ -871,7 +881,7 @@ contains
 
     !------------------------------------------------------------------------
     ! Local Variables
-    integer  :: m,i,k,ix                  !indices
+    integer  :: imode,icol,ilev,ix                  !indices
     real(r8) :: rho                       !atm density (kg/m**3)
     real(r8) :: vsc_dyn_atm(pcols,pver)   ![kg m-1 s-1] Dynamic viscosity of air
     real(r8) :: vsc_knm_atm(pcols,pver)   ![m2 s-1] Kinematic viscosity of atmosphere
@@ -890,7 +900,7 @@ contains
     real(r8) :: lnsig                     ! ln(sig_part)
     real(r8) :: dispersion                ! accounts for influence of size dist dispersion on bulk settling velocity
     ! assuming radius_part is number mode radius * exp(1.5 ln(sigma))
-    integer  :: lt
+    integer  :: ltype
     real(r8) :: lnd_frc
     real(r8) :: wrk1, wrk2, wrk3
 
@@ -934,79 +944,79 @@ contains
 
     !------------------------------------------------------------------------
 
-    if(top_lev.gt.1) then
+    if(top_lev>1) then
        vlc_grv(:ncol,:top_lev-1) = 0._r8
        vlc_dry(:ncol,:top_lev-1) = 0._r8
     endif
 
-    do k=top_lev,pver
-       do i=1,ncol
+    do ilev=top_lev,pver
+       do icol=1,ncol
 
-          lnsig = log(sig_part(i,k))
+          lnsig = log(sig_part(icol,ilev))
           ! use a maximum radius of 50 microns when calculating deposition velocity
-          radius_moment(i,k) = min(50.0e-6_r8,radius_part(i,k))*   &
+          radius_moment(icol,ilev) = min(50.0e-6_r8,radius_part(icol,ilev))*   &
                exp((float(moment)-1.5_r8)*lnsig*lnsig)
           dispersion = exp(2._r8*lnsig*lnsig)
 
-          rho=pmid(i,k)/rair/t(i,k)
+          rho=pmid(icol,ilev)/rair/t(icol,ilev)
 
           ! Quasi-laminar layer resistance: call rss_lmn_get
           ! Size-independent thermokinetic properties
-          vsc_dyn_atm(i,k) = 1.72e-5_r8 * ((t(i,k)/273.0_r8)**1.5_r8) * 393.0_r8 / &
-               (t(i,k)+120.0_r8)      ![kg m-1 s-1] RoY94 p. 102
-          mfp_atm(i,k) = 2.0_r8 * vsc_dyn_atm(i,k) / &   ![m] SeP97 p. 455
-               (pmid(i,k)*sqrt(8.0_r8/(pi*rair*t(i,k))))
-          vsc_knm_atm(i,k) = vsc_dyn_atm(i,k) / rho ![m2 s-1] Kinematic viscosity of air
+          vsc_dyn_atm(icol,ilev) = 1.72e-5_r8 * ((t(icol,ilev)/273.0_r8)**1.5_r8) * 393.0_r8 / &
+               (t(icol,ilev)+120.0_r8)      ![kg m-1 s-1] RoY94 p. 102
+          mfp_atm(icol,ilev) = 2.0_r8 * vsc_dyn_atm(icol,ilev) / &   ![m] SeP97 p. 455
+               (pmid(icol,ilev)*sqrt(8.0_r8/(pi*rair*t(icol,ilev))))
+          vsc_knm_atm(icol,ilev) = vsc_dyn_atm(icol,ilev) / rho ![m2 s-1] Kinematic viscosity of air
 
-          slp_crc(i,k) = 1.0_r8 + mfp_atm(i,k) * &
-               (1.257_r8+0.4_r8*exp(-1.1_r8*radius_moment(i,k)/(mfp_atm(i,k)))) / &
-               radius_moment(i,k)   ![frc] Slip correction factor SeP97 p. 464
-          vlc_grv(i,k) = (4.0_r8/18.0_r8) * radius_moment(i,k)*radius_moment(i,k)*density_part(i,k)* &
-               gravit*slp_crc(i,k) / vsc_dyn_atm(i,k) ![m s-1] Stokes' settling velocity SeP97 p. 466
-          vlc_grv(i,k) = vlc_grv(i,k) * dispersion
+          slp_crc(icol,ilev) = 1.0_r8 + mfp_atm(icol,ilev) * &
+               (1.257_r8+0.4_r8*exp(-1.1_r8*radius_moment(icol,ilev)/(mfp_atm(icol,ilev)))) / &
+               radius_moment(icol,ilev)   ![frc] Slip correction factor SeP97 p. 464
+          vlc_grv(icol,ilev) = (4.0_r8/18.0_r8) * radius_moment(icol,ilev)*radius_moment(icol,ilev)*density_part(icol,ilev)* &
+               gravit*slp_crc(icol,ilev) / vsc_dyn_atm(icol,ilev) ![m s-1] Stokes' settling velocity SeP97 p. 466
+          vlc_grv(icol,ilev) = vlc_grv(icol,ilev) * dispersion
 
-          vlc_dry(i,k)=vlc_grv(i,k)
+          vlc_dry(icol,ilev)=vlc_grv(icol,ilev)
        enddo
     enddo
-    k=pver  ! only look at bottom level for next part
-    do i=1,ncol
-       dff_aer = boltz * t(i,k) * slp_crc(i,k) / &    ![m2 s-1]
-            (6.0_r8*pi*vsc_dyn_atm(i,k)*radius_moment(i,k)) !SeP97 p.474
-       shm_nbr = vsc_knm_atm(i,k) / dff_aer                        ![frc] SeP97 p.972
+    ilev=pver  ! only look at bottom level for next part
+    do icol=1,ncol
+       dff_aer = boltz * t(icol,ilev) * slp_crc(icol,ilev) / &    ![m2 s-1]
+            (6.0_r8*pi*vsc_dyn_atm(icol,ilev)*radius_moment(icol,ilev)) !SeP97 p.474
+       shm_nbr = vsc_knm_atm(icol,ilev) / dff_aer                        ![frc] SeP97 p.972
 
        wrk2 = 0._r8
        wrk3 = 0._r8
-       do lt = 1,n_land_type
-          lnd_frc = fraction_landuse(i,lt,lchnk)
+       do ltype = 1,n_land_type
+          lnd_frc = fraction_landuse(icol,ltype,lchnk)
           if ( lnd_frc /= 0._r8 ) then
-             brownian = shm_nbr**(-gamma(lt))
-             if (radius_collector(lt) > 0.0_r8) then
+             brownian = shm_nbr**(-gamma(ltype))
+             if (radius_collector(ltype) > 0.0_r8) then
                 !       vegetated surface
-                stk_nbr = vlc_grv(i,k) * fv(i) / (gravit*radius_collector(lt))
-                interception = 2.0_r8*(radius_moment(i,k)/radius_collector(lt))**2.0_r8
+                stk_nbr = vlc_grv(icol,ilev) * fv(icol) / (gravit*radius_collector(ltype))
+                interception = 2.0_r8*(radius_moment(icol,ilev)/radius_collector(ltype))**2.0_r8
              else
                 !       non-vegetated surface
-                stk_nbr = vlc_grv(i,k) * fv(i) * fv(i) / (gravit*vsc_knm_atm(i,k))  ![frc] SeP97 p.965
+                stk_nbr = vlc_grv(icol,ilev) * fv(icol) * fv(icol) / (gravit*vsc_knm_atm(icol,ilev))  ![frc] SeP97 p.965
                 interception = 0.0_r8
              endif
-             impaction = (stk_nbr/(alpha(lt)+stk_nbr))**2.0_r8
+             impaction = (stk_nbr/(alpha(ltype)+stk_nbr))**2.0_r8
 
-             if (iwet(lt) > 0) then
+             if (iwet(ltype) > 0) then
                 stickfrac = 1.0_r8
              else
                 stickfrac = exp(-sqrt(stk_nbr))
                 if (stickfrac < 1.0e-10_r8) stickfrac = 1.0e-10_r8
              endif
-             rss_lmn = 1.0_r8 / (3.0_r8 * fv(i) * stickfrac * (brownian+interception+impaction))
-             rss_trb = ram1(i) + rss_lmn + ram1(i)*rss_lmn*vlc_grv(i,k)
+             rss_lmn = 1.0_r8 / (3.0_r8 * fv(icol) * stickfrac * (brownian+interception+impaction))
+             rss_trb = ram1(icol) + rss_lmn + ram1(icol)*rss_lmn*vlc_grv(icol,ilev)
 
              wrk1 = 1.0_r8 / rss_trb
              wrk2 = wrk2 + lnd_frc*( wrk1 )
-             wrk3 = wrk3 + lnd_frc*( wrk1 + vlc_grv(i,k) )
+             wrk3 = wrk3 + lnd_frc*( wrk1 + vlc_grv(icol,ilev) )
           endif
        enddo  ! n_land_type
-       vlc_trb(i) = wrk2
-       vlc_dry(i,k) = wrk3
+       vlc_trb(icol) = wrk2
+       vlc_dry(icol,ilev) = wrk3
     enddo !ncol
 
   end subroutine oslo_aero_depvel_part
@@ -1029,7 +1039,7 @@ contains
     real(r8), intent(out) :: dstwet4(:)
 
     ! Local variables:
-    integer :: i
+    integer :: icol
     !----------------------------------------------------------------------------
 
     bcphiwet(:) = 0._r8
@@ -1043,28 +1053,28 @@ contains
     !  note: wet deposition fluxes are negative into surface,
     !        dry deposition fluxes are positive into surface.
     !        srf models want positive definite fluxes.
-    do i = 1,ncol
+    do icol = 1,ncol
        ! black carbon fluxes
        ! note: bc_ax is assumed not to exist in cloud water
-       bcphiwet(i) = -(aerdepwetis(i,l_bc_ni)+aerdepwetcw(i,l_bc_ni)+ &
-                       aerdepwetis(i,l_bc_ai)+aerdepwetcw(i,l_bc_ai)+ &
-                       aerdepwetis(i,l_bc_a )+aerdepwetcw(i,l_bc_a )+ &
-                       aerdepwetis(i,l_bc_ac)+aerdepwetcw(i,l_bc_ac)+ &
-                       aerdepwetis(i,l_bc_n )+aerdepwetcw(i,l_bc_n )+ &
-                       aerdepwetis(i,l_bc_ax))
+       bcphiwet(icol) = -(aerdepwetis(icol,l_bc_ni)+aerdepwetcw(icol,l_bc_ni)+ &
+                       aerdepwetis(icol,l_bc_ai)+aerdepwetcw(icol,l_bc_ai)+ &
+                       aerdepwetis(icol,l_bc_a )+aerdepwetcw(icol,l_bc_a )+ &
+                       aerdepwetis(icol,l_bc_ac)+aerdepwetcw(icol,l_bc_ac)+ &
+                       aerdepwetis(icol,l_bc_n )+aerdepwetcw(icol,l_bc_n )+ &
+                       aerdepwetis(icol,l_bc_ax))
 
        ! organic carbon fluxes
-       ocphiwet(i) = -(aerdepwetis(i,l_om_ni)+aerdepwetcw(i,l_om_ni)+ &
-                       aerdepwetis(i,l_om_ai)+aerdepwetcw(i,l_om_ai)+ &
-                       aerdepwetis(i,l_om_ac)+aerdepwetcw(i,l_om_ac))
+       ocphiwet(icol) = -(aerdepwetis(icol,l_om_ni)+aerdepwetcw(icol,l_om_ni)+ &
+                       aerdepwetis(icol,l_om_ai)+aerdepwetcw(icol,l_om_ai)+ &
+                       aerdepwetis(icol,l_om_ac)+aerdepwetcw(icol,l_om_ac))
 
        ! dust fluxes
        ! bulk bin1 (fine) dust deposition equals accumulation mode deposition:
        !  A. Simple: Assign all coarse-mode dust to bulk size bin 3:
-       dstwet1(i) = -(aerdepwetis(i,l_dst_a2)+aerdepwetcw(i,l_dst_a2))
-       dstwet2(i) = 0._r8
-       dstwet3(i) = -(aerdepwetis(i,l_dst_a3)+aerdepwetcw(i,l_dst_a3))
-       dstwet4(i) = 0._r8
+       dstwet1(icol) = -(aerdepwetis(icol,l_dst_a2)+aerdepwetcw(icol,l_dst_a2))
+       dstwet2(icol) = 0._r8
+       dstwet3(icol) = -(aerdepwetis(icol,l_dst_a3)+aerdepwetcw(icol,l_dst_a3))
+       dstwet4(icol) = 0._r8
 
     enddo
 
@@ -1090,7 +1100,7 @@ contains
     real(r8), intent(out) :: dstdry4(:)
 
     ! Local variables:
-    integer :: i
+    integer :: icol
     !----------------------------------------------------------------------------
 
     bcphidry(:) = 0._r8
@@ -1105,31 +1115,31 @@ contains
     ! wet deposition fluxes are negative into surface,
     ! dry deposition fluxes are positive into surface.
     ! srf models want positive definite fluxes.
-    do i = 1, ncol
+    do icol = 1, ncol
        ! black carbon fluxes
-       bcphidry(i) = aerdepdryis(i,l_bc_ni)+aerdepdrycw(i,l_bc_ni)+ &
-                     aerdepdryis(i,l_bc_ai)+aerdepdrycw(i,l_bc_ai)+ &
-                     aerdepdryis(i,l_bc_a )+aerdepdrycw(i,l_bc_a )+ &
-                     aerdepdryis(i,l_bc_ac)+aerdepdrycw(i,l_bc_ac)
-       bcphodry(i) = aerdepdryis(i,l_bc_n )+aerdepdrycw(i,l_bc_n )+ &
-                     aerdepdryis(i,l_bc_ax)+aerdepdrycw(i,l_bc_ax)
+       bcphidry(icol) = aerdepdryis(icol,l_bc_ni)+aerdepdrycw(icol,l_bc_ni)+ &
+                     aerdepdryis(icol,l_bc_ai)+aerdepdrycw(icol,l_bc_ai)+ &
+                     aerdepdryis(icol,l_bc_a )+aerdepdrycw(icol,l_bc_a )+ &
+                     aerdepdryis(icol,l_bc_ac)+aerdepdrycw(icol,l_bc_ac)
+       bcphodry(icol) = aerdepdryis(icol,l_bc_n )+aerdepdrycw(icol,l_bc_n )+ &
+                     aerdepdryis(icol,l_bc_ax)+aerdepdrycw(icol,l_bc_ax)
 
        ! organic carbon fluxes
        ! djlo : skipped the bc_a contribution (was about om !)
-       ! ocphidry(i) = aerdepdryis(i,l_om_ni)+aerdepdrycw(i,l_om_ni)+ &
-       !               aerdepdryis(i,l_om_ai)+aerdepdrycw(i,l_om_ai)+ &
-       !               aerdepdryis(i,l_om_ac)+aerdepdrycw(i,l_om_ac)
-       ocphidry(i) = 0._r8
-       ocphodry(i) = 0._r8
+       ! ocphidry(icol) = aerdepdryis(icol,l_om_ni)+aerdepdrycw(icol,l_om_ni)+ &
+       !               aerdepdryis(icol,l_om_ai)+aerdepdrycw(icol,l_om_ai)+ &
+       !               aerdepdryis(icol,l_om_ac)+aerdepdrycw(icol,l_om_ac)
+       ocphidry(icol) = 0._r8
+       ocphodry(icol) = 0._r8
 
        ! dust fluxes
        ! bulk bin1 (fine) : dust deposition equals accumulation mode deposition:
        ! bulk bin 3       : A. Simple: Assign all coarse-mode dust to bulk size bin 3:
        ! bulk bins 2-4    : two options for partitioning deposition into bins 2-4:
-       dstdry1(i) = aerdepdryis(i,l_dst_a2)+aerdepdrycw(i,l_dst_a2)
-       dstdry2(i) = 0._r8
-       dstdry3(i) = aerdepdryis(i,l_dst_a3)+aerdepdrycw(i,l_dst_a3)
-       dstdry4(i) = 0._r8
+       dstdry1(icol) = aerdepdryis(icol,l_dst_a2)+aerdepdrycw(icol,l_dst_a2)
+       dstdry2(icol) = 0._r8
+       dstdry3(icol) = aerdepdryis(icol,l_dst_a3)+aerdepdrycw(icol,l_dst_a3)
+       dstdry4(icol) = 0._r8
     enddo
 
   end subroutine oslo_set_srf_drydep
@@ -1160,45 +1170,45 @@ contains
     real(r8), parameter :: zzsice = 0.0400_r8   ! Sea ice aerodynamic roughness length
     real(r8), parameter :: xkar   = 0.4_r8      ! Von Karman constant
     real(r8) :: z,psi,psi0,nu,nu0,temp,ram
-    integer  :: i
+    integer  :: icol
 
-    do i = 1,ncol
-       z=pdel(i)*rair*t(i)/pmid(i)/gravit/2.0_r8   !use half the layer height like Ganzefeld and Lelieveld, 1995
-       if(obklen(i).eq.0) then
+    do icol = 1,ncol
+       z=pdel(icol)*rair*t(icol)/pmid(icol)/gravit/2.0_r8   !use half the layer height like Ganzefeld and Lelieveld, 1995
+       if(obklen(icol) == 0) then
           psi=0._r8
           psi0=0._r8
        else
-          psi=min(max(z/obklen(i),-1.0_r8),1.0_r8)
-          psi0=min(max(zzocen/obklen(i),-1.0_r8),1.0_r8)
+          psi=min(max(z/obklen(icol),-1.0_r8),1.0_r8)
+          psi0=min(max(zzocen/obklen(icol),-1.0_r8),1.0_r8)
        endif
        temp=z/zzocen
-       if(icefrac(i) > 0.5_r8) then
-          if(obklen(i).gt.0) then
-             psi0=min(max(zzsice/obklen(i),-1.0_r8),1.0_r8)
+       if(icefrac(icol) > 0.5_r8) then
+          if(obklen(icol)>0) then
+             psi0=min(max(zzsice/obklen(icol),-1.0_r8),1.0_r8)
           else
              psi0=0.0_r8
           endif
           temp=z/zzsice
        endif
        if(psi> 0._r8) then
-          ram=1/xkar/ustar(i)*(log(temp)+4.7_r8*(psi-psi0))
+          ram=1/xkar/ustar(icol)*(log(temp)+4.7_r8*(psi-psi0))
        else
           nu=(1.00_r8-15.000_r8*psi)**(.25_r8)
           nu0=(1.000_r8-15.000_r8*psi0)**(.25_r8)
-          if(ustar(i).ne.0._r8) then
-             ram=1/xkar/ustar(i)*(log(temp) &
+          if(ustar(icol).ne.0._r8) then
+             ram=1/xkar/ustar(icol)*(log(temp) &
                   +log(((nu0**2+1.00_r8)*(nu0+1.0_r8)**2)/((nu**2+1.0_r8)*(nu+1.00_r8)**2)) &
                   +2.0_r8*(atan(nu)-atan(nu0)))
           else
              ram=0._r8
           endif
        endif
-       if(landfrac(i) < 0.000000001_r8) then
-          fv(i)=ustar(i)
-          ram1(i)=ram
+       if(landfrac(icol) < 0.000000001_r8) then
+          fv(icol)=ustar(icol)
+          ram1(icol)=ram
        else
-          fv(i)=fvin(i)
-          ram1(i)=ram1in(i)
+          fv(icol)=fvin(icol)
+          ram1(icol)=ram1in(icol)
        endif
     enddo
 
@@ -1330,7 +1340,7 @@ contains
     real(r8), intent(out) :: rain(pcols,pver)     ! mixing ratio of rain (kg/kg)
 
     ! Local variables:
-    integer  i, k
+    integer  icol, ilev
     real(r8) convfw            ! used in fallspeed calculation; taken from findmcnew
     real(r8) sumppr(pcols)     ! precipitation rate (kg/m2-s)
     real(r8) sumpppr(pcols)    ! sum of positive precips from above
@@ -1352,54 +1362,54 @@ contains
     ! -----------------------------------------------------------------------
 
     convfw = 1.94_r8*2.13_r8*sqrt(rhoh2o*gravit*2.7e-4_r8)
-    do i=1,ncol
-       sumppr(i) = 0._r8
-       cldv1(i) = 0._r8
-       sumpppr(i) = 1.e-36_r8
-       sumppr_cu(i)  = 0._r8
-       cldv1_cu(i)   = 0._r8
-       sumpppr_cu(i) = 1.e-36_r8
-       sumppr_st(i)  = 0._r8
-       cldv1_st(i)   = 0._r8
-       sumpppr_st(i) = 1.e-36_r8
+    do icol=1,ncol
+       sumppr(icol) = 0._r8
+       cldv1(icol) = 0._r8
+       sumpppr(icol) = 1.e-36_r8
+       sumppr_cu(icol)  = 0._r8
+       cldv1_cu(icol)   = 0._r8
+       sumpppr_cu(icol) = 1.e-36_r8
+       sumppr_st(icol)  = 0._r8
+       cldv1_st(icol)   = 0._r8
+       sumpppr_st(icol) = 1.e-36_r8
     end do
 
-    do k = 1,pver
-       do i = 1,ncol
-          cldv(i,k) = &
+    do ilev = 1,pver
+       do icol = 1,ncol
+          cldv(icol,ilev) = &
                max(min(1._r8, &
-               cldv1(i)/sumpppr(i) &
-               )*sumppr(i)/sumpppr(i), &
-               cldt(i,k) &
+               cldv1(icol)/sumpppr(icol) &
+               )*sumppr(icol)/sumpppr(icol), &
+               cldt(icol,ilev) &
                )
-          lprec = pdel(i,k)/gravit  * (prain(i,k)+cmfdqr(i,k)-evapr(i,k))
+          lprec = pdel(icol,ilev)/gravit  * (prain(icol,ilev)+cmfdqr(icol,ilev)-evapr(icol,ilev))
           lprecp = max(lprec,1.e-30_r8)
-          cldv1(i) = cldv1(i)  + cldt(i,k)*lprecp
-          sumppr(i) = sumppr(i) + lprec
-          sumpppr(i) = sumpppr(i) + lprecp
+          cldv1(icol) = cldv1(icol)  + cldt(icol,ilev)*lprecp
+          sumppr(icol) = sumppr(icol) + lprec
+          sumpppr(icol) = sumpppr(icol) + lprecp
 
           ! For convective precipitation volume at the top interface of each layer. Neglect the current layer.
-          cldvcu(i,k)   = max(min(1._r8,cldv1_cu(i)/sumpppr_cu(i))*(sumppr_cu(i)/sumpppr_cu(i)),0._r8)
-          lprec_cu      = (pdel(i,k)/gravit)*(cmfdqr(i,k)-evapc(i,k))
+          cldvcu(icol,ilev)   = max(min(1._r8,cldv1_cu(icol)/sumpppr_cu(icol))*(sumppr_cu(icol)/sumpppr_cu(icol)),0._r8)
+          lprec_cu      = (pdel(icol,ilev)/gravit)*(cmfdqr(icol,ilev)-evapc(icol,ilev))
           lprecp_cu     = max(lprec_cu,1.e-30_r8)
-          cldv1_cu(i)   = cldv1_cu(i) + cldcu(i,k)*lprecp_cu
-          sumppr_cu(i)  = sumppr_cu(i) + lprec_cu
-          sumpppr_cu(i) = sumpppr_cu(i) + lprecp_cu
+          cldv1_cu(icol)   = cldv1_cu(icol) + cldcu(icol,ilev)*lprecp_cu
+          sumppr_cu(icol)  = sumppr_cu(icol) + lprec_cu
+          sumpppr_cu(icol) = sumpppr_cu(icol) + lprecp_cu
 
           ! For stratiform precipitation volume at the top interface of each layer. Neglect the current layer.
-          cldvst(i,k)   = max(min(1._r8,cldv1_st(i)/sumpppr_st(i))*(sumppr_st(i)/sumpppr_st(i)),0._r8)
-          lprec_st      = (pdel(i,k)/gravit)*(prain(i,k)-evapr(i,k))
+          cldvst(icol,ilev)   = max(min(1._r8,cldv1_st(icol)/sumpppr_st(icol))*(sumppr_st(icol)/sumpppr_st(icol)),0._r8)
+          lprec_st      = (pdel(icol,ilev)/gravit)*(prain(icol,ilev)-evapr(icol,ilev))
           lprecp_st     = max(lprec_st,1.e-30_r8)
-          cldv1_st(i)   = cldv1_st(i) + cldst(i,k)*lprecp_st
-          sumppr_st(i)  = sumppr_st(i) + lprec_st
-          sumpppr_st(i) = sumpppr_st(i) + lprecp_st
+          cldv1_st(icol)   = cldv1_st(icol) + cldst(icol,ilev)*lprecp_st
+          sumppr_st(icol)  = sumppr_st(icol) + lprec_st
+          sumpppr_st(icol) = sumpppr_st(icol) + lprecp_st
 
-          rain(i,k) = 0._r8
-          if(t(i,k) .gt. tmelt) then
-             rho = pmid(i,k)/(rair*t(i,k))
+          rain(icol,ilev) = 0._r8
+          if(t(icol,ilev) > tmelt) then
+             rho = pmid(icol,ilev)/(rair*t(icol,ilev))
              vfall = convfw/sqrt(rho)
-             rain(i,k) = sumppr(i)/(rho*vfall)
-             if (rain(i,k).lt.1.e-14_r8) rain(i,k) = 0._r8
+             rain(icol,ilev) = sumppr(icol)/(rho*vfall)
+             if (rain(icol,ilev)<1.e-14_r8) rain(icol,ilev) = 0._r8
           endif
        end do
     end do
@@ -1480,7 +1490,7 @@ contains
     real(r8), intent(out), optional :: rsscavt(pcols,pver)     ! resuspension, stratiform
 
     ! local variables
-    integer  :: i, k
+    integer  :: icol, ilev
     logical  :: out_resuspension
     real(r8) :: omsm                 ! 1 - (a small number)
     real(r8) :: clds(pcols)          ! stratiform cloud fraction
@@ -1563,26 +1573,26 @@ contains
     scavab(:ncol)  = 0.0_r8
     scavabc(:ncol) = 0.0_r8
 
-    do k = 1, pver
-       do i = 1, ncol
+    do ilev = 1, pver
+       do icol = 1, ncol
 
-          clds(i)  = cldt(i,k) - cldc(i,k)
-          pdog(i)  = pdel(i,k)/gravit
-          rpdog(i) = gravit/pdel(i,k)
+          clds(icol)  = cldt(icol,ilev) - cldc(icol,ilev)
+          pdog(icol)  = pdel(icol,ilev)/gravit
+          rpdog(icol) = gravit/pdel(icol,ilev)
           rdeltat  = 1.0_r8/deltat
 
           ! ****************** Evaporation **************************
           ! calculate the fraction of strat precip from above
           !                 which evaporates within this layer
-          fracev(i) = evaps(i,k)*pdog(i) &
-               /max(1.e-12_r8,precabs(i))
+          fracev(icol) = evaps(icol,ilev)*pdog(icol) &
+               /max(1.e-12_r8,precabs(icol))
 
           ! trap to ensure reasonable ratio bounds
-          fracev(i) = max(0._r8,min(1._r8,fracev(i)))
+          fracev(icol) = max(0._r8,min(1._r8,fracev(icol)))
 
           ! Same as above but convective precipitation part
-          fracev_cu(i) = evapc(i,k)*pdog(i)/max(1.e-12_r8,precabc(i))
-          fracev_cu(i) = max(0._r8,min(1._r8,fracev_cu(i)))
+          fracev_cu(icol) = evapc(icol,ilev)*pdog(icol)/max(1.e-12_r8,precabc(icol))
+          fracev_cu(icol) = max(0._r8,min(1._r8,fracev_cu(icol)))
 
           ! ****************** Convection ***************************
           !
@@ -1602,9 +1612,9 @@ contains
           ! NB: In below formula for fracp conicw is a LWC/IWC that has already
           !     precipitated out, i.e., conicw does not contain precipitation
 
-          fracp(i) = cmfdqr(i,k)*deltat / &
-               max( 1.e-12_r8, cldc(i,k)*conicw(i,k) + (cmfdqr(i,k)+dlf(i,k))*deltat )
-          fracp(i) = max( min( 1._r8, fracp(i)), 0._r8 )
+          fracp(icol) = cmfdqr(icol,ilev)*deltat / &
+               max( 1.e-12_r8, cldc(icol,ilev)*conicw(icol,ilev) + (cmfdqr(icol,ilev)+dlf(icol,ilev))*deltat )
+          fracp(icol) = max( min( 1._r8, fracp(icol)), 0._r8 )
 
           if ( present(is_strat_cloudborne) ) then
 
@@ -1612,46 +1622,46 @@ contains
 
                 ! convective scavenging
 
-                conv_scav_ic(i) = 0._r8
+                conv_scav_ic(icol) = 0._r8
 
-                conv_scav_bc(i) = 0._r8
+                conv_scav_bc(icol) = 0._r8
 
                 ! stratiform scavenging
 
-                fracp(i) = precs(i,k)*deltat / &
-                     max( 1.e-12_r8, cwat(i,k) + precs(i,k)*deltat )
-                fracp(i) = max( 0._r8, min(1._r8, fracp(i)) )
-                st_scav_ic(i) = sol_facti *fracp(i)*tracer(i,k)*rdeltat
+                fracp(icol) = precs(icol,ilev)*deltat / &
+                     max( 1.e-12_r8, cwat(icol,ilev) + precs(icol,ilev)*deltat )
+                fracp(icol) = max( 0._r8, min(1._r8, fracp(icol)) )
+                st_scav_ic(icol) = sol_facti *fracp(icol)*tracer(icol,ilev)*rdeltat
 
-                st_scav_bc(i) = 0._r8
+                st_scav_bc(icol) = 0._r8
 
              else
 
                 ! convective scavenging
 
-                trac_qqcw(i) = min(qqcw(i,k), &
-                     tracer(i,k)*( clds(i)/max( 0.01_r8, 1._r8-clds(i) ) ) )
+                trac_qqcw(icol) = min(qqcw(icol,ilev), &
+                     tracer(icol,ilev)*( clds(icol)/max( 0.01_r8, 1._r8-clds(icol) ) ) )
 
-                tracer_incu(i) = f_act_conv(i,k)*(tracer(i,k) + trac_qqcw(i))
+                tracer_incu(icol) = f_act_conv(icol,ilev)*(tracer(icol,ilev) + trac_qqcw(icol))
 
-                conv_scav_ic(i) = sol_factic(i,k)*cldc(i,k)*fracp(i)*tracer_incu(i)*rdeltat
+                conv_scav_ic(icol) = sol_factic(icol,ilev)*cldc(icol,ilev)*fracp(icol)*tracer_incu(icol)*rdeltat
 
-                tracer_mean(i) = tracer(i,k)*(1._r8 - cldc(i,k)*f_act_conv(i,k)) - &
-                     cldc(i,k)*f_act_conv(i,k)*trac_qqcw(i)
-                tracer_mean(i) = max(0._r8,tracer_mean(i))
+                tracer_mean(icol) = tracer(icol,ilev)*(1._r8 - cldc(icol,ilev)*f_act_conv(icol,ilev)) - &
+                     cldc(icol,ilev)*f_act_conv(icol,ilev)*trac_qqcw(icol)
+                tracer_mean(icol) = max(0._r8,tracer_mean(icol))
 
-                odds(i) = precabc(i)/max(cldvcu(i,k),1.e-5_r8)*scavcoef(i,k)*deltat
-                odds(i) = max(min(1._r8,odds(i)),0._r8)
-                conv_scav_bc(i) = sol_factb *cldvcu(i,k)*odds(i)*tracer_mean(i)*rdeltat
+                odds(icol) = precabc(icol)/max(cldvcu(icol,ilev),1.e-5_r8)*scavcoef(icol,ilev)*deltat
+                odds(icol) = max(min(1._r8,odds(icol)),0._r8)
+                conv_scav_bc(icol) = sol_factb *cldvcu(icol,ilev)*odds(icol)*tracer_mean(icol)*rdeltat
 
 
                 ! stratiform scavenging
 
-                st_scav_ic(i) = 0._r8
+                st_scav_ic(icol) = 0._r8
 
-                odds(i) = precabs(i)/max(cldvst(i,k),1.e-5_r8)*scavcoef(i,k)*deltat
-                odds(i) = max(min(1._r8,odds(i)),0._r8)
-                st_scav_bc(i) = sol_factb *cldvst(i,k)*odds(i)*tracer_mean(i)*rdeltat
+                odds(icol) = precabs(icol)/max(cldvst(icol,ilev),1.e-5_r8)*scavcoef(icol,ilev)*deltat
+                odds(icol) = max(min(1._r8,odds(icol)),0._r8)
+                st_scav_bc(icol) = sol_factb *cldvst(icol,ilev)*odds(icol)*tracer_mean(icol)*rdeltat
 
              end if
 
@@ -1659,104 +1669,104 @@ contains
 
              ! convective scavenging
 
-             conv_scav_ic(i) = sol_factic(i,k)*cldc(i,k)*fracp(i)*tracer(i,k)*rdeltat
+             conv_scav_ic(icol) = sol_factic(icol,ilev)*cldc(icol,ilev)*fracp(icol)*tracer(icol,ilev)*rdeltat
 
-             odds(i) = precabc(i)/max(cldvcu(i,k), 1.e-5_r8)*scavcoef(i,k)*deltat
-             odds(i) = max( min(1._r8, odds(i)), 0._r8)
-             conv_scav_bc(i) = sol_factb*cldvcu(i,k)*odds(i)*tracer(i,k)*rdeltat
+             odds(icol) = precabc(icol)/max(cldvcu(icol,ilev), 1.e-5_r8)*scavcoef(icol,ilev)*deltat
+             odds(icol) = max( min(1._r8, odds(icol)), 0._r8)
+             conv_scav_bc(icol) = sol_factb*cldvcu(icol,ilev)*odds(icol)*tracer(icol,ilev)*rdeltat
 
              ! stratiform scavenging
 
              ! fracp is the fraction of cloud water converted to precip
              ! NB: In below formula for fracp cwat is a LWC/IWC that has already
-             !     precipitated out, i.e., cwat does not contain precipitation
-             fracp(i) = precs(i,k)*deltat / &
-                  max( 1.e-12_r8, cwat(i,k) + precs(i,k)*deltat )
-             fracp(i) = max( 0._r8, min( 1._r8, fracp(i) ) )
+             !     precipitated out, icol.e., cwat does not contain precipitation
+             fracp(icol) = precs(icol,ilev)*deltat / &
+                  max( 1.e-12_r8, cwat(icol,ilev) + precs(icol,ilev)*deltat )
+             fracp(icol) = max( 0._r8, min( 1._r8, fracp(icol) ) )
 
              ! assume the corresponding amnt of tracer is removed
-             st_scav_ic(i) = sol_facti*clds(i)*fracp(i)*tracer(i,k)*rdeltat
+             st_scav_ic(icol) = sol_facti*clds(icol)*fracp(icol)*tracer(icol,ilev)*rdeltat
 
-             odds(i) = precabs(i)/max(cldvst(i,k),1.e-5_r8)*scavcoef(i,k)*deltat
-             odds(i) = max(min(1._r8,odds(i)),0._r8)
-             st_scav_bc(i) =sol_factb*(cldvst(i,k)*odds(i)) *tracer(i,k)*rdeltat
+             odds(icol) = precabs(icol)/max(cldvst(icol,ilev),1.e-5_r8)*scavcoef(icol,ilev)*deltat
+             odds(icol) = max(min(1._r8,odds(icol)),0._r8)
+             st_scav_bc(icol) =sol_factb*(cldvst(icol,ilev)*odds(icol)) *tracer(icol,ilev)*rdeltat
 
           end if
 
           ! total convective scavenging
-          srcc(i) = conv_scav_ic(i) + conv_scav_bc(i)
-          finc(i) = conv_scav_ic(i)/(srcc(i) + 1.e-36_r8)
+          srcc(icol) = conv_scav_ic(icol) + conv_scav_bc(icol)
+          finc(icol) = conv_scav_ic(icol)/(srcc(icol) + 1.e-36_r8)
 
           ! total stratiform scavenging
-          srcs(i) = st_scav_ic(i) + st_scav_bc(i)
-          fins(i) = st_scav_ic(i)/(srcs(i) + 1.e-36_r8)
+          srcs(icol) = st_scav_ic(icol) + st_scav_bc(icol)
+          fins(icol) = st_scav_ic(icol)/(srcs(icol) + 1.e-36_r8)
 
           ! make sure we dont take out more than is there
           ! ratio of amount available to amount removed
-          rat(i) = tracer(i,k)/max(deltat*(srcc(i)+srcs(i)),1.e-36_r8)
-          if (rat(i).lt.1._r8) then
-             srcs(i) = srcs(i)*rat(i)
-             srcc(i) = srcc(i)*rat(i)
+          rat(icol) = tracer(icol,ilev)/max(deltat*(srcc(icol)+srcs(icol)),1.e-36_r8)
+          if (rat(icol)<1._r8) then
+             srcs(icol) = srcs(icol)*rat(icol)
+             srcc(icol) = srcc(icol)*rat(icol)
           endif
-          srct(i) = (srcc(i)+srcs(i))*omsm
+          srct(icol) = (srcc(icol)+srcs(icol))*omsm
 
 
           ! fraction that is not removed within the cloud
           ! (assumed to be interstitial, and subject to convective transport)
-          fracp(i) = deltat*srct(i)/max(cldvst(i,k)*tracer(i,k),1.e-36_r8)  ! amount removed
-          fracp(i) = max(0._r8,min(1._r8,fracp(i)))
-          fracis(i,k) = 1._r8 - fracp(i)
+          fracp(icol) = deltat*srct(icol)/max(cldvst(icol,ilev)*tracer(icol,ilev),1.e-36_r8)  ! amount removed
+          fracp(icol) = max(0._r8,min(1._r8,fracp(icol)))
+          fracis(icol,ilev) = 1._r8 - fracp(icol)
 
           ! tend is all tracer removed by scavenging, plus all re-appearing from evaporation above
           ! Sungsu added cumulus contribution in the below 3 blocks
-          scavt(i,k) = -srct(i) + (fracev(i)*scavab(i)+fracev_cu(i)*scavabc(i))*rpdog(i)
-          iscavt(i,k) = -(srcc(i)*finc(i) + srcs(i)*fins(i))*omsm
+          scavt(icol,ilev) = -srct(icol) + (fracev(icol)*scavab(icol)+fracev_cu(icol)*scavabc(icol))*rpdog(icol)
+          iscavt(icol,ilev) = -(srcc(icol)*finc(icol) + srcs(icol)*fins(icol))*omsm
 
-          if ( present(icscavt) ) icscavt(i,k) = -(srcc(i)*finc(i)) * omsm
-          if ( present(isscavt) ) isscavt(i,k) = -(srcs(i)*fins(i)) * omsm
+          if ( present(icscavt) ) icscavt(icol,ilev) = -(srcc(icol)*finc(icol)) * omsm
+          if ( present(isscavt) ) isscavt(icol,ilev) = -(srcs(icol)*fins(icol)) * omsm
 
           if (.not. out_resuspension) then
-             if (present(bcscavt)) bcscavt(i,k) = -(srcc(i) * (1-finc(i))) * omsm +  &
-                  fracev_cu(i)*scavabc(i)*rpdog(i)
+             if (present(bcscavt)) bcscavt(icol,ilev) = -(srcc(icol) * (1-finc(icol))) * omsm +  &
+                  fracev_cu(icol)*scavabc(icol)*rpdog(icol)
 
-             if (present(bsscavt)) bsscavt(i,k) = -(srcs(i) * (1-fins(i))) * omsm +  &
-                  fracev(i)*scavab(i)*rpdog(i)
+             if (present(bsscavt)) bsscavt(icol,ilev) = -(srcs(icol) * (1-fins(icol))) * omsm +  &
+                  fracev(icol)*scavab(icol)*rpdog(icol)
           else
-             bcscavt(i,k) = -(srcc(i) * (1-finc(i))) * omsm
-             rcscavt(i,k) =  fracev_cu(i)*scavabc(i)*rpdog(i)
+             bcscavt(icol,ilev) = -(srcc(icol) * (1-finc(icol))) * omsm
+             rcscavt(icol,ilev) =  fracev_cu(icol)*scavabc(icol)*rpdog(icol)
 
-             bsscavt(i,k) = -(srcs(i) * (1-fins(i))) * omsm
-             rsscavt(i,k) =  fracev(i)*scavab(i)*rpdog(i)
+             bsscavt(icol,ilev) = -(srcs(icol) * (1-fins(icol))) * omsm
+             rsscavt(icol,ilev) =  fracev(icol)*scavab(icol)*rpdog(icol)
           end if
 
-          dblchek(i) = tracer(i,k) + deltat*scavt(i,k)
+          dblchek(icol) = tracer(icol,ilev) + deltat*scavt(icol,ilev)
 
           ! now keep track of scavenged mass and precip
-          scavab(i) = scavab(i)*(1-fracev(i)) + srcs(i)*pdog(i)
-          precabs(i) = precabs(i) + (precs(i,k) - evaps(i,k))*pdog(i)
-          scavabc(i) = scavabc(i)*(1-fracev_cu(i)) + srcc(i)*pdog(i)
-          precabc(i) = precabc(i) + (cmfdqr(i,k) - evapc(i,k))*pdog(i)
+          scavab(icol) = scavab(icol)*(1-fracev(icol)) + srcs(icol)*pdog(icol)
+          precabs(icol) = precabs(icol) + (precs(icol,ilev) - evaps(icol,ilev))*pdog(icol)
+          scavabc(icol) = scavabc(icol)*(1-fracev_cu(icol)) + srcc(icol)*pdog(icol)
+          precabc(icol) = precabc(icol) + (cmfdqr(icol,ilev) - evapc(icol,ilev))*pdog(icol)
 
-       end do ! End of i = 1, ncol
+       end do ! End of icol = 1, ncol
 
        found = .false.
-       do i = 1,ncol
-          if ( dblchek(i) < 0._r8 ) then
+       do icol = 1,ncol
+          if ( dblchek(icol) < 0._r8 ) then
              found = .true.
              exit
           end if
        end do
 
        if ( found ) then
-          do i = 1,ncol
-             if (dblchek(i) .lt. 0._r8) then
-                write(iulog,*) ' wetdapa: negative value ', i, k, tracer(i,k), &
-                     dblchek(i), scavt(i,k), srct(i), rat(i), fracev(i)
+          do icol = 1,ncol
+             if (dblchek(icol) < 0._r8) then
+                write(iulog,*) ' wetdapa: negative value ', icol, ilev, tracer(icol,ilev), &
+                     dblchek(icol), scavt(icol,ilev), srct(icol), rat(icol), fracev(icol)
              endif
           end do
        endif
 
-    end do ! End of k = 1, pver
+    end do ! End of ilev = 1, pver
 
   end subroutine wetdepa_v2
 
@@ -1802,8 +1812,8 @@ contains
          fracis(pcols, pver)    ! fraction of constituent that is insoluble
 
     ! local variables
-    integer i               ! x index
-    integer k               ! z index
+    integer icol               ! x index
+    integer ilev               ! z index
     real(r8) adjfac         ! factor stolen from cmfmca
     real(r8) aqfrac         ! fraction of tracer in aqueous phase
     real(r8) cwatc          ! local convective total water amount
@@ -1854,18 +1864,18 @@ contains
     adjfac = deltat/(max(deltat,cmftau)) ! adjustment factor from hack scheme
 
     ! zero accumulators
-    do i = 1,pcols
-       precab(i) = 1.e-36_r8
-       scavab(i) = 0._r8
-       cldmabs(i) = 0._r8
+    do icol = 1,pcols
+       precab(icol) = 1.e-36_r8
+       scavab(icol) = 0._r8
+       cldmabs(icol) = 0._r8
     end do
 
-    do k = 1,pver
-       do i = 1,ncol
-          tc = t(i,k) - tmelt
+    do ilev = 1,pver
+       do icol = 1,ncol
+          tc = t(icol,ilev) - tmelt
           weight = max(0._r8,min(-tc*0.05_r8,1.0_r8)) ! fraction of condensate that is ice
 
-          cldmabs(i) = max(cldmabs(i),cldt(i,k))
+          cldmabs(icol) = max(cldmabs(icol),cldt(icol,ilev))
 
           ! partitioning coefs for gas and aqueous phase
           ! take as a cloud water amount, the sum of the stratiform amount
@@ -1873,41 +1883,41 @@ contains
 
           ! convective amnt is just the local precip rate from the hack scheme
           ! since there is no storage of water, this ignores that falling from above
-          cwatc = (icwmr1(i,k) + icwmr2(i,k)) * (1._r8-weight)
+          cwatc = (icwmr1(icol,ilev) + icwmr2(icol,ilev)) * (1._r8-weight)
 
           ! strat cloud water amount and also ignore the part falling from above
-          cwats = cwat(i,k)
+          cwats = cwat(icol,ilev)
 
           ! cloud water as liq
           cwatl = (1._r8-weight)*cwats
 
           ! cloud water as ice total suspended condensate as liquid
-          cwatt = cwatl + rain(i,k)
+          cwatt = cwatl + rain(icol,ilev)
 
           ! incloud version
-          cwatti = cwatt/max(cldv(i,k), 0.00001_r8) + cwatc
+          cwatti = cwatt/max(cldv(icol,ilev), 0.00001_r8) + cwatc
 
           ! partitioning terms
-          patm = p(i,k)/1.013e5_r8 ! pressure in atmospheres
-          hconst = molwta*patm*solconst(i,k)*cwatti/rhoh2o
+          patm = p(icol,ilev)/1.013e5_r8 ! pressure in atmospheres
+          hconst = molwta*patm*solconst(icol,ilev)*cwatti/rhoh2o
           aqfrac = hconst/(1._r8+hconst)
           gafrac = 1/(1._r8+hconst)
-          fracis(i,k) = gafrac
+          fracis(icol,ilev) = gafrac
 
           ! partial pressure of the tracer in the gridbox in atmospheres
-          part = patm*gafrac*tracer(i,k)*molwta/molwt
+          part = patm*gafrac*tracer(icol,ilev)*molwta/molwt
 
           ! use henrys law to give moles tracer /liter of water  in this volume
           ! then convert to kg tracer /liter of water (kg tracer / kg water)
-          mplb = solconst(i,k)*part*molwt/1000._r8
+          mplb = solconst(icol,ilev)*part*molwt/1000._r8
 
-          pdog = pdel(i,k)/gravit
+          pdog = pdel(icol,ilev)/gravit
 
           ! this part of precip will be carried downward but at a new molarity of mpl
-          precic = pdog*(precs(i,k) + cmfdqr(i,k))
+          precic = pdog*(precs(icol,ilev) + cmfdqr(icol,ilev))
 
           ! we cant take out more than entered, plus that available in the cloud
-          scavmax = scavab(i)+tracer(i,k)*cldv(i,k)/deltat*pdog
+          scavmax = scavab(icol)+tracer(icol,ilev)*cldv(icol,ilev)/deltat*pdog
 
           ! flux of tracer by incloud processes
           scavin = precic*(1._r8-weight)*mplb
@@ -1915,41 +1925,41 @@ contains
           ! fraction of precip which entered above that leaves below
           if (cam_physpkg_is('cam5') .or. cam_physpkg_is('cam6')) then
              ! Sungsu added evaporation of convective precipitation below.
-             precxx = precab(i)-pdog*(evaps(i,k)+evapc(i,k))
+             precxx = precab(icol)-pdog*(evaps(icol,ilev)+evapc(icol,ilev))
           else
-             precxx = precab(i)-pdog*evaps(i,k)
+             precxx = precab(icol)-pdog*evaps(icol,ilev)
           end if
           precxx = max (precxx,0.0_r8)
 
           ! flux of tracer by below cloud processes
-          if (tc.gt.0) then
+          if (tc > 0) then
              scavbc = precxx*mplb ! if liquid
           else
              precxx2=max(precxx,1.e-36_r8)
-             scavbc = scavab(i)*precxx2/(precab(i)) ! if ice
+             scavbc = scavab(icol)*precxx2/(precab(icol)) ! if ice
           endif
 
           scavbl = min(scavbc + scavin, scavmax)
 
           ! first guess assuming that henries law works
-          scavt1 = (scavab(i)-scavbl)/pdog*omsm
+          scavt1 = (scavab(icol)-scavbl)/pdog*omsm
 
           ! pjr this should not be required, but we put it in to make sure we cant remove too much
           ! remember, scavt1 is generally negative (indicating removal)
-          scavt1 = max(scavt1,-tracer(i,k)*cldv(i,k)/deltat)
+          scavt1 = max(scavt1,-tracer(icol,ilev)*cldv(icol,ilev)/deltat)
 
           ! instead just set scavt to scavt1
-          scavt(i,k) = scavt1
+          scavt(icol,ilev) = scavt1
 
           ! now update the amount leaving the layer
-          scavbl = scavab(i) - scavt(i,k)*pdog
+          scavbl = scavab(icol) - scavt(icol,ilev)*pdog
 
           ! in cloud amount is that formed locally over the total flux out bottom
           fins = scavin/(scavin + scavbc + 1.e-36_r8)
-          iscavt(i,k) = scavt(i,k)*fins
+          iscavt(icol,ilev) = scavt(icol,ilev)*fins
 
-          scavab(i) = scavbl
-          precab(i) = max(precxx + precic,1.e-36_r8)
+          scavab(icol) = scavbl
+          precab(icol) = max(precxx + precic,1.e-36_r8)
 
        end do
     end do

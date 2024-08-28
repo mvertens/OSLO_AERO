@@ -88,7 +88,7 @@ contains
   subroutine oslo_aero_dust_init()
 
     ! local variables
-    integer :: i
+    integer :: imode
 
     call soil_erod_init( dust_emis_fact, soil_erod_file )
 
@@ -97,8 +97,8 @@ contains
     tracerMap(2) = l_dst_a3
 
     dust_names(:)="      "
-    do i=1,numberOfDustModes
-       dust_names(i) = cnst_name(tracerMap(i))
+    do imode=1,numberOfDustModes
+       dust_names(imode) = cnst_name(tracerMap(imode))
     end do
 
   end subroutine oslo_aero_dust_init
@@ -106,7 +106,7 @@ contains
   !===============================================================================
   subroutine oslo_aero_dust_emis(lchnk, ncol, dstflx, cflx)
 
-    !----------------------------------------------------------------------- 
+    !-----------------------------------------------------------------------
     ! Purpose: Interface to emission of all dusts.
     ! Notice that the mobilization is calculated in the land model and
     ! the soil erodibility factor is applied here.
@@ -115,37 +115,37 @@ contains
     ! Arguments:
     integer  , intent(in)    :: lchnk
     integer  , intent(in)    :: ncol
-    real(r8) , intent(in)    :: dstflx(pcols,4) 
+    real(r8) , intent(in)    :: dstflx(pcols,4)
     real(r8) , intent(inout) :: cflx(pcols,pcnst) ! Surface fluxes
 
     ! Local variables
-    integer  :: i,n
+    integer  :: icol,imode
     real(r8) :: soil_erod_tmp(pcols)
     real(r8) :: totalEmissionFlux(pcols)
 
     ! Filter away unreasonable values for soil erodibility
     ! (using low values e.g. gives emissions in greenland..)
-    where(soil_erodibility(:,lchnk) .lt. 0.1_r8)
+    where(soil_erodibility(:,lchnk) < 0.1_r8)
        soil_erod_tmp(:)=0.0_r8
     elsewhere
        soil_erod_tmp(:)=soil_erodibility(:,lchnk)
     end where
 
     totalEmissionFlux(:) = 0.0_r8
-    do i=1,ncol
-       totalEmissionFlux(i) = totalEmissionFlux(i) + sum(dstflx(i,:))
+    do icol=1,ncol
+       totalEmissionFlux(icol) = totalEmissionFlux(icol) + sum(dstflx(icol,:))
     end do
 
-    ! Note that following CESM use of "dust_emis_fact", the emissions are 
+    ! Note that following CESM use of "dust_emis_fact", the emissions are
     ! scaled by the INVERSE of the factor!!
     ! There is another random scale factor of 1.15 there. Adapting the exact
     ! same formulation as MAM now and tune later
     ! As of NE-380: Oslo dust emissions are 2/3 of CAM emissions
     ! gives better AOD close to dust sources
 
-    do n = 1,numberOfDustModes
-       cflx(:ncol, tracerMap(n)) = -1.0_r8*emis_fraction_in_mode(n) &
-            *totalEmissionFlux(:ncol)*soil_erod_tmp(:ncol)/(dust_emis_fact)*1.15_r8  
+    do imode = 1,numberOfDustModes
+       cflx(:ncol, tracerMap(imode)) = -1.0_r8*emis_fraction_in_mode(imode) &
+            *totalEmissionFlux(:ncol)*soil_erod_tmp(:ncol)/(dust_emis_fact)*1.15_r8
     end do
 
   end subroutine oslo_aero_dust_emis
@@ -180,7 +180,7 @@ contains
 
     ! read in soil erodibility factors, similar to Zender's boundary conditions
 
-    ! Get file name.  
+    ! Get file name.
     call getfil(soil_erod_file, infile, 0)
     call cam_pio_openfile (ncid, trim(infile), PIO_NOWRITE)
 

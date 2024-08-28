@@ -32,6 +32,7 @@ module oslo_aero_hetfrz
   use cam_abortutils,    only: endrun
   !
   use oslo_aero_share,   only: nmodes_oslo => nmodes
+  use oslo_aero_share,   only: max_tracers_per_mode, n_tracers_in_mode, n_background_tracers_in_mode
   use oslo_aero_share,   only: CalculateNumberConcentration, calculateNumberMedianRadius
   use oslo_aero_share,   only: MODE_IDX_DST_A2, MODE_IDX_DST_A3, MODE_IDX_OMBC_INTMIX_COAT_AIT
   use oslo_aero_share,   only: getNumberOfTracersInMode, getTracerIndex
@@ -100,7 +101,49 @@ module oslo_aero_hetfrz
   real(r8) :: pdf_d_theta
   real(r8) :: dim_f_imm_dust_a1(pdf_n_theta) = 0.0_r8
   real(r8) :: dim_f_imm_dust_a3(pdf_n_theta) = 0.0_r8
+
+  !********************************************************
+  ! Wang et al., 2014 fitting parameters
+  !********************************************************
+  ! freezing parameters for immersion freezing
+  real(r8),parameter :: theta_imm_bc = 48.0_r8      ! contact angle [deg], converted to rad later !DeMott et al (1990)
+  real(r8),parameter :: dga_imm_bc = 14.15E-20_r8   ! activation energy [J]
+  real(r8),parameter :: theta_imm_dust = 46.0_r8    ! contact angle [deg], converted to rad later !DeMott et al (2011) SD
+  real(r8),parameter :: dga_imm_dust = 14.75E-20_r8 ! activation energy [J]
+
+  ! freezing parameters for deposition nucleation
+  real(r8),parameter :: theta_dep_dust = 20.0_r8   ! contact angle [deg], converted to rad later !Koehler et al (2010) SD
+  real(r8),parameter :: dga_dep_dust = -8.1E-21_r8 ! activation energy [J]
+  real(r8),parameter :: theta_dep_bc = 28._r8      ! contact angle [deg], converted to rad later !Moehler et al (2005), soot
+  real(r8),parameter :: dga_dep_bc = -2.E-19_r8    ! activation energy [J]
+
+  real(r8) :: f_imm_bc
+  real(r8) :: f_imm_dust_a1, f_imm_dust_a3
+  real(r8) :: f_dep_bc
+  real(r8) :: f_dep_dust_a1, f_dep_dust_a3
+  real(r8) :: f_cnt_bc
+  real(r8) :: f_cnt_dust_a1,f_cnt_dust_a3
+
+  real(r8) :: sqroot_f_imm_bc
+  real(r8) :: sqroot_dim_f_imm_dust_a1(i1:i2)
+  real(r8) :: sqroot_dim_f_imm_dust_a3(i1:i2)
+  real(r8) :: sqroot_f_dep_bc
+  real(r8) :: sqroot_f_dep_dust_a1
+  real(r8) :: sqroot_f_dep_dust_a3
+  real(r8) :: sqroot_f_imm_dust_a1
+  real(r8) :: sqroot_f_imm_dust_a3
+
+  integer  :: num_bc_idx, num_dst1_idx, num_dst3_idx    ! mode indices
+  real(r8) :: fac_volsfc_bc
+  real(r8) :: fac_volsfc_dust_a1
+  real(r8) :: fac_volsfc_dust_a3
+
+  real(r8) :: con1
+
+  integer  :: tracer_index(0:nmodes_oslo,max_tracers_per_mode)  ! tracer index
+
   logical  :: pdf_imm_in = .true.
+  logical  :: tot_in = .false.
 
 !===============================================================================
 contains
@@ -166,9 +209,11 @@ contains
     real(r8), intent(in) :: mincld_in
 
     ! local variables
-    integer  :: m, n, nspec
+    integer  :: imode, nspec, itrac
     integer  :: istat
     real(r8) :: sigma_logr_aer
+    real(r8) :: sigmag_amode(3)
+    real(r8) :: cos_angle
     character(len=32) :: str32
     character(len=*), parameter :: routine = 'hetfrz_classnuc_cam_init'
     !--------------------------------------------------------------------------------------------
@@ -336,6 +381,67 @@ contains
        call hetfrz_classnuc_init_pdftheta()
     end if
 
+    ! form factor
+    ! only consider flat surfaces due to uncertainty of curved surfaces
+
+    cos_angle = COS(theta_imm_bc*pi/180._r8)
+    f_imm_bc = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+    if (.not. pdf_imm_in) then
+       cos_angle = COS(theta_imm_dust*pi/180._r8)
+       f_imm_dust_a1 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+
+       cos_angle = COS(theta_imm_dust*pi/180._r8)
+       f_imm_dust_a3 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+    end if
+
+
+    ! form factor
+    cos_angle = COS(theta_dep_bc*pi/180._r8)
+    f_dep_bc = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+
+    cos_angle = COS(theta_dep_dust*pi/180._r8)
+    f_dep_dust_a1 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+
+    cos_angle = COS(theta_dep_dust*pi/180._r8)
+    f_dep_dust_a3 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+
+    ! form factor
+    cos_angle = COS(theta_dep_bc*pi/180._r8)
+    f_cnt_bc = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+
+    cos_angle = COS(theta_dep_dust*pi/180._r8)
+    f_cnt_dust_a1 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+
+    cos_angle = COS(theta_dep_dust*pi/180._r8)
+    f_cnt_dust_a3 = (2._r8+cos_angle)*(1._r8-cos_angle)**2/4._r8
+
+    sqroot_f_imm_bc = SQRT(f_imm_bc)
+    sqroot_dim_f_imm_dust_a1(i1:i2) = SQRT(dim_f_imm_dust_a1(i1:i2))
+    sqroot_dim_f_imm_dust_a3(i1:i2) = SQRT(dim_f_imm_dust_a3(i1:i2))
+    sqroot_f_dep_bc = SQRT(f_dep_bc)
+    sqroot_f_dep_dust_a1 = SQRT(f_dep_dust_a1)
+    sqroot_f_dep_dust_a3 = SQRT(f_dep_dust_a3)
+
+    num_bc_idx   = MODE_IDX_OMBC_INTMIX_COAT_AIT
+    num_dst1_idx = MODE_IDX_DST_A2
+    num_dst3_idx = MODE_IDX_DST_A3
+
+    sigmag_amode(1) = lifeCycleSigma(num_bc_idx)
+    sigmag_amode(2) = lifeCycleSigma(num_dst1_idx)
+    sigmag_amode(3) = lifeCycleSigma(num_dst3_idx)
+
+    fac_volsfc_bc      = exp(2.5*(log(sigmag_amode(1))**2))
+    fac_volsfc_dust_a1 = exp(2.5*(log(sigmag_amode(2))**2))
+    fac_volsfc_dust_a3 = exp(2.5*(log(sigmag_amode(3))**2))
+
+    con1 = 1._r8/(1.333_r8*pi)**0.333_r8
+
+    do imode = 0,nmodes_oslo
+       do itrac = 1,n_tracers_in_mode(imode)
+          tracer_index(imode,itrac) = getTracerIndex(imode,itrac,.false.)
+       end do
+    end do
+
   end subroutine hetfrz_classnuc_oslo_init
 
   !================================================================================================
@@ -370,7 +476,7 @@ contains
     real(r8), pointer :: frzdep(:,:) ! output shared with the microphysics via the pbuf
     real(r8), pointer :: ast(:,:)
     integer  :: itim_old
-    integer  :: i, k, n, m, kk
+    integer  :: icol, ilev, cos_angle
     real(r8) :: rho(pcols,pver)          ! air density (kg m-3)
     real(r8) :: lcldm(pcols,pver)
     real(r8) :: fn(3)
@@ -384,7 +490,9 @@ contains
     real(r8) :: coated_aer_num(pcols,pver,3)
     real(r8) :: uncoated_aer_num(pcols,pver,3)
     real(r8) :: fn_cloudborne_aer_num(pcols,pver,3)
-    real(r8) :: con1, r3lx, supersatice
+    real(r8) :: r3lx, supersatice(pcols,pver)
+    real(r8) :: eswtr(pcols,pver)
+    real(r8) :: esice(pcols,pver)
     real(r8) :: qcic
     real(r8) :: ncic
     real(r8) :: frzbcimm(pcols,pver), frzduimm(pcols,pver)
@@ -418,55 +526,41 @@ contains
 
     rho(:,:) = 0._r8
 
-    do k = top_lev, pver
-       do i = 1, ncol
-          rho(i,k) = pmid(i,k)/(rair*t(i,k))
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          rho(icol,ilev) = pmid(icol,ilev)/(rair*t(icol,ilev))
        end do
     end do
 
-    do k = top_lev, pver
-       do i = 1, ncol
-          lcldm(i,k) = max(ast(i,k), mincld)
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          lcldm(icol,ilev) = max(ast(icol,ilev), mincld)
        end do
     end do
 
     ! Convert interstitial and cloud borne aerosols from a mass to a volume basis before
     ! being used in get_aer_num
-    do i = 1, pcnst
-       aer_cb(:ncol,:,i,lchnk) = aer_cb(:ncol,:,i,lchnk) * rho(:ncol,:)
+    do icol = 1, pcnst
+       aer_cb(:ncol,:,icol,lchnk) = aer_cb(:ncol,:,icol,lchnk) * rho(:ncol,:)
     end do
-
-    ! Init top levels of outputs of get_aer_num
-    total_aer_num              = 0._r8
-    coated_aer_num             = 0._r8
-    uncoated_aer_num           = 0._r8
-    total_interstitial_aer_num = 0._r8
-    total_cloudborne_aer_num   = 0._r8
-    hetraer                    = 0._r8
-    awcam                      = 0._r8
-    awfacm                     = 0._r8
-    dstcoat                    = 0._r8
-    na500                      = 0._r8
-    tot_na500                  = 0._r8
 
     !Get estimate of number of aerosols inside clouds
     call calculateNumberConcentration(ncol, aer_cb(:,:,:,lchnk), rho, CloudnumberConcentration)
     call calculateNumberMedianRadius(numberConcentration, volumeConcentration, lnSigma, numberMedianRadius, ncol)
-    !End estimate of number inside clouds
 
     ! output aerosols as reference information for heterogeneous freezing
-    do i = 1, ncol
-       do k = top_lev, pver
-          call get_aer_num(numberConcentration(i,k,:), CloudnumberConcentration(i,k,:), rho(i,k),         &
-               f_acm(i,k,:), f_so4_condm(i,k,:), cam(i,k,:), volumeCore(i,k,:), volumeCoat(i,k,:), &
-               total_aer_num(i,k,:), coated_aer_num(i,k,:), uncoated_aer_num(i,k,:),  &
-               total_interstitial_aer_num(i,k,:), total_cloudborne_aer_num(i,k,:),    &
-               hetraer(i,k,:), awcam(i,k,:), awfacm(i,k,:), dstcoat(i,k,:),           &
-               na500(i,k), tot_na500(i,k))
+    call get_aer_num(ncol, numberConcentration, CloudnumberConcentration, rho, &
+         f_acm, f_so4_condm, cam, volumeCore, volumeCoat,                &
+         total_aer_num, coated_aer_num, uncoated_aer_num,                &
+         total_interstitial_aer_num, total_cloudborne_aer_num,           &
+         hetraer, awcam, awfacm, dstcoat,                                &
+         na500, tot_na500)
 
-          fn_cloudborne_aer_num(i,k,1) = total_aer_num(i,k,1)*factnum(i,k,MODE_IDX_OMBC_INTMIX_COAT_AIT)  ! bc
-          fn_cloudborne_aer_num(i,k,2) = total_aer_num(i,k,2)*factnum(i,k,MODE_IDX_DST_A2)
-          fn_cloudborne_aer_num(i,k,3) = total_aer_num(i,k,3)*factnum(i,k,MODE_IDX_DST_A3)
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          fn_cloudborne_aer_num(icol,ilev,1) = total_aer_num(icol,ilev,1)*factnum(icol,ilev,MODE_IDX_OMBC_INTMIX_COAT_AIT)  ! bc
+          fn_cloudborne_aer_num(icol,ilev,2) = total_aer_num(icol,ilev,2)*factnum(icol,ilev,MODE_IDX_DST_A2)
+          fn_cloudborne_aer_num(icol,ilev,3) = total_aer_num(icol,ilev,3)*factnum(icol,ilev,MODE_IDX_DST_A3)
        end do
     end do
 
@@ -538,64 +632,72 @@ contains
     nicnt_dst(:,:) = 0._r8
     nidep_dst(:,:) = 0._r8
 
-    do i = 1, ncol
-       do k = top_lev, pver
+    do ilev = top_lev, pver
+       do icol = 1,ncol
+          if (t(icol,ilev) > 235.15_r8 .and. t(icol,ilev) < 269.15_r8) then
+             eswtr(icol,ilev) = svp_water(t(icol,ilev))
+             esice(icol,ilev) = svp_ice(t(icol,ilev))
+             supersatice(icol,ilev) = eswtr(icol,ilev)/esice(icol,ilev)
+          end if
+       end do
+    end do
 
-          if (t(i,k) > 235.15_r8 .and. t(i,k) < 269.15_r8) then
-             qcic = min(qc(i,k)/lcldm(i,k), 5.e-3_r8)
-             ncic = max(nc(i,k)/lcldm(i,k), 0._r8)
+    do ilev = top_lev, pver
+       do icol = 1, ncol
 
-             con1 = 1._r8/(1.333_r8*pi)**0.333_r8
-             r3lx = con1*(rho(i,k)*qcic/(rhoh2o*max(ncic*rho(i,k), 1.0e6_r8)))**0.333_r8 ! in m
+          if (t(icol,ilev) > 235.15_r8 .and. t(icol,ilev) < 269.15_r8) then
+             qcic = min(qc(icol,ilev)/lcldm(icol,ilev), 5.e-3_r8)
+             ncic = max(nc(icol,ilev)/lcldm(icol,ilev), 0._r8)
+
+             r3lx = con1*(rho(icol,ilev)*qcic/(rhoh2o*max(ncic*rho(icol,ilev), 1.0e6_r8)))**0.333_r8 ! in m
              r3lx = max(4.e-6_r8, r3lx)
-             supersatice = svp_water(t(i,k))/svp_ice(t(i,k))
-             fn(1) = factnum(i,k,MODE_IDX_OMBC_INTMIX_COAT_AIT)  ! bc accumulation mode
-             fn(2) = factnum(i,k,MODE_IDX_DST_A2)                ! dust_a1 accumulation mode
-             fn(3) = factnum(i,k,MODE_IDX_DST_A3)                ! dust_a3 coarse mode
+             fn(1) = factnum(icol,ilev,MODE_IDX_OMBC_INTMIX_COAT_AIT)  ! bc accumulation mode
+             fn(2) = factnum(icol,ilev,MODE_IDX_DST_A2)                ! dust_a1 accumulation mode
+             fn(3) = factnum(icol,ilev,MODE_IDX_DST_A3)                ! dust_a3 coarse mode
 
              call hetfrz_classnuc_calc( &
-                  deltatin,  t(i,k),  pmid(i,k),  supersatice,   &
-                  fn,  r3lx,  ncic*rho(i,k)*1.0e-6_r8,  frzbcimm(i,k),  frzduimm(i,k),   &
-                  frzbccnt(i,k),  frzducnt(i,k),  frzbcdep(i,k),  frzdudep(i,k),  hetraer(i,k,:), &
-                  awcam(i,k,:), awfacm(i,k,:), dstcoat(i,k,:), total_aer_num(i,k,:),  &
-                  coated_aer_num(i,k,:), uncoated_aer_num(i,k,:), total_interstitial_aer_num(i,k,:), &
-                  total_cloudborne_aer_num(i,k,:), errstring)
+                  deltatin,  t(icol,ilev),  pmid(icol,ilev),  supersatice(icol,ilev), eswtr(icol,ilev), esice(icol,ilev),  &
+                  fn,  r3lx,  ncic*rho(icol,ilev)*1.0e-6_r8,  frzbcimm(icol,ilev),  frzduimm(icol,ilev),   &
+                  frzbccnt(icol,ilev),  frzducnt(icol,ilev),  frzbcdep(icol,ilev),  frzdudep(icol,ilev),  hetraer(icol,ilev,:), &
+                  awcam(icol,ilev,:), awfacm(icol,ilev,:), dstcoat(icol,ilev,:), total_aer_num(icol,ilev,:),  &
+                  coated_aer_num(icol,ilev,:), uncoated_aer_num(icol,ilev,:), total_interstitial_aer_num(icol,ilev,:), &
+                  total_cloudborne_aer_num(icol,ilev,:), errstring)
 
              call handle_errmsg(errstring, subname="hetfrz_classnuc_calc")
 
-             frzimm(i,k) = frzbcimm(i,k) + frzduimm(i,k)
-             frzcnt(i,k) = frzbccnt(i,k) + frzducnt(i,k)
-             frzdep(i,k) = frzbcdep(i,k) + frzdudep(i,k)
+             frzimm(icol,ilev) = frzbcimm(icol,ilev) + frzduimm(icol,ilev)
+             frzcnt(icol,ilev) = frzbccnt(icol,ilev) + frzducnt(icol,ilev)
+             frzdep(icol,ilev) = frzbcdep(icol,ilev) + frzdudep(icol,ilev)
 
-             if (frzimm(i,k) > 0._r8) freqimm(i,k) = 1._r8
-             if (frzcnt(i,k) > 0._r8) freqcnt(i,k) = 1._r8
-             if (frzdep(i,k) > 0._r8) freqdep(i,k) = 1._r8
-             if ((frzimm(i,k) + frzcnt(i,k) + frzdep(i,k)) > 0._r8) freqmix(i,k) = 1._r8
+             if (frzimm(icol,ilev) > 0._r8) freqimm(icol,ilev) = 1._r8
+             if (frzcnt(icol,ilev) > 0._r8) freqcnt(icol,ilev) = 1._r8
+             if (frzdep(icol,ilev) > 0._r8) freqdep(icol,ilev) = 1._r8
+             if ((frzimm(icol,ilev) + frzcnt(icol,ilev) + frzdep(icol,ilev)) > 0._r8) freqmix(icol,ilev) = 1._r8
           else
-             frzimm(i,k) = 0._r8
-             frzcnt(i,k) = 0._r8
-             frzdep(i,k) = 0._r8
+             frzimm(icol,ilev) = 0._r8
+             frzcnt(icol,ilev) = 0._r8
+             frzdep(icol,ilev) = 0._r8
           end if
 
-          nnuccc_bc(i,k) = frzbcimm(i,k)*1.0e6_r8*ast(i,k)
-          nnucct_bc(i,k) = frzbccnt(i,k)*1.0e6_r8*ast(i,k)
-          nnudep_bc(i,k) = frzbcdep(i,k)*1.0e6_r8*ast(i,k)
+          nnuccc_bc(icol,ilev) = frzbcimm(icol,ilev)*1.0e6_r8*ast(icol,ilev)
+          nnucct_bc(icol,ilev) = frzbccnt(icol,ilev)*1.0e6_r8*ast(icol,ilev)
+          nnudep_bc(icol,ilev) = frzbcdep(icol,ilev)*1.0e6_r8*ast(icol,ilev)
 
-          nnuccc_dst(i,k) = frzduimm(i,k)*1.0e6_r8*ast(i,k)
-          nnucct_dst(i,k) = frzducnt(i,k)*1.0e6_r8*ast(i,k)
-          nnudep_dst(i,k) = frzdudep(i,k)*1.0e6_r8*ast(i,k)
+          nnuccc_dst(icol,ilev) = frzduimm(icol,ilev)*1.0e6_r8*ast(icol,ilev)
+          nnucct_dst(icol,ilev) = frzducnt(icol,ilev)*1.0e6_r8*ast(icol,ilev)
+          nnudep_dst(icol,ilev) = frzdudep(icol,ilev)*1.0e6_r8*ast(icol,ilev)
 
-          niimm_bc(i,k) = frzbcimm(i,k)*1.0e6_r8*deltatin
-          nicnt_bc(i,k) = frzbccnt(i,k)*1.0e6_r8*deltatin
-          nidep_bc(i,k) = frzbcdep(i,k)*1.0e6_r8*deltatin
+          niimm_bc(icol,ilev) = frzbcimm(icol,ilev)*1.0e6_r8*deltatin
+          nicnt_bc(icol,ilev) = frzbccnt(icol,ilev)*1.0e6_r8*deltatin
+          nidep_bc(icol,ilev) = frzbcdep(icol,ilev)*1.0e6_r8*deltatin
 
-          niimm_dst(i,k) = frzduimm(i,k)*1.0e6_r8*deltatin
-          nicnt_dst(i,k) = frzducnt(i,k)*1.0e6_r8*deltatin
-          nidep_dst(i,k) = frzdudep(i,k)*1.0e6_r8*deltatin
+          niimm_dst(icol,ilev) = frzduimm(icol,ilev)*1.0e6_r8*deltatin
+          nicnt_dst(icol,ilev) = frzducnt(icol,ilev)*1.0e6_r8*deltatin
+          nidep_dst(icol,ilev) = frzdudep(icol,ilev)*1.0e6_r8*deltatin
 
-          numice10s(i,k) = (frzimm(i,k)+frzcnt(i,k)+frzdep(i,k))*1.0e6_r8*deltatin*(10._r8/deltatin)
-          numice10s_imm_dst(i,k) = frzduimm(i,k)*1.0e6_r8*deltatin*(10._r8/deltatin)
-          numice10s_imm_bc(i,k) = frzbcimm(i,k)*1.0e6_r8*deltatin*(10._r8/deltatin)
+          numice10s(icol,ilev) = (frzimm(icol,ilev)+frzcnt(icol,ilev)+frzdep(icol,ilev))*1.0e6_r8*deltatin*(10._r8/deltatin)
+          numice10s_imm_dst(icol,ilev) = frzduimm(icol,ilev)*1.0e6_r8*deltatin*(10._r8/deltatin)
+          numice10s_imm_bc(icol,ilev) = frzbcimm(icol,ilev)*1.0e6_r8*deltatin*(10._r8/deltatin)
        end do
     end do
 
@@ -641,7 +743,7 @@ contains
     type(physics_buffer_desc),   pointer       :: pbuf(:)
 
     ! local variables
-    integer :: i, lchnk, kk, ncol, m, n
+    integer :: icol, ilev, lchnk, kk, ncol, imode, itrac
     type qqcw_type
        real(r8), pointer :: fldcw(:,:)
     end type qqcw_type
@@ -654,214 +756,220 @@ contains
     lchnk = state%lchnk
     ncol = state%ncol
     aer_cb(1:ncol,1:pver,:,lchnk) = 0.0_r8
-    do m=1,nmodes_oslo
-       do n=1,getNumberOfTracersInMode(m)
-          kk = getTracerIndex(m,n,.false.)! This gives the tracer index used in the q-array
+    do imode = 1,nmodes_oslo
+       do itrac = 1,n_tracers_in_mode(imode)
+          kk = tracer_index(imode,itrac) ! This gives the tracer index used in the q-array
           qqcw(kk)%fldcw => qqcw_get_field(pbuf,kk)
-          if(associated(qqcw(kk)%fldcw))then
-             aer_cb(:,:,kk,lchnk) = qqcw(kk)%fldcw
+          if (associated(qqcw(kk)%fldcw)) then
+             do ilev = 1,pver
+                do icol = 1,ncol
+                   aer_cb(icol,ilev,kk,lchnk) = qqcw(kk)%fldcw(icol,ilev)
+                end do
+             end do
           end if
        end do
     end do
+
   end subroutine hetfrz_classnuc_oslo_save_cbaero
 
   !====================================================================================================
 
-  subroutine get_aer_num(qaerpt, qaercwpt, rhoair,           &   ! input
-       f_acm, f_condm,                     &
-       cam, volumeCore, volumeCoat,        &
-       total_aer_num,                      &   ! output
-       coated_aer_num,                     &
-       uncoated_aer_num,                   &
-       total_interstial_aer_num,           &
-       total_cloudborne_aer_num,           &
-       hetraer, awcam, awfacm, dstcoat,    &
+  subroutine get_aer_num(                                    &
+       ncol, qaerpt, qaercwpt, rhoair,                       &   ! input
+       f_acm, f_condm,                                       &
+       cam, volumeCore, volumeCoat,                          &
+       total_aer_num, coated_aer_num,  uncoated_aer_num,     &   ! output
+       total_interstitial_aer_num, total_cloudborne_aer_num, &
+       hetraer, awcam, awfacm, dstcoat,                      &
        na500, tot_na500)
 
     ! input
-    real(r8), intent(in) :: qaerpt(0:nmodes_oslo)   ! aerosol number and mass mixing ratios(instertitial)
-    real(r8), intent(in) :: qaercwpt(0:nmodes_oslo) ! cloud borne aerosol number and mass mixing ratios
-    real(r8), intent(in) :: rhoair                  ! air density (kg/m3)
-    real(r8), intent(in) :: f_acm(nmodes_oslo)
-    real(r8), intent(in) :: f_condm(nmodes_oslo)
-    real(r8), intent(in) :: cam(nmodes_oslo)
-    real(r8), intent(in) :: volumeCoat(nmodes_oslo)
-    real(r8), intent(in) :: volumeCore(nmodes_oslo)
+    integer , intent(in) :: ncol
+    real(r8), intent(in) :: qaerpt(pcols,pver,0:nmodes_oslo)   ! aerosol number and mass mixing ratios(instertitial)
+    real(r8), intent(in) :: qaercwpt(pcols,pver,0:nmodes_oslo) ! cloud borne aerosol number and mass mixing ratios
+    real(r8), intent(in) :: rhoair(pcols,pver)                 ! air density (kg/m3)
+    real(r8), intent(in) :: f_acm(pcols,pver,nmodes_oslo)
+    real(r8), intent(in) :: f_condm(pcols,pver,nmodes_oslo)
+    real(r8), intent(in) :: cam(pcols,pver,nmodes_oslo)
+    real(r8), intent(in) :: volumeCoat(pcols,pver,nmodes_oslo)
+    real(r8), intent(in) :: volumeCore(pcols,pver,nmodes_oslo)
 
     ! output
-    real(r8), intent(out) :: total_aer_num(3)            ! #/cm^3
-    real(r8), intent(out) :: total_interstial_aer_num(3) ! #/cm^3
-    real(r8), intent(out) :: total_cloudborne_aer_num(3) ! #/cm^3
-    real(r8), intent(out) :: coated_aer_num(3)           ! #/cm^3
-    real(r8), intent(out) :: uncoated_aer_num(3)         ! #/cm^3
-    real(r8), intent(out) :: hetraer(3)                  ! BC and Dust mass mean radius [m]
-    real(r8), intent(out) :: awcam(3)                    ! modal added mass [mug m-3]
-    real(r8), intent(out) :: awfacm(3)                   ! (OC+BC)/(OC+BC+SO4)
-    real(r8), intent(out) :: dstcoat(3)                  ! coated fraction
-    real(r8), intent(out) :: na500                       ! #/cm^3 interstitial aerosol number with D>500 nm (#/cm^3)
-    real(r8), intent(out) :: tot_na500                   ! #/cm^3 total aerosol number with D>500 nm (#/cm^3)
+    real(r8), intent(out) :: total_aer_num(pcols,pver,3)              ! #/cm^3
+    real(r8), intent(out) :: coated_aer_num(pcols,pver,3)             ! #/cm^3
+    real(r8), intent(out) :: uncoated_aer_num(pcols,pver,3)           ! #/cm^3
+    real(r8), intent(out) :: total_interstitial_aer_num(pcols,pver,3) ! #/cm^3
+    real(r8), intent(out) :: total_cloudborne_aer_num(pcols,pver,3)   ! #/cm^3
+    real(r8), intent(out) :: hetraer(pcols,pver,3)                    ! BC and Dust mass mean radius [m]
+    real(r8), intent(out) :: awcam(pcols,pver,3)                      ! modal added mass [mug m-3]
+    real(r8), intent(out) :: awfacm(pcols,pver,3)                     ! (OC+BC)/(OC+BC+SO4)
+    real(r8), intent(out) :: dstcoat(pcols,pver,3)                    ! coated fraction
+    real(r8), intent(out) :: na500(pcols,pver)                        ! #/cm^3 interstitial aerosol number with D>500 nm (#/cm^3)
+    real(r8), intent(out) :: tot_na500(pcols,pver)                    ! #/cm^3 total aerosol number with D>500 nm (#/cm^3)
 
     ! local variables
     real(r8), parameter :: n_so4_monolayers_dust = 1.0_r8 ! number of so4(+nh4) monolayers needed to coat a dust particle
     real(r8), parameter :: dr_so4_monolayers_dust = n_so4_monolayers_dust * 4.76e-10
-    real(r8) :: sigmag_amode(3)
     real(r8) :: tmp1, tmp2
     real(r8) :: bc_num                                    ! bc number in accumulation mode
     real(r8) :: dst1_num, dst3_num                        ! dust number in accumulation and corase mode
     real(r8) :: dst1_num_imm, dst3_num_imm, bc_num_imm
-    real(r8) :: fac_volsfc_bc, fac_volsfc_dust_a1, fac_volsfc_dust_a3
     real(r8) :: r_bc                         ! model radii of BC modes [m]
     real(r8) :: r_dust_a1, r_dust_a3         ! model radii of dust modes [m]
-    integer  :: i
-    integer  :: num_bc_idx, num_dst1_idx, num_dst3_idx    ! mode indices
+    integer  :: icol,ilev,imode
 
-    num_bc_idx = MODE_IDX_OMBC_INTMIX_COAT_AIT
-    num_dst1_idx = MODE_IDX_DST_A2
-    num_dst3_idx = MODE_IDX_DST_A3
-
-    !*****************************************************************************
-    !                calculate intersitial aerosol
-    !*****************************************************************************
-
-    dst1_num = qaerpt(num_dst1_idx)*1.0e-6_r8    ! #/cm3
-    dst3_num = qaerpt(num_dst3_idx)*1.0e-6_r8    ! #/cm3
-    bc_num = qaerpt(num_bc_idx)*1.0e-6_r8    ! #/cm3
-
-    !*****************************************************************************
-    !                calculate cloud borne aerosol
-    !*****************************************************************************
-
-    dst1_num_imm = qaercwpt(num_dst1_idx)*1.0e-6_r8    ! #/cm3
-    dst3_num_imm = qaercwpt(num_dst3_idx)*1.0e-6_r8    ! #/cm3
-    bc_num_imm = qaercwpt(num_bc_idx)*1.0e-6_r8    ! #/cm3
-
-    !  calculate mass mean radius
+    ! calculate mass mean radius
     r_dust_a1 = lifeCycleNumberMedianRadius(num_dst1_idx)
     r_dust_a3 = lifeCycleNumberMedianRadius(num_dst3_idx)
-    r_bc = lifeCycleNumberMedianRadius(num_bc_idx)
+    r_bc      = lifeCycleNumberMedianRadius(num_bc_idx)
 
-    hetraer(1) = r_bc
-    hetraer(2) = r_dust_a1
-    hetraer(3) = r_dust_a3
+    ! set hetraer
+    hetraer(:,:,1) = r_bc
+    hetraer(:,:,2) = r_dust_a1
+    hetraer(:,:,3) = r_dust_a3
 
-    !*****************************************************************************
-    !                calculate coated fraction
-    !*****************************************************************************
+    ! init output
+    total_aer_num(:,:,:)              = 0._r8
+    coated_aer_num(:,:,:)             = 0._r8
+    uncoated_aer_num(:,:,:)           = 0._r8
+    total_interstitial_aer_num(:,:,:) = 0._r8
+    total_cloudborne_aer_num(:,:,:)   = 0._r8
+    awcam(:,:,:)                      = 0._r8
+    awfacm(:,:,:)                     = 0._r8
+    dstcoat(:,:,:)                    = 0._r8
+    na500(:,:)                        = 0._r8
+    tot_na500(:,:)                    = 0._r8
 
-    ! volumeCore and volumeCoat from subroutine calculateHygroscopicity in paramix_progncdnc.f90
+    do ilev = top_lev, pver
+       do icol = 1, ncol
 
-    sigmag_amode(1) = lifeCycleSigma(num_bc_idx)
-    sigmag_amode(2) = lifeCycleSigma(num_dst1_idx)
-    sigmag_amode(3) = lifeCycleSigma(num_dst3_idx)
+          ! calculate intersitial aerosol
+          dst1_num = qaerpt(icol,ilev,num_dst1_idx)*1.0e-6_r8    ! #/cm3
+          dst3_num = qaerpt(icol,ilev,num_dst3_idx)*1.0e-6_r8    ! #/cm3
+          bc_num   = qaerpt(icol,ilev,num_bc_idx)*1.0e-6_r8      ! #/cm3
 
-    fac_volsfc_bc = exp(2.5*(log(sigmag_amode(1))**2))
-    fac_volsfc_dust_a1 = exp(2.5*(log(sigmag_amode(2))**2))
-    fac_volsfc_dust_a3 = exp(2.5*(log(sigmag_amode(3))**2))
+          ! calculate cloud borne aerosol
+          dst1_num_imm = qaercwpt(icol,ilev,num_dst1_idx)*1.0e-6_r8  ! #/cm3
+          dst3_num_imm = qaercwpt(icol,ilev,num_dst3_idx)*1.0e-6_r8  ! #/cm3
+          bc_num_imm   = qaercwpt(icol,ilev,num_bc_idx)*1.0e-6_r8    ! #/cm3
 
-    tmp1 = volumeCoat(num_bc_idx)*(r_bc*2._r8)*fac_volsfc_bc
-    tmp2 = max(6.0_r8*dr_so4_monolayers_dust*volumeCore(num_bc_idx), 0.0_r8) ! dr_so4_monolayers_dust = n_so4_monolayers_dust (=1) * 4.67e-10
-    dstcoat(1) = tmp1/tmp2
+          ! calculate coated fraction
+          ! volumeCore and volumeCoat from subroutine calculateHygroscopicity in paramix_progncdnc.f90
 
-    tmp1 = volumeCoat(num_dst1_idx)*(r_dust_a1*2._r8)*fac_volsfc_dust_a1
-    tmp2 = max(6.0_r8*dr_so4_monolayers_dust*volumeCore(num_dst1_idx), 0.0_r8) ! dr_so4_monolayers_dust = n_so4_monolayers_dust (=1) * 4.67e-10
-    dstcoat(2) = tmp1/tmp2
+          tmp1 = volumeCoat(icol,ilev,num_bc_idx)*(r_bc*2._r8)*fac_volsfc_bc
+          tmp2 = max(6.0_r8*dr_so4_monolayers_dust*volumeCore(icol,ilev,num_bc_idx), 0.0_r8)
+          dstcoat(icol,ilev,1) = tmp1/tmp2
+          if (dstcoat(icol,ilev,1) > 1._r8) then
+             dstcoat(icol,ilev,1) = 1._r8
+          else if (dstcoat(icol,ilev,1) < 0.001_r8) then
+             dstcoat(icol,ilev,1) = 0.001_r8
+          end if
 
-    tmp1 = volumeCoat(num_dst3_idx)*(r_dust_a3*2._r8)*fac_volsfc_dust_a3
-    tmp2 = max(6.0_r8*dr_so4_monolayers_dust*volumeCore(num_dst3_idx), 0.0_r8) ! dr_so4_monolayers_dust = n_so4_monolayers_dust (=1) * 4.67e-10
-    dstcoat(3) = tmp1/tmp2
+          tmp1 = volumeCoat(icol,ilev,num_dst1_idx)*(r_dust_a1*2._r8)*fac_volsfc_dust_a1
+          tmp2 = max(6.0_r8*dr_so4_monolayers_dust*volumeCore(icol,ilev,num_dst1_idx), 0.0_r8)
+          dstcoat(icol,ilev,2) = tmp1/tmp2
+          if (dstcoat(icol,ilev,2) > 1._r8) then
+             dstcoat(icol,ilev,2) = 1._r8
+          else if (dstcoat(icol,ilev,2) < 0.001_r8) then
+             dstcoat(icol,ilev,2) = 0.001_r8
+          end if
 
-    if (dstcoat(1) > 1._r8) dstcoat(1) = 1._r8
-    if (dstcoat(1) < 0.001_r8) dstcoat(1) = 0.001_r8
-    if (dstcoat(2) > 1._r8) dstcoat(2) = 1._r8
-    if (dstcoat(2) < 0.001_r8) dstcoat(2) = 0.001_r8
-    if (dstcoat(3) > 1._r8) dstcoat(3) = 1._r8
-    if (dstcoat(3) < 0.001_r8) dstcoat(3) = 0.001_r8
+          tmp1 = volumeCoat(icol,ilev,num_dst3_idx)*(r_dust_a3*2._r8)*fac_volsfc_dust_a3
+          tmp2 = max(6.0_r8*dr_so4_monolayers_dust*volumeCore(icol,ilev,num_dst3_idx), 0.0_r8)
+          dstcoat(icol,ilev,3) = tmp1/tmp2
+          if (dstcoat(icol,ilev,3) > 1._r8) then
+             dstcoat(icol,ilev,3) = 1._r8
+          else if (dstcoat(icol,ilev,3) < 0.001_r8) then
+             dstcoat(icol,ilev,3) = 0.001_r8
+          end if
 
-    !*****************************************************************************
-    !                prepare some variables for water activity
-    !*****************************************************************************
-    ! cam ([kg/m3] added mass distributed to modes) from paramix_progncdnc.f90
+          ! prepare some variables for water activity
 
-    ! accumulation mode for dust_a1
-    if (qaerpt(num_dst1_idx) > 0._r8) then
-       awcam(2) = cam(num_dst1_idx)*1.e9_r8    ! kg/m3 -> ug/m3
-    else
-       awcam(2) = 0._r8
-    end if
-    if (awcam(2) >0._r8) then
-       awfacm(2) = f_acm(num_dst1_idx)
-    else
-       awfacm(2) = 0._r8
-    end if
+          ! cam ([kg/m3] added mass distributed to modes)
+          ! accumulation mode for dust_a1
+          if (qaerpt(icol,ilev,num_dst1_idx) > 0._r8) then
+             awcam(icol,ilev,2) = cam(icol,ilev,num_dst1_idx)*1.e9_r8    ! kg/m3 -> ug/m3
+          else
+             awcam(icol,ilev,2) = 0._r8
+          end if
+          if (awcam(icol,ilev,2) >0._r8) then
+             awfacm(icol,ilev,2) = f_acm(icol,ilev,num_dst1_idx)
+          else
+             awfacm(icol,ilev,2) = 0._r8
+          end if
 
-    ! accumulation mode for dust_a3
-    if (qaerpt(num_dst3_idx) > 0._r8) then
-       awcam(3) = cam(num_dst3_idx)*1.e9_r8    ! kg/m3 -> ug/m3
-    else
-       awcam(3) = 0._r8
-    end if
-    if (awcam(3) >0._r8) then
-       awfacm(3) = f_acm(num_dst3_idx)
-    else
-       awfacm(3) = 0._r8
-    end if
+          ! accumulation mode for dust_a3
+          if (qaerpt(icol,ilev,num_dst3_idx) > 0._r8) then
+             awcam(icol,ilev,3) = cam(icol,ilev,num_dst3_idx)*1.e9_r8    ! kg/m3 -> ug/m3
+          else
+             awcam(icol,ilev,3) = 0._r8
+          end if
+          if (awcam(icol,ilev,3) >0._r8) then
+             awfacm(icol,ilev,3) = f_acm(icol,ilev,num_dst3_idx)
+          else
+             awfacm(icol,ilev,3) = 0._r8
+          end if
 
-    ! accumulation mode for bc
-    if (qaerpt(num_bc_idx) > 0._r8) then
-       awcam(1) = cam(num_bc_idx)*1.e9_r8    ! kg/m3 -> ug/m3
-    else
-       awcam(1) = 0._r8
-    end if
-    if (awcam(1) >0._r8) then
-       awfacm(1) = f_acm(num_bc_idx)
-    else
-       awfacm(1) = 0._r8
-    end if
+          ! accumulation mode for bc
+          if (qaerpt(icol,ilev,num_bc_idx) > 0._r8) then
+             awcam(icol,ilev,1) = cam(icol,ilev,num_bc_idx)*1.e9_r8    ! kg/m3 -> ug/m3
+          else
+             awcam(icol,ilev,1) = 0._r8
+          end if
+          if (awcam(icol,ilev,1) >0._r8) then
+             awfacm(icol,ilev,1) = f_acm(icol,ilev,num_bc_idx)
+          else
+             awfacm(icol,ilev,1) = 0._r8
+          end if
 
-    !*****************************************************************************
-    !                prepare output
-    !*****************************************************************************
+          ! prepare output
+          total_interstitial_aer_num(icol,ilev,1) = bc_num
+          total_interstitial_aer_num(icol,ilev,2) = dst1_num
+          total_interstitial_aer_num(icol,ilev,3) = dst3_num
 
-    total_interstial_aer_num(1) = bc_num
-    total_interstial_aer_num(2) = dst1_num
-    total_interstial_aer_num(3) = dst3_num
+          total_cloudborne_aer_num(icol,ilev,1) = bc_num_imm
+          total_cloudborne_aer_num(icol,ilev,2) = dst1_num_imm
+          total_cloudborne_aer_num(icol,ilev,3) = dst3_num_imm
 
-    total_cloudborne_aer_num(1) = bc_num_imm
-    total_cloudborne_aer_num(2) = dst1_num_imm
-    total_cloudborne_aer_num(3) = dst3_num_imm
+          do imode = 1, 3
+             total_aer_num(icol,ilev,imode)    = &
+                  total_interstitial_aer_num(icol,ilev,imode) + total_cloudborne_aer_num(icol,ilev,imode)
+             coated_aer_num(icol,ilev,imode)   = &
+                  total_interstitial_aer_num(icol,ilev,imode) * dstcoat(icol,ilev,imode)
+             uncoated_aer_num(icol,ilev,imode) = &
+                  total_interstitial_aer_num(icol,ilev,imode) * (1._r8-dstcoat(icol,ilev,imode))
+          end do
 
-    do i = 1, 3
-       total_aer_num(i) = total_interstial_aer_num(i)+total_cloudborne_aer_num(i)
-       coated_aer_num(i) = total_interstial_aer_num(i)*dstcoat(i)
-       uncoated_aer_num(i) = total_interstial_aer_num(i)*(1._r8-dstcoat(i))
+          ! scaled for D>0.5 um using Clarke et al., 1997; 2004; 2007: rg=0.1um, sig=1.6
+          tot_na500(icol,ilev) = total_aer_num(icol,ilev,1)*0.0256_r8  &
+                          +total_aer_num(icol,ilev,3)
+
+          ! scaled for D>0.5 um using Clarke et al., 1997; 2004; 2007: rg=0.1um, sig=1.6
+          na500(icol,ilev) = total_interstitial_aer_num(icol,ilev,1)*0.0256_r8   &
+                      +total_interstitial_aer_num(icol,ilev,3)
+
+       end do
     end do
-
-
-    tot_na500 = total_aer_num(1)*0.0256_r8          & ! scaled for D>0.5 um using Clarke et al., 1997; 2004; 2007: rg=0.1um, sig=1.6
-         +total_aer_num(3)
-
-    na500 = total_interstial_aer_num(1)*0.0256_r8   & ! scaled for D>0.5 um using Clarke et al., 1997; 2004; 2007: rg=0.1um, sig=1.6
-         +total_interstial_aer_num(3)
 
   end subroutine get_aer_num
 
   !===================================================================================================
 
-  subroutine hetfrz_classnuc_calc( &
-       deltat, t, p, supersatice,                 &
-       fn,                                        &
-       r3lx, icnlx,                               &
-       frzbcimm, frzduimm,                        &
-       frzbccnt, frzducnt,                        &
-       frzbcdep, frzdudep,                        &
-       hetraer, awcam, awfacm, dstcoat,                   &
-       total_aer_num, coated_aer_num, uncoated_aer_num,  &
-       total_interstitial_aer_num, total_cloudborne_aer_num, errstring)
+  subroutine hetfrz_classnuc_calc(                                   &
+       deltat, t, p, supersatice, eswtr, esice,                      &
+       fn, r3lx, icnlx, frzbcimm, frzduimm,                          &
+       frzbccnt, frzducnt,                                           &
+       frzbcdep, frzdudep, hetraer,                                  &
+       awcam, awfacm, dstcoat, total_aer_num,                        &
+       coated_aer_num, uncoated_aer_num, total_interstitial_aer_num, &
+       total_cloudborne_aer_num, errstring)
 
     real(r8), intent(in) :: deltat                        ! timestep [s]
     real(r8), intent(in) :: t                             ! temperature [K]
     real(r8), intent(in) :: p                             ! pressure [Pa]
     real(r8), intent(in) :: supersatice                   ! supersaturation ratio wrt ice at 100%rh over water [ ]
+    real(r8), intent(in) :: eswtr                         ! saturation vapor pressure water [Pa]
+    real(r8), intent(in) :: esice                         ! saturation vapor pressure ice [Pa]
     real(r8), intent(in) :: r3lx                          ! volume mean drop radius [m]
     real(r8), intent(in) :: icnlx                         ! in-cloud droplet concentration [cm-3]
     real(r8), intent(in) :: fn(3)                         ! fraction activated [ ] for cloud borne aerosol number
@@ -875,6 +983,7 @@ contains
     real(r8), intent(in) :: uncoated_aer_num(3)           ! uncoated bc and dust number concentration(interstitial)
     real(r8), intent(in) :: total_interstitial_aer_num(3) ! total bc and dust concentration(interstitial)
     real(r8), intent(in) :: total_cloudborne_aer_num(3)   ! total bc and dust concentration(cloudborne)
+
     real(r8), intent(out) :: frzbcimm                     ! het. frz by BC immersion nucleation [cm-3 s-1]
     real(r8), intent(out) :: frzduimm                     ! het. frz by dust immersion nucleation [cm-3 s-1]
     real(r8), intent(out) :: frzbccnt                     ! het. frz by BC contact nucleation [cm-3 s-1]
@@ -893,20 +1002,18 @@ contains
     real(r8) , parameter :: hplanck = 6.63e-34_r8
     real(r8) , parameter :: rhplanck = 1._r8/hplanck
     real(r8) , parameter :: amu = 1.66053886e-27_r8
-    real(r8) , parameter :: nus = 1.e13_r8       ! frequ. of vibration [s-1] higher freq. (as in P&K, consistent with Anupam's data)
+    real(r8) , parameter :: nus = 1.e13_r8       ! frequ. of vibration [s-1] higher freq. (as in P&ILEV, consistent with Anupam's data)
     real(r8) , parameter :: taufrz = 195.435_r8  ! time constant for falloff of freezing rate [s]
     real(r8) , parameter :: rhwincloud = 0.98_r8 ! 98% RH in mixed-phase clouds (Korolev & Isaac, JAS 2006)
     real(r8) , parameter :: limfacbc = 0.01_r8   ! max. ice nucleating fraction soot
-    real(r8) :: aw(3)                           ! water activity [ ]
-    real(r8) :: molal(3)                        ! molality [moles/kg]
+    real(r8) :: aw(3)                            ! water activity [ ]
+    real(r8) :: molal(3)                         ! molality [moles/kg]
     logical  :: do_bc, do_dst1, do_dst3
     real(r8) :: tc
     real(r8) :: vwice
     real(r8) :: rhoice
     real(r8) :: sigma_iw                        ! [J/m2]
     real(r8) :: sigma_iv                        ! [J/m2]
-    real(r8) :: esice                           ! [Pa]
-    real(r8) :: eswtr                           ! [Pa]
     real(r8) :: rgimm
     real(r8) :: rgdep
     real(r8) :: dg0dep
@@ -919,64 +1026,23 @@ contains
     real(r8) :: dg0imm_dust_a1, dg0imm_dust_a3
     real(r8) :: Aimm_bc
     real(r8) :: Aimm_dust_a1, Aimm_dust_a3
-    real(r8) :: q, m, phi
+    real(r8) :: q,phi
     real(r8) :: r_bc                            ! model radii of BC modes [m]
     real(r8) :: r_dust_a1, r_dust_a3            ! model radii of dust modes [m]
-    real(r8) :: f_imm_bc
-    real(r8) :: f_imm_dust_a1, f_imm_dust_a3
     real(r8) :: Jimm_bc
     real(r8) :: Jimm_dust_a1, Jimm_dust_a3
-    real(r8) :: f_dep_bc
-    real(r8) :: f_dep_dust_a1, f_dep_dust_a3
     real(r8) :: Jdep_bc
     real(r8) :: Jdep_dust_a1, Jdep_dust_a3
-    real(r8) :: f_cnt_bc
-    real(r8) :: f_cnt_dust_a1,f_cnt_dust_a3
     real(r8) :: Jcnt_bc
     real(r8) :: Jcnt_dust_a1,Jcnt_dust_a3
-    integer  :: i
-
-    !********************************************************
-    ! Hoose et al., 2010 fitting parameters
-    !********************************************************
-    !freezing parameters for immersion freezing
-    !real(r8),parameter :: theta_imm_bc = 40.17         ! contact angle [deg], converted to rad later
-    !real(r8),parameter :: dga_imm_bc = 14.4E-20        ! activation energy [J]
-    !real(r8),parameter :: theta_imm_dust = 30.98       ! contact angle [deg], converted to rad later
-    !real(r8),parameter :: dga_imm_dust = 15.7E-20      ! activation energy [J]
-
-    !freezing parameters for deposition nucleation
-    !real(r8),parameter :: theta_dep_dust = 12.7       ! contact angle [deg], converted to rad later !Zimmermann et al (2008), illite
-    !real(r8),parameter :: dga_dep_dust = -6.21E-21    ! activation energy [J]
-    !real(r8),parameter :: theta_dep_bc = 28.          ! contact angle [deg], converted to rad later !Moehler et al (2005), soot
-    !real(r8),parameter :: dga_dep_bc = -2.E-19        ! activation energy [J]
-
-    !********************************************************
-    ! Wang et al., 2014 fitting parameters
-    !********************************************************
-    ! freezing parameters for immersion freezing
-    real(r8),parameter :: theta_imm_bc = 48.0_r8      ! contact angle [deg], converted to rad later !DeMott et al (1990)
-    real(r8),parameter :: dga_imm_bc = 14.15E-20_r8   ! activation energy [J]
-    real(r8),parameter :: theta_imm_dust = 46.0_r8    ! contact angle [deg], converted to rad later !DeMott et al (2011) SD
-    real(r8),parameter :: dga_imm_dust = 14.75E-20_r8 ! activation energy [J]
-
-    ! freezing parameters for deposition nucleation
-    real(r8),parameter :: theta_dep_dust = 20.0_r8   ! contact angle [deg], converted to rad later !Koehler et al (2010) SD
-    real(r8),parameter :: dga_dep_dust = -8.1E-21_r8 ! activation energy [J]
-    real(r8),parameter :: theta_dep_bc = 28._r8      ! contact angle [deg], converted to rad later !Moehler et al (2005), soot
-    real(r8),parameter :: dga_dep_bc = -2.E-19_r8    ! activation energy [J]
+    integer  :: icol
 
     real(r8) :: Kcoll_bc      ! collision kernel [cm3 s-1]
     real(r8) :: Kcoll_dust_a1 ! collision kernel [cm3 s-1]
     real(r8) :: Kcoll_dust_a3 ! collision kernel [cm3 s-1]
-    logical  :: tot_in = .false.
     real(r8) :: dim_Jimm_dust_a1(pdf_n_theta), dim_Jimm_dust_a3(pdf_n_theta)
     real(r8) :: sum_imm_dust_a1, sum_imm_dust_a3
     !------------------------------------------------------------------------------------------------
-
-    ! get saturation vapor pressures
-    eswtr = svp_water(t)  ! 0 for liquid
-    esice = svp_ice(t)  ! 1 for ice
 
     tc = t - tmelt
     rhoice = 916.7_r8-0.175_r8*tc-5.e-4_r8*tc**2
@@ -1012,12 +1078,12 @@ contains
     ! water activity.
     ! If the index of IN is 0, it means three freezing modes of this aerosol are depressed.
 
-    do i = 1, 3
+    do icol = 1, 3
        !calculate molality
-       if ( total_interstitial_aer_num(i) > 0._r8 ) then
-          molal(i) = (1.e-6_r8*awcam(i)*(1._r8-awfacm(i))/(Mso4*total_interstitial_aer_num(i)*1.e6_r8))/ &
+       if ( total_interstitial_aer_num(icol) > 0._r8 ) then
+          molal(icol) = (1.e-6_r8*awcam(icol)*(1._r8-awfacm(icol))/(Mso4*total_interstitial_aer_num(icol)*1.e6_r8))/ &
                (4*pi/3*rhoh2o*(MAX(r3lx,4.e-6_r8))**3)
-          aw(i) = 1._r8/(1._r8+2.9244948e-2_r8*molal(i)+2.3141243e-3_r8*molal(i)**2+7.8184854e-7_r8*molal(i)**3)
+          aw(icol) = 1._r8/(1._r8 + 2.9244948e-2_r8*molal(icol) + 2.3141243e-3_r8*molal(icol)**2 + 7.8184854e-7_r8*molal(icol)**3)
        end if
     end do
 
@@ -1063,21 +1129,8 @@ contains
        do_dst3 = .false.
     end if
 
-    ! form factor
-    ! only consider flat surfaces due to uncertainty of curved surfaces
-
-    m = COS(theta_imm_bc*pi/180._r8)
-    f_imm_bc = (2+m)*(1-m)**2/4._r8
-    if (.not. pdf_imm_in) then
-       m = COS(theta_imm_dust*pi/180._r8)
-       f_imm_dust_a1 = (2+m)*(1-m)**2/4._r8
-
-       m = COS(theta_imm_dust*pi/180._r8)
-       f_imm_dust_a3 = (2+m)*(1-m)**2/4._r8
-    end if
-
     ! homogeneous energy of germ formation
-    dg0imm_bc = 4*pi/3._r8*sigma_iw*rgimm_bc**2
+    dg0imm_bc      = 4*pi/3._r8*sigma_iw*rgimm_bc**2
     dg0imm_dust_a1 = 4*pi/3._r8*sigma_iw*rgimm_dust_a1**2
     dg0imm_dust_a3 = 4*pi/3._r8*sigma_iw*rgimm_dust_a3**2
 
@@ -1087,28 +1140,28 @@ contains
     Aimm_dust_a3 = n1*((vwice*rhplanck)/(rgimm_dust_a3**3)*SQRT(3._r8/pi*kboltz*T*dg0imm_dust_a3))
 
     ! nucleation rate per particle
-    Jimm_bc = Aimm_bc*r_bc**2/SQRT(f_imm_bc)*EXP((-dga_imm_bc-f_imm_bc*dg0imm_bc)/(kboltz*T))
+    Jimm_bc = Aimm_bc*r_bc**2/sqroot_f_imm_bc*EXP((-dga_imm_bc-f_imm_bc*dg0imm_bc)/(kboltz*T))
     if (.not. pdf_imm_in) then
        ! 1/sqrt(f)
        ! the expression of Chen et al. (sqrt(f)) may however lead to unphysical
        ! behavior as it implies J->0 when f->0 (i.e. ice nucleation would be
        ! more difficult on easily wettable materials).
-       Jimm_dust_a1 = Aimm_dust_a1*r_dust_a1**2/SQRT(f_imm_dust_a1)*EXP((-dga_imm_dust-f_imm_dust_a1*dg0imm_dust_a1)/(kboltz*T))
-       Jimm_dust_a3 = Aimm_dust_a3*r_dust_a3**2/SQRT(f_imm_dust_a3)*EXP((-dga_imm_dust-f_imm_dust_a3*dg0imm_dust_a3)/(kboltz*T))
+       Jimm_dust_a1 = Aimm_dust_a1*r_dust_a1**2/sqroot_f_imm_dust_a1*EXP((-dga_imm_dust-f_imm_dust_a1*dg0imm_dust_a1)/(kboltz*T))
+       Jimm_dust_a3 = Aimm_dust_a3*r_dust_a3**2/sqroot_f_imm_dust_a3*EXP((-dga_imm_dust-f_imm_dust_a3*dg0imm_dust_a3)/(kboltz*T))
     end if
 
     if (pdf_imm_in) then
        dim_Jimm_dust_a1 = 0.0_r8
        dim_Jimm_dust_a3 = 0.0_r8
-       do i = i1,i2
+       do icol = i1,i2
           ! 1/sqrt(f)
-          dim_Jimm_dust_a1(i) = Aimm_dust_a1*r_dust_a1**2/SQRT(dim_f_imm_dust_a1(i))*EXP((-dga_imm_dust-dim_f_imm_dust_a1(i)* &
-               dg0imm_dust_a1)/(kboltz*T))
-          dim_Jimm_dust_a1(i) = max(dim_Jimm_dust_a1(i), 0._r8)
+          dim_Jimm_dust_a1(icol) = Aimm_dust_a1*r_dust_a1**2/sqroot_dim_f_imm_dust_a1(icol) &
+               *EXP((-dga_imm_dust-dim_f_imm_dust_a1(icol)*dg0imm_dust_a1)/(kboltz*T))
+          dim_Jimm_dust_a1(icol) = max(dim_Jimm_dust_a1(icol), 0._r8)
 
-          dim_Jimm_dust_a3(i) = Aimm_dust_a3*r_dust_a3**2/SQRT(dim_f_imm_dust_a3(i))*EXP((-dga_imm_dust-dim_f_imm_dust_a3(i)* &
-               dg0imm_dust_a3)/(kboltz*T))
-          dim_Jimm_dust_a3(i) = max(dim_Jimm_dust_a3(i), 0._r8)
+          dim_Jimm_dust_a3(icol) = Aimm_dust_a3*r_dust_a3**2/sqroot_dim_f_imm_dust_a1(icol) &
+               *EXP((-dga_imm_dust-dim_f_imm_dust_a3(icol)*dg0imm_dust_a3)/(kboltz*T))
+          dim_Jimm_dust_a3(icol) = max(dim_Jimm_dust_a3(icol), 0._r8)
        end do
     end if
 
@@ -1116,13 +1169,15 @@ contains
     if (pdf_imm_in) then
        sum_imm_dust_a1 = 0._r8
        sum_imm_dust_a3 = 0._r8
-       do i = i1,i2-1
-          sum_imm_dust_a1 = sum_imm_dust_a1+0.5_r8*((pdf_imm_theta(i)*exp(-dim_Jimm_dust_a1(i)*deltat)+ &
-               pdf_imm_theta(i+1)*exp(-dim_Jimm_dust_a1(i+1)*deltat)))*pdf_d_theta
-          sum_imm_dust_a3 = sum_imm_dust_a3+0.5_r8*((pdf_imm_theta(i)*exp(-dim_Jimm_dust_a3(i)*deltat)+ &
-               pdf_imm_theta(i+1)*exp(-dim_Jimm_dust_a3(i+1)*deltat)))*pdf_d_theta
+       do icol = i1,i2-1
+          sum_imm_dust_a1 = sum_imm_dust_a1 &
+               + 0.5_r8*((pdf_imm_theta(icol)*exp(-dim_Jimm_dust_a1(icol)*deltat) &
+               +          pdf_imm_theta(icol+1)*exp(-dim_Jimm_dust_a1(icol+1)*deltat)))*pdf_d_theta
+          sum_imm_dust_a3 = sum_imm_dust_a3 + &
+               0.5_r8*((pdf_imm_theta(icol)*exp(-dim_Jimm_dust_a3(icol)*deltat)+ &
+                        pdf_imm_theta(icol+1)*exp(-dim_Jimm_dust_a3(icol+1)*deltat)))*pdf_d_theta
        end do
-       do i = i1,i2
+       do icol = i1,i2
           if (sum_imm_dust_a1 > 0.99_r8) then
              sum_imm_dust_a1 = 1.0_r8
           end if
@@ -1174,19 +1229,10 @@ contains
     !----------------------------------
     !   Deposition nucleation
     !----------------------------------
+
     ! critical germ size
     ! assume 98% RH in mixed-phase clouds (Korolev & Isaac, JAS 2006)
     rgdep=2*vwice*sigma_iv/(kboltz*t*LOG(rhwincloud*supersatice))
-
-    ! form factor
-    m = COS(theta_dep_bc*pi/180._r8)
-    f_dep_bc = (2+m)*(1-m)**2/4._r8
-
-    m = COS(theta_dep_dust*pi/180._r8)
-    f_dep_dust_a1 = (2+m)*(1-m)**2/4._r8
-
-    m = COS(theta_dep_dust*pi/180._r8)
-    f_dep_dust_a3 = (2+m)*(1-m)**2/4._r8
 
     ! homogeneous energy of germ formation
     dg0dep = 4*pi/3._r8*sigma_iv*rgdep**2
@@ -1197,9 +1243,9 @@ contains
 
     ! nucleation rate per particle
     if (rgdep > 0) then
-       Jdep_bc = Adep*r_bc**2/SQRT(f_dep_bc)*EXP((-dga_dep_bc-f_dep_bc*dg0dep)/(kboltz*T))
-       Jdep_dust_a1 = Adep*r_dust_a1**2/SQRT(f_dep_dust_a1)*EXP((-dga_dep_dust-f_dep_dust_a1*dg0dep)/(kboltz*T))
-       Jdep_dust_a3 = Adep*r_dust_a3**2/SQRT(f_dep_dust_a3)*EXP((-dga_dep_dust-f_dep_dust_a3*dg0dep)/(kboltz*T))
+       Jdep_bc = Adep*r_bc**2/sqroot_f_dep_bc*EXP((-dga_dep_bc-f_dep_bc*dg0dep)/(kboltz*T))
+       Jdep_dust_a1 = Adep*r_dust_a1**2/sqroot_f_dep_dust_a1*EXP((-dga_dep_dust-f_dep_dust_a1*dg0dep)/(kboltz*T))
+       Jdep_dust_a3 = Adep*r_dust_a3**2/sqroot_f_dep_dust_a3*EXP((-dga_dep_dust-f_dep_dust_a3*dg0dep)/(kboltz*T))
     else
        Jdep_bc = 0._r8
        Jdep_dust_a1 = 0._r8
@@ -1236,16 +1282,6 @@ contains
     ! contact nucleation
     ! ---------------------------
 
-    ! form factor
-    m = COS(theta_dep_bc*pi/180._r8)
-    f_cnt_bc = (2+m)*(1-m)**2/4._r8
-
-    m = COS(theta_dep_dust*pi/180._r8)
-    f_cnt_dust_a1 = (2+m)*(1-m)**2/4._r8
-
-    m = COS(theta_dep_dust*pi/180._r8)
-    f_cnt_dust_a3 = (2+m)*(1-m)**2/4._r8
-
     ! homogeneous energy of germ formation
     dg0cnt = 4*pi/3._r8*sigma_iv*rgimm**2
 
@@ -1254,7 +1290,7 @@ contains
     Acnt = rhwincloud*eswtr*4*pi/(nus*SQRT(2*pi*mwh2o*amu*kboltz*T))
 
     ! nucleation rate per particle
-    Jcnt_bc = Acnt*r_bc**2*EXP((-dga_dep_bc-f_cnt_bc*dg0cnt)/(kboltz*T))*Kcoll_bc*icnlx
+    Jcnt_bc      = Acnt*r_bc**2     *EXP((-dga_dep_bc-f_cnt_bc*dg0cnt)       /(kboltz*T))*Kcoll_bc*icnlx
     Jcnt_dust_a1 = Acnt*r_dust_a1**2*EXP((-dga_dep_dust-f_cnt_dust_a1*dg0cnt)/(kboltz*T))*Kcoll_dust_a1*icnlx
     Jcnt_dust_a3 = Acnt*r_dust_a3**2*EXP((-dga_dep_dust-f_cnt_dust_a3*dg0cnt)/(kboltz*T))*Kcoll_dust_a3*icnlx
 
@@ -1343,7 +1379,7 @@ contains
     real(r8) :: Tdiff_cotton ! temperature difference between droplet and environment [K]
     real(r8) :: K_brownian,K_thermo_cotton,K_diffusio_cotton   ! collision kernels [m3 s-1]
     real(r8) :: K_total     ! total collision kernel [cm3 s-1]
-    integer  :: i
+    integer  :: imode
     !------------------------------------------------------------------------------------------------
 
     Kcoll_bc      = 0._r8
@@ -1392,10 +1428,10 @@ contains
 
     ! variables depending on aerosol radius
     ! loop over 3 aerosol modes
-    do i = 1, 3
-       if (i == 1) r_a = r_bc
-       if (i == 2) r_a = r_dust_a1
-       if (i == 3) r_a = r_dust_a3
+    do imode = 1, 3
+       if (imode == 1) r_a = r_bc
+       if (imode == 2) r_a = r_dust_a1
+       if (imode == 3) r_a = r_dust_a3
        ! Knudsen number (Seinfeld & Pandis 8.1)
        Kn = lambda/r_a
        ! aerosol diffusivity
@@ -1407,8 +1443,8 @@ contains
        K_brownian = 4*pi*r3lx*Daer*(1 + 0.3_r8*Re**0.5_r8*Sc**0.33_r8)
 
        ! thermal conductivities from Seinfeld & Pandis, Table 8.6
-       if (i == 1) Ktherm = 4.2_r8 ! Carbon
-       if (i == 2 .or. i == 3) Ktherm = 0.72_r8 ! clay
+       if (imode == 1) Ktherm = 4.2_r8 ! Carbon
+       if (imode == 2 .or. imode == 3) Ktherm = 0.72_r8 ! clay
 
        ! form factor
        f_t = 0.4_r8*(1._r8 + 1.45_r8*Kn + 0.4_r8*Kn*EXP(-1._r8/Kn))      &
@@ -1423,11 +1459,11 @@ contains
        K_total = 1.e6_r8*(K_brownian + K_thermo_cotton + K_diffusio_cotton)  ! convert m3/s -> cm3/s
 
        ! set K to 0 if negative
-       if (K_total .lt. 0._r8) K_total = 0._r8
+       if (K_total < 0._r8) K_total = 0._r8
 
-       if (i == 1) Kcoll_bc = K_total
-       if (i == 2) Kcoll_dust_a1 = K_total
-       if (i == 3) Kcoll_dust_a3 = K_total
+       if (imode == 1) Kcoll_bc = K_total
+       if (imode == 2) Kcoll_dust_a1 = K_total
+       if (imode == 3) Kcoll_dust_a3 = K_total
     end do
 
   end subroutine collkernel
@@ -1442,8 +1478,8 @@ contains
     real(r8) :: norm_theta_imm
     real(r8) :: imm_dust_mean_theta
     real(r8) :: imm_dust_var_theta
-    integer  :: i
-    real(r8) :: m
+    integer  :: index
+    real(r8) :: cos_angle
     real(r8) :: temp
     !----------------------------------------------------------------------------
 
@@ -1457,20 +1493,20 @@ contains
     x1_imm = (LOG(theta_min) - LOG(imm_dust_mean_theta))/(sqrt(2.0_r8)*imm_dust_var_theta)
     x2_imm = (LOG(theta_max) - LOG(imm_dust_mean_theta))/(sqrt(2.0_r8)*imm_dust_var_theta)
     norm_theta_imm = (ERF(x2_imm) - ERF(x1_imm))*0.5_r8
-    dim_theta      = 0.0_r8
+    dim_theta = 0.0_r8
     pdf_imm_theta  = 0.0_r8
-    do i = i1, i2
-       dim_theta(i)     = 1._r8/180._r8*pi + (i-1)*pdf_d_theta
-       pdf_imm_theta(i) = exp(-((LOG(dim_theta(i)) - LOG(imm_dust_mean_theta))**2._r8) / &
-            (2._r8*imm_dust_var_theta**2._r8) ) /                     &
-            (dim_theta(i)*imm_dust_var_theta*SQRT(2*pi))/norm_theta_imm
+    do index = i1, i2
+       dim_theta(index) = 1._r8/180._r8*pi + (index-1)*pdf_d_theta
+       pdf_imm_theta(index) = exp(-((LOG(dim_theta(index)) - LOG(imm_dust_mean_theta))**2._r8) / &
+            (2._r8*imm_dust_var_theta**2._r8) ) /  &
+            (dim_theta(index)*imm_dust_var_theta*SQRT(2*pi))/norm_theta_imm
     end do
 
-    do i = i1, i2
-       m = cos(dim_theta(i))
-       temp = (2+m)*(1-m)**2/4._r8
-       dim_f_imm_dust_a1(i) = temp
-       dim_f_imm_dust_a3(i) = temp
+    do index = i1, i2
+       cos_angle = cos(dim_theta(index))
+       temp = (2+cos_angle)*(1-cos_angle)**2/4._r8
+       dim_f_imm_dust_a1(index) = temp
+       dim_f_imm_dust_a3(index) = temp
     end do
 
   end subroutine hetfrz_classnuc_init_pdftheta

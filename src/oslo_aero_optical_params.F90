@@ -18,6 +18,7 @@ module oslo_aero_optical_params
   use oslo_aero_conc,      only: calculateBulkProperties, partitionMass
   use oslo_aero_sw_tables, only: interpol0, interpol1, interpol2to3, interpol4, interpol5to10
   use oslo_aero_aerocom,   only: aerocom1, aerocom2
+  use perf_mod,            only: t_startf, t_stopf
 
   implicit none
   private
@@ -64,8 +65,7 @@ contains
     real(r8), intent(out) :: absvis(pcols)                        ! AAOD vis
 
     ! Local variables
-    integer  :: i, k, ib, icol, mplus10
-    integer  :: iloop
+    integer  :: imode, index, ilev, ib, icol, mplus10
     real(r8) :: Nnatk(pcols,pver,0:nmodes) ! aerosol mode number concentration
     logical  :: daylight(pcols)            ! SW calculations also at (polar) night in interpol* if daylight=.true.
     real(r8) :: aodvisvolc(pcols)          ! AOD vis for CMIP6 volcanic aerosol
@@ -125,28 +125,30 @@ contains
     real(r8) :: daerh2o(pcols)
     !-------------------------------------------------------------------------
 
+    call t_startf('oslo_aero_optical_params')
+
     ! calculate relative humidity for table lookup into rh grid
     call qsat_water(state%t(1:ncol,1:pver), state%pmid(1:ncol,1:pver), es(1:ncol,1:pver), qs(1:ncol,1:pver), ncol, pver)
 
     rht(1:ncol,1:pver) = state%q(1:ncol,1:pver,1) / qs(1:ncol,1:pver)
     rh_temp(1:ncol,1:pver) = min(rht(1:ncol,1:pver),1._r8)
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
           ! Set upper and lower relative humidity for the aerosol calculations
-          rhum(icol,k) = min(0.995_r8, max(rh_temp(icol,k), 0.01_r8))
-          rhoda(icol,k) = pmid(icol,k)/(rair*t(icol,k))      ! unit kg/m^3
-          if (cld(icol,k) .lt. 1.0_r8) then
-             rhum(icol,k) = (rhum(icol,k) - cld(icol,k)) / (1.0_r8 - cld(icol,k))  ! clear portion
+          rhum(icol,ilev) = min(0.995_r8, max(rh_temp(icol,ilev), 0.01_r8))
+          rhoda(icol,ilev) = pmid(icol,ilev)/(rair*t(icol,ilev))      ! unit kg/m^3
+          if (cld(icol,ilev) < 1.0_r8) then
+             rhum(icol,ilev) = (rhum(icol,ilev) - cld(icol,ilev)) / (1.0_r8 - cld(icol,ilev))  ! clear portion
           end if
-          rhum(icol,k) = min(0.995_r8, max(rhum(icol,k), 0.01_r8))
+          rhum(icol,ilev) = min(0.995_r8, max(rhum(icol,ilev), 0.01_r8))
        end do
     end do
 
     ! Layer thickness with unit km
     do icol=1,ncol
-       do k=1,pver
-          deltah_km(icol,k)=1.e-4_r8*(pint(icol,k+1)-pint(icol,k))/(rhoda(icol,k)*9.8_r8)
+       do ilev=1,pver
+          deltah_km(icol,ilev)=1.e-4_r8*(pint(icol,ilev+1)-pint(icol,ilev))/(rhoda(icol,ilev)*9.8_r8)
        end do
     end do
 
@@ -168,16 +170,16 @@ contains
     ! Set SO4, BC and OC concentrations:
 
     ! initialize concentration fields
-    do i=0,nmodes
-       do k=1,pver
+    do imode=0,nmodes
+       do ilev=1,pver
           do icol=1,ncol
-             Nnatk(icol,k,i)  = 0.0_r8
+             Nnatk(icol,ilev,imode)  = 0.0_r8
           end do
        end do
     end do
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          n_aer(icol,k)     = 0.0_r8
+          n_aer(icol,ilev)     = 0.0_r8
        end do
     end do
     kalw(:,:,:,:)=0._r8
@@ -191,22 +193,22 @@ contains
          f_aq, f_so4_cond, f_soa, faitbc, fnbc, f_soana)
 
     ! calculating vulume fractions from mass fractions:
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          v_soana(icol,k) = f_soana(icol,k)/(f_soana(icol,k) &
-               +(1.0_r8-f_soana(icol,k))*rhopart(l_soa_na)/rhopart(l_so4_na))
+          v_soana(icol,ilev) = f_soana(icol,ilev)/(f_soana(icol,ilev) &
+               +(1.0_r8-f_soana(icol,ilev))*rhopart(l_soa_na)/rhopart(l_so4_na))
        end do
     end do
 
     ! Avoid very small numbers
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          Ca(icol,k)     = max(eps,Ca(icol,k))
-          f_c(icol,k)    = max(eps,f_c(icol,k))
-          f_bc(icol,k)   = max(eps,f_bc(icol,k))
-          f_aq(icol,k)   = max(eps,f_aq(icol,k))
-          fnbc(icol,k)   = max(eps,fnbc(icol,k))
-          faitbc(icol,k) = max(eps,faitbc(icol,k))
+          Ca(icol,ilev)     = max(eps,Ca(icol,ilev))
+          f_c(icol,ilev)    = max(eps,f_c(icol,ilev))
+          f_bc(icol,ilev)   = max(eps,f_bc(icol,ilev))
+          f_aq(icol,ilev)   = max(eps,f_aq(icol,ilev))
+          fnbc(icol,ilev)   = max(eps,fnbc(icol,ilev))
+          faitbc(icol,ilev) = max(eps,faitbc(icol,ilev))
        end do
     end do
 
@@ -223,24 +225,26 @@ contains
 
     ! Calculate fraction of added mass which is either SOA condensate or OC coagulate,
     ! which in AeroTab are both treated as condensate for kcomp=1-4.
-    do i=1,4
-       do k=1,pver
+    do index=1,4
+       do ilev=1,pver
           do icol=1,ncol
-             focm(icol,k,i) = fcm(icol,k,i)*(1.0_r8-fbcm(icol,k,i))
+             focm(icol,ilev,index) = fcm(icol,ilev,index)*(1.0_r8-fbcm(icol,ilev,index))
           enddo
        enddo
     enddo
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          faqm4(icol,k) = faqm(icol,k,4)
+          faqm4(icol,ilev) = faqm(icol,ilev,4)
        end do
     enddo
 
     ! find common input parameters for use in the interpolation routines
+    call t_startf('oslo_aero_input_interpol')
     call inputForInterpol (ncol, rhum, xrh, irh1,   &
          f_soana, xfombg, ifombg1, faitbc, xfbcbg, ifbcbg1,  &
          fnbc, xfbcbgn, ifbcbgn1, Nnatk, Cam, xct, ict1,     &
          focm, fcm, xfac, ifac1, fbcm, xfbc, ifbc1, faqm, xfaq, ifaq1)
+    call t_stopf('oslo_aero_input_interpol')
 
 #ifdef AEROCOM
     call aerocom1(lchnk, ncol, Cam, Nnatk, deltah_km, &
@@ -249,38 +253,49 @@ contains
        xfombg, ifombg1, Ctotdry)
 #endif
 
+    call t_startf('oslo_aero_interpol')
     ! (Wet) Optical properties for each of the aerosol modes:
     lw_on = .true.  ! No LW optics needed for RH=0 (interpol returns 0-values)
 
     ! BC(ax) mode (dry only):
+    call t_startf('oslo_aero_interpol0')
     call interpol0 (ncol, daylight, Nnatk, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol0')
 
     mplus10=0
     ! SO4/SOA(Ait) mode:
+    call t_startf('oslo_aero_interpol1')
     call interpol1 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xfombg, ifombg1, xct, ict1,    &
          xfac, ifac1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol1')
 
     ! BC(Ait) and OC(Ait) modes:
+    call t_startf('oslo_aero_interpol2to3')
     call interpol2to3 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xct, ict1, xfac, ifac1, &
          ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol2to3')
 
     ! BC&OC(Ait) mode:   ------ fcm invalid here (=0). Using faitbc instead
+    call t_startf('oslo_aero_interpol4')
     call interpol4 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xfbcbg, ifbcbg1, xct, ict1,    &
          xfac, ifac1, xfaq, ifaq1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol4')
 
     ! SO4(Ait75) (5), Mineral (6-7) and Sea-salt (8-10) modes:
+    call t_startf('oslo_aero_interpol5to10')
     call interpol5to10 (ncol, daylight, xrh, irh1, &
          Nnatk, xct, ict1, xfac, ifac1, &
          xfbc, ifbc1, xfaq, ifaq1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol5to10')
 
     ! total aerosol number concentrations
-    do i=0,nmodes    ! mode 0 to 14
-       do k=1,pver
+    do imode=0,nmodes    ! mode 0 to 14
+       do ilev=1,pver
           do icol=1,ncol
-             n_aer(icol,k)=n_aer(icol,k)+Nnatk(icol,k,i)
+             n_aer(icol,ilev)=n_aer(icol,ilev)+Nnatk(icol,ilev,imode)
           end do
        enddo
     enddo
@@ -288,46 +303,53 @@ contains
 
     ! BC(Ait) and OC(Ait) modes:
     mplus10=1
+    call t_startf('oslo_aero_interpol2to3')
     call interpol2to3 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xct, ict1, xfac, ifac1, &
          ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol2to3')
 
     ! BC&OC(n) mode:    ------ fcm not valid here (=0). Use fnbc instead
     mplus10=1
+    call t_startf('oslo_aero_interpol4')
     call interpol4 (ncol, daylight, xrh, irh1, mplus10, &
          Nnatk, xfbcbgn, ifbcbgn1, xct, ict1,  &
          xfac, ifac1, xfaq, ifaq1, ssa, asym, be, ke, lw_on, kalw)
+    call t_stopf('oslo_aero_interpol4')
+
+    call t_stopf('oslo_aero_interpol')
 
     ! Determine Ctot
     Ctot(:,:) = 0.0_r8
-    do i=0,nmodes    ! mode 0 to 14
-       do k=1,pver
+    do imode=0,nmodes    ! mode 0 to 14
+       do ilev=1,pver
           do icol=1,ncol
-             dCtot(icol,k)=1.e3_r8*be(icol,k,i,4)/(ke(icol,k,i,4)+eps)
-             Ctot(icol,k)=Ctot(icol,k)+dCtot(icol,k)*Nnatk(icol,k,i)
+             dCtot(icol,ilev)=1.e3_r8*be(icol,ilev,imode,4)/(ke(icol,ilev,imode,4)+eps)
+             Ctot(icol,ilev)=Ctot(icol,ilev)+dCtot(icol,ilev)*Nnatk(icol,ilev,imode)
           end do
        enddo
     enddo
 
     ! SW Optical properties of total aerosol:
     do ib=1,nbands
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             betot(icol,k,ib)=0.0_r8
-             ssatot(icol,k,ib)=0.0_r8
-             asymtot(icol,k,ib)=0.0_r8
+             betot(icol,ilev,ib)=0.0_r8
+             ssatot(icol,ilev,ib)=0.0_r8
+             asymtot(icol,ilev,ib)=0.0_r8
           end do
        enddo
     enddo
     do ib=1,nbands
-       do i=0,nmodes
-          do k=1,pver
+       do imode=0,nmodes
+          do ilev=1,pver
              do icol=1,ncol
-                betot(icol,k,ib)=betot(icol,k,ib)+Nnatk(icol,k,i)*be(icol,k,i,ib)
-                ssatot(icol,k,ib)=ssatot(icol,k,ib)+Nnatk(icol,k,i) &
-                     *be(icol,k,i,ib)*ssa(icol,k,i,ib)
-                asymtot(icol,k,ib)=asymtot(icol,k,ib)+Nnatk(icol,k,i) &
-                     *be(icol,k,i,ib)*ssa(icol,k,i,ib)*asym(icol,k,i,ib)
+                betot(icol,ilev,ib)=betot(icol,ilev,ib)+Nnatk(icol,ilev,imode) &
+                     *be(icol,ilev,imode,ib)
+                ssatot(icol,ilev,ib)=ssatot(icol,ilev,ib)+Nnatk(icol,ilev,imode) &
+                     *be(icol,ilev,imode,ib)*ssa(icol,ilev,imode,ib)
+                asymtot(icol,ilev,ib)=asymtot(icol,ilev,ib)+Nnatk(icol,ilev,imode) &
+                     *be(icol,ilev,imode,ib)*ssa(icol,ilev,imode,ib)*asym(icol,ilev,imode,ib)
              end do
           enddo
        enddo
@@ -357,10 +379,10 @@ contains
 
     ! and then calculate the total bulk optical parameters
     do ib=1,nbands
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             ssatot(icol,k,ib)=ssatot(icol,k,ib)/(betot(icol,k,ib)+eps)
-             asymtot(icol,k,ib)=asymtot(icol,k,ib)/(betot(icol,k,ib)*ssatot(icol,k,ib)+eps)
+             ssatot(icol,ilev,ib)=ssatot(icol,ilev,ib)/(betot(icol,ilev,ib)+eps)
+             asymtot(icol,ilev,ib)=asymtot(icol,ilev,ib)/(betot(icol,ilev,ib)*ssatot(icol,ilev,ib)+eps)
           end do
        enddo
     enddo
@@ -383,55 +405,55 @@ contains
     ! 12 0.263 0.345          2
     ! 13 0.200 0.263          1
 
-    do i=1,ncol  ! zero aerosol in the top layer
+    do icol=1,ncol  ! zero aerosol in the top layer
        do ib=1,14 ! 1-nbands
-          per_tau(i,0,ib)= 0._r8
-          per_tau_w(i,0,ib)= 0.999_r8
-          per_tau_w_g(i,0,ib)= 0.5_r8
-          per_tau_w_f(i,0,ib)= 0.25_r8
+          per_tau(icol,0,ib)= 0._r8
+          per_tau_w(icol,0,ib)= 0.999_r8
+          per_tau_w_g(icol,0,ib)= 0.5_r8
+          per_tau_w_f(icol,0,ib)= 0.25_r8
        end do
        do ib=1,14  ! initialize also for the other layers
-          do k=1,pver
-             per_tau(i,k,ib)= 0._r8
-             per_tau_w(i,k,ib)= 0.999_r8
-             per_tau_w_g(i,k,ib)= 0.5_r8
-             per_tau_w_f(i,k,ib)= 0.25_r8
+          do ilev=1,pver
+             per_tau(icol,ilev,ib)= 0._r8
+             per_tau_w(icol,ilev,ib)= 0.999_r8
+             per_tau_w_g(icol,ilev,ib)= 0.5_r8
+             per_tau_w_f(icol,ilev,ib)= 0.25_r8
           end do
        end do
     end do
     ! Remapping of SW wavelength bands from AeroTab to CAM5
-    do i=1,ncol
+    do icol=1,ncol
        do ib=1,13
-          do k=1,pver
-             per_tau(i,k,ib)=deltah_km(i,k)*betot(i,k,14-ib)
-             per_tau_w(i,k,ib)=per_tau(i,k,ib)*max(min(ssatot(i,k,14-ib),0.999999_r8),1.e-6_r8)
-             per_tau_w_g(i,k,ib)=per_tau_w(i,k,ib)*asymtot(i,k,14-ib)
-             per_tau_w_f(i,k,ib)=per_tau_w_g(i,k,ib)*asymtot(i,k,14-ib)
+          do ilev=1,pver
+             per_tau(icol,ilev,ib)=deltah_km(icol,ilev)*betot(icol,ilev,14-ib)
+             per_tau_w(icol,ilev,ib)=per_tau(icol,ilev,ib)*max(min(ssatot(icol,ilev,14-ib),0.999999_r8),1.e-6_r8)
+             per_tau_w_g(icol,ilev,ib)=per_tau_w(icol,ilev,ib)*asymtot(icol,ilev,14-ib)
+             per_tau_w_f(icol,ilev,ib)=per_tau_w_g(icol,ilev,ib)*asymtot(icol,ilev,14-ib)
           end do
        end do
        ib=14
-       do k=1,pver
-          per_tau(i,k,ib)=deltah_km(i,k)*betot(i,k,ib)
-          per_tau_w(i,k,ib)=per_tau(i,k,ib)*max(min(ssatot(i,k,ib),0.999999_r8),1.e-6_r8)
-          per_tau_w_g(i,k,ib)=per_tau_w(i,k,ib)*asymtot(i,k,ib)
-          per_tau_w_f(i,k,ib)=per_tau_w_g(i,k,ib)*asymtot(i,k,ib)
+       do ilev=1,pver
+          per_tau(icol,ilev,ib)=deltah_km(icol,ilev)*betot(icol,ilev,ib)
+          per_tau_w(icol,ilev,ib)=per_tau(icol,ilev,ib)*max(min(ssatot(icol,ilev,ib),0.999999_r8),1.e-6_r8)
+          per_tau_w_g(icol,ilev,ib)=per_tau_w(icol,ilev,ib)*asymtot(icol,ilev,ib)
+          per_tau_w_f(icol,ilev,ib)=per_tau_w_g(icol,ilev,ib)*asymtot(icol,ilev,ib)
        end do
     end do  ! ncol
 
     ! LW Optical properties of total aerosol:
     do ib=1,nlwbands
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             batotlw(icol,k,ib)=0.0_r8
+             batotlw(icol,ilev,ib)=0.0_r8
           end do
        enddo
     enddo
     do ib=1,nlwbands
-       do i=0,nmodes
-          do k=1,pver
+       do imode=0,nmodes
+          do ilev=1,pver
              do icol=1,ncol
-                balw(icol,k,i,ib)=kalw(icol,k,i,ib)*(be(icol,k,i,4)/(ke(icol,k,i,4)+eps))
-                batotlw(icol,k,ib)=batotlw(icol,k,ib)+Nnatk(icol,k,i)*balw(icol,k,i,ib)
+                balw(icol,ilev,imode,ib)=kalw(icol,ilev,imode,ib)*(be(icol,ilev,imode,4)/(ke(icol,ilev,imode,4)+eps))
+                batotlw(icol,ilev,ib)=batotlw(icol,ilev,ib)+Nnatk(icol,ilev,imode)*balw(icol,ilev,imode,ib)
              end do
           enddo
        enddo
@@ -446,18 +468,18 @@ contains
 
     ! Remapping of LW wavelength bands from AeroTab to CAM5
     do ib=1,nlwbands
-       do i=1,ncol
-          do k=1,pver
-             per_lw_abs(i,k,ib)=deltah_km(i,k)*batotlw(i,k,17-ib)
+       do icol=1,ncol
+          do ilev=1,pver
+             per_lw_abs(icol,ilev,ib)=deltah_km(icol,ilev)*batotlw(icol,ilev,17-ib)
           end do
        end do
     end do
 
 #ifdef AEROCOM
-    do i=1,ncol
-       do k=1,pver
-          batotsw13(i,k)=betot(i,k,13)*(1.0_r8-ssatot(i,k,13))
-          batotlw01(i,k)=batotlw(i,k,1)
+    do icol=1,ncol
+       do ilev=1,pver
+          batotsw13(icol,ilev)=betot(icol,ilev,13)*(1.0_r8-ssatot(icol,ilev,13))
+          batotlw01(icol,ilev)=batotlw(icol,ilev,1)
        end do
     end do
     ! These two fields should be close to equal, both representing absorption
@@ -468,31 +490,31 @@ contains
 
     ! APPROXIMATE aerosol extinction and absorption at 550nm (0.442-0.625 um)
     ! (in the visible wavelength band)
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          betotvis(icol,k)=betot(icol,k,4)
-          batotvis(icol,k)=betotvis(icol,k)*(1.0-ssatot(icol,k,4))
+          betotvis(icol,ilev)=betot(icol,ilev,4)
+          batotvis(icol,ilev)=betotvis(icol,ilev)*(1.0-ssatot(icol,ilev,4))
        end do
     enddo
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          ssavis(icol,k) = 0.0_r8
-          asymmvis(icol,k) = 0.0_r8
-          extvis(icol,k) = 0.0_r8
-          dayfoc(icol,k) = 0.0_r8
+          ssavis(icol,ilev) = 0.0_r8
+          asymmvis(icol,ilev) = 0.0_r8
+          extvis(icol,ilev) = 0.0_r8
+          dayfoc(icol,ilev) = 0.0_r8
        enddo
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
           ! dayfoc < 1 when looping only over gridcells with daylight
           if(daylight(icol)) then
-             dayfoc(icol,k) = 1.0_r8
+             dayfoc(icol,ilev) = 1.0_r8
              ! with the new bands in CAM5, band 4 is now at ca 0.5 um (0.442-0.625)
-             ssavis(icol,k) = ssatot(icol,k,4)
-             asymmvis(icol,k) = asymtot(icol,k,4)
-             extvis(icol,k) = betot(icol,k,4)
+             ssavis(icol,ilev) = ssatot(icol,ilev,4)
+             asymmvis(icol,ilev) = asymtot(icol,ilev,4)
+             extvis(icol,ilev) = betot(icol,ilev,4)
           endif
        enddo
     end do
@@ -514,21 +536,21 @@ contains
 
     do icol=1,ncol
        if(daylight(icol)) then
-          do k=1,pver
+          do ilev=1,pver
              ! Layer thickness, unit km, and layer airmass, unit kg/m2
-             deltah=deltah_km(icol,k)
-             airmassl(icol,k)=1.e3_r8*deltah*rhoda(icol,k)
-             airmass(icol)=airmass(icol)+airmassl(icol,k)
+             deltah=deltah_km(icol,ilev)
+             airmassl(icol,ilev)=1.e3_r8*deltah*rhoda(icol,ilev)
+             airmass(icol)=airmass(icol)+airmassl(icol,ilev)
 
              ! Optical depths at ca. 550 nm (0.442-0.625um) all aerosols
-             aodvis(icol)=aodvis(icol)+betotvis(icol,k)*deltah
-             absvis(icol)=absvis(icol)+batotvis(icol,k)*deltah
+             aodvis(icol)=aodvis(icol)+betotvis(icol,ilev)*deltah
+             absvis(icol)=absvis(icol)+batotvis(icol,ilev)*deltah
 
              ! Optical depths at ca. 550 nm (0.442-0.625um) CMIP6 volcanic aerosol
-             aodvisvolc(icol)=aodvisvolc(icol)+volc_ext_sun(icol,k,4)*deltah
-             absvisvolc(icol)=absvisvolc(icol)+volc_ext_sun(icol,k,4)*(1.0_r8-volc_omega_sun(icol,k,4))*deltah
+             aodvisvolc(icol)=aodvisvolc(icol)+volc_ext_sun(icol,ilev,4)*deltah
+             absvisvolc(icol)=absvisvolc(icol)+volc_ext_sun(icol,ilev,4)*(1.0_r8-volc_omega_sun(icol,ilev,4))*deltah
 
-          end do  ! k
+          end do  ! ilev
        endif   ! daylight
     end do   ! icol
 
@@ -548,19 +570,19 @@ contains
 
     ! Mass concentration (ug/m3) and mmr (kg/kg) of aerosol condensed water
     ! Condensed water mmr (kg/kg)
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          Cwater(icol,k) = Ctot(icol,k) - Ctotdry(icol,k)
-          mmr_aerh2o(icol,k)=1.e-9_r8*Cwater(icol,k)/rhoda(icol,k)
+          Cwater(icol,ilev) = Ctot(icol,ilev) - Ctotdry(icol,ilev)
+          mmr_aerh2o(icol,ilev)=1.e-9_r8*Cwater(icol,ilev)/rhoda(icol,ilev)
        end do
     enddo
     call outfld('MMR_AH2O',mmr_aerh2o, pcols, lchnk)
 
     ! Condensed water loading (mg_m2)
     daerh2o(:) = 0.0_r8
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          daerh2o(icol) = daerh2o(icol) + Cwater(icol,k)*deltah_km(icol,k)
+          daerh2o(icol) = daerh2o(icol) + Cwater(icol,ilev)*deltah_km(icol,ilev)
        end do
     end do
     call outfld('DAERH2O ',daerh2o ,pcols,lchnk)
@@ -570,6 +592,8 @@ contains
          xct, ict1, xfac, ifac1, xfbc, ifbc1, xfaq, ifaq1, xfbcbg, ifbcbg1, xfbcbgn, ifbcbgn1, &
          xfombg, ifombg1, xrh, irh1)
 #endif
+
+    call t_stopf('oslo_aero_optical_params')
 
   end subroutine oslo_aero_optical_params_calc
 
@@ -610,128 +634,128 @@ contains
     integer,  intent(out) :: ifaq1(pcols,pver,nbmodes)
     !
     ! Local variables
-    integer k, icol, i, irelh
+    integer  :: ilev, icol, imode, irelh
     real(r8) :: eps10 = 1.e-10_r8
     !------------------------------------------------------------------------
     !
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
-          xrh(icol,k)  = min(max(rhum(icol,k),rh(1)),rh(10))
+          xrh(icol,ilev)  = min(max(rhum(icol,ilev),rh(1)),rh(10))
        end do
     end do
 
     do irelh=1,9
-       do k=1,pver
+       do ilev=1,pver
           do icol=1,ncol
-             if(xrh(icol,k) >= rh(irelh) .and. xrh(icol,k)<=rh(irelh+1)) then
-                irh1(icol,k)=irelh
+             if(xrh(icol,ilev) >= rh(irelh) .and. xrh(icol,ilev)<=rh(irelh+1)) then
+                irh1(icol,ilev)=irelh
              endif
           end do
        end do
     end do
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
           ! find common xfombg, ifombg1 and ifombg2 for use in the interpolation routines
-          xfombg(icol,k) =min(max(f_soana(icol,k),fombg(1)),fombg(6))
-          ifombg1(icol,k)=int(5.0_r8*xfombg(icol,k)-eps10)+1
+          xfombg(icol,ilev) =min(max(f_soana(icol,ilev),fombg(1)),fombg(6))
+          ifombg1(icol,ilev)=int(5.0_r8*xfombg(icol,ilev)-eps10)+1
        end do
     enddo
 
-    do k=1,pver
+    do ilev=1,pver
        do icol=1,ncol
           ! find common xfbcbg, ifbcbg1 and ifbcbg2 for use in the interpolation routines
-          xfbcbg(icol,k) =min(max(faitbc(icol,k),fbcbg(1)),fbcbg(6))
-          ifbcbg1(icol,k)=min(max(int(4*log10(xfbcbg(icol,k))+6),1),5)
+          xfbcbg(icol,ilev) =min(max(faitbc(icol,ilev),fbcbg(1)),fbcbg(6))
+          ifbcbg1(icol,ilev)=min(max(int(4*log10(xfbcbg(icol,ilev))+6),1),5)
 
           ! find common xfbcbgn, ifbcbgn1 and ifbcbgn2 for use in the interpolation routines
-          xfbcbgn(icol,k) =min(max(fnbc(icol,k),fbcbg(1)),fbcbg(6))
-          ifbcbgn1(icol,k)=min(max(int(4*log10(xfbcbgn(icol,k))+6),1),5)
+          xfbcbgn(icol,ilev) =min(max(fnbc(icol,ilev),fbcbg(1)),fbcbg(6))
+          ifbcbgn1(icol,ilev)=min(max(int(4*log10(xfbcbgn(icol,ilev))+6),1),5)
        end do
     enddo
 
-    do i=1,4
-       do k=1,pver
+    do imode=1,4
+       do ilev=1,pver
           do icol=1,ncol
              ! find common xfac, ifac1 and ifac2 for use in the interpolation routines
-             xfac(icol,k,i) =min(max(focm(icol,k,i),fac(1)),fac(6))
-             ifac1(icol,k,i)=int(5.0_r8*xfac(icol,k,i)-eps10)+1
+             xfac(icol,ilev,imode) =min(max(focm(icol,ilev,imode),fac(1)),fac(6))
+             ifac1(icol,ilev,imode)=int(5.0_r8*xfac(icol,ilev,imode)-eps10)+1
           end do
        enddo
     enddo
-    do i=5,nbmodes
-       do k=1,pver
+    do imode=5,nbmodes
+       do ilev=1,pver
           do icol=1,ncol
              ! find common xfac, ifac1 and ifac2 for use in the interpolation routines
-             xfac(icol,k,i) =min(max(fcm(icol,k,i),fac(1)),fac(6))
-             ifac1(icol,k,i)=int(5.0_r8*xfac(icol,k,i)-eps10)+1
+             xfac(icol,ilev,imode) =min(max(fcm(icol,ilev,imode),fac(1)),fac(6))
+             ifac1(icol,ilev,imode)=int(5.0_r8*xfac(icol,ilev,imode)-eps10)+1
           end do
        enddo
     enddo
 
-    do i=1,nbmodes
-       do k=1,pver
+    do imode=1,nbmodes
+       do ilev=1,pver
           do icol=1,ncol
              ! find common xfbc, ifbc1 and ifbc2 for use in the interpolation routines
-             xfbc(icol,k,i) =min(max(fbcm(icol,k,i),fbc(1)),fbc(6))
-             ifbc1(icol,k,i)=min(max(int(4*log10(xfbc(icol,k,i))+6),1),5)
+             xfbc(icol,ilev,imode) =min(max(fbcm(icol,ilev,imode),fbc(1)),fbc(6))
+             ifbc1(icol,ilev,imode)=min(max(int(4*log10(xfbc(icol,ilev,imode))+6),1),5)
           end do
        enddo
     enddo
 
-    do i=1,nbmodes
-       do k=1,pver
+    do imode=1,nbmodes
+       do ilev=1,pver
           do icol=1,ncol
              ! find common xfaq, ifaq1 and ifaq2 for use in the interpolation routines
-             xfaq(icol,k,i) =min(max(faqm(icol,k,i),faq(1)),faq(6))
-             ifaq1(icol,k,i)=int(5.0_r8*xfaq(icol,k,i)-eps10)+1
+             xfaq(icol,ilev,imode) =min(max(faqm(icol,ilev,imode),faq(1)),faq(6))
+             ifaq1(icol,ilev,imode)=int(5.0_r8*xfaq(icol,ilev,imode)-eps10)+1
           end do
        enddo
     enddo
 
     ! find common xct, ict1 and ict2 for use in the interpolation routines
-    do i=1,4
-       do k=1,pver
+    do imode=1,4
+       do ilev=1,pver
           do icol=1,ncol
-             xct(icol,k,i)=min(max(Cam(icol,k,i)/(Nnatk(icol,k,i)+eps),cate(i,1)),cate(i,16))
-             if(i.le.2) then
-                ict1(icol,k,i)=min(max(int(3*log10(xct(icol,k,i))+19.666_r8),1),15)
-             elseif(i.eq.3) then ! mode not used
-                xct(icol,k,i)=cate(i,1)
-                ict1(icol,k,i)=1
+             xct(icol,ilev,imode)=min(max(Cam(icol,ilev,imode)/(Nnatk(icol,ilev,imode)+eps),cate(imode,1)),cate(imode,16))
+             if(imode <= 2) then
+                ict1(icol,ilev,imode)=min(max(int(3*log10(xct(icol,ilev,imode))+19.666_r8),1),15)
+             elseif(imode == 3) then ! mode not used
+                xct(icol,ilev,imode)=cate(imode,1)
+                ict1(icol,ilev,imode)=1
              else
-                ict1(icol,k,i)=min(max(int(3*log10(xct(icol,k,i))+13.903_r8),1),15)
+                ict1(icol,ilev,imode)=min(max(int(3*log10(xct(icol,ilev,imode))+13.903_r8),1),15)
              endif
           end do
        end do
     end do
 
-    do i=5,10
-       do k=1,pver
+    do imode=5,10
+       do ilev=1,pver
           do icol=1,ncol
-             xct(icol,k,i)=min(max(Cam(icol,k,i)/(Nnatk(icol,k,i)+eps),cat(i,1)),cat(i,6))
-             if(i.eq.5) then
-                ict1(icol,k,i)=min(max(int(log10(xct(icol,k,i))+4.824_r8),1),5)
-             elseif(i.eq.6) then
-                ict1(icol,k,i)=min(max(int(log10(xct(icol,k,i))+4.523_r8),1),5)
-             elseif(i.eq.7) then
-                ict1(icol,k,i)=min(max(int(log10(xct(icol,k,i))+4.699_r8),1),5)
-             elseif(i.eq.8) then
-                ict1(icol,k,i)=min(max(int(log10(xct(icol,k,i))+5.921_r8),1),5)
-             elseif(i.eq.9) then
-                ict1(icol,k,i)=min(max(int(log10(xct(icol,k,i))+4.301_r8),1),5)
+             xct(icol,ilev,imode)=min(max(Cam(icol,ilev,imode)/(Nnatk(icol,ilev,imode)+eps),cat(imode,1)),cat(imode,6))
+             if(imode == 5) then
+                ict1(icol,ilev,imode)=min(max(int(log10(xct(icol,ilev,imode))+4.824_r8),1),5)
+             elseif(imode == 6) then
+                ict1(icol,ilev,imode)=min(max(int(log10(xct(icol,ilev,imode))+4.523_r8),1),5)
+             elseif(imode == 7) then
+                ict1(icol,ilev,imode)=min(max(int(log10(xct(icol,ilev,imode))+4.699_r8),1),5)
+             elseif(imode == 8) then
+                ict1(icol,ilev,imode)=min(max(int(log10(xct(icol,ilev,imode))+5.921_r8),1),5)
+             elseif(imode == 9) then
+                ict1(icol,ilev,imode)=min(max(int(log10(xct(icol,ilev,imode))+4.301_r8),1),5)
              else
-                ict1(icol,k,i)=min(max(int(log10(xct(icol,k,i))+4.699_r8),1),5)
+                ict1(icol,ilev,imode)=min(max(int(log10(xct(icol,ilev,imode))+4.699_r8),1),5)
              endif
           end do
        end do
     end do
 
-    do i=11,nmodes ! for the externally mixed modes 11-14 (now only 12 and 14)
-       do k=1,pver
+    do imode=11,nmodes ! for the externally mixed modes 11-14 (now only 12 and 14)
+       do ilev=1,pver
           do icol=1,ncol
-             xct(icol,k,i)=cate(i-10,1)
-             ict1(icol,k,i)=1
+             xct(icol,ilev,imode)=cate(imode-10,1)
+             ict1(icol,ilev,imode)=1
           end do
        end do
     end do

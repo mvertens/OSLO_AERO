@@ -20,13 +20,15 @@ module oslo_aero_ndrop
   use cam_history,       only: addfld, add_default, horiz_only, fieldname_len, outfld
   use cam_abortutils,    only: endrun
   use cam_logfile,       only: iulog
+  use perf_mod,          only: t_startf, t_stopf
   !
   use oslo_aero_share,   only: calculateNumberMedianRadius
-  use oslo_aero_share,   only: getNumberOfTracersInMode, getNumberOfAerosolTracers, getTracerIndex
-  use oslo_aero_share,   only: getCloudTracerName, getCloudTracerIndex, getConstituentFraction
+  use oslo_aero_share,   only: getNumberOfTracersInMode, getNumberOfAerosolTracers
+  use oslo_aero_share,   only: getCloudTracerName, getTracerIndex
   use oslo_aero_share,   only: fillAerosolTracerList, fillInverseAerosolTracerList
-  use oslo_aero_share,   only: nmodes, nbmodes
-  use oslo_aero_share,   only: smallNumber
+  use oslo_aero_share,   only: nmodes, nbmodes, max_tracers_per_mode
+  use oslo_aero_share,   only: smallNumber, CloudTracerIndex
+  use oslo_aero_share,   only: l_so4_a1, l_so4_ac, l_so4_a2, l_bc_ac, l_om_ac, l_soa_a1
 
   implicit none
   private
@@ -36,7 +38,6 @@ module oslo_aero_ndrop
   public :: dropmixnuc_oslo
 
   ! private routines
-  private :: explmix_oslo
   private :: maxsat_oslo
   private :: ccncalc_oslo
   private :: activate_modal_oslo
@@ -49,11 +50,9 @@ module oslo_aero_ndrop
   real(r8) :: third, twothird, sixth, zero
   real(r8) :: sq2, sqpi
 
-  integer,  parameter :: psat=7    ! number of supersaturations to calc ccn concentration
-
   ! supersaturation (%) to determine ccn concentration
+  integer,  parameter :: psat=7    ! number of supersaturations to calc ccn concentration
   real(r8), parameter :: supersat(psat)= (/ 0.02_r8, 0.05_r8, 0.1_r8, 0.15_r8, 0.2_r8, 0.5_r8, 1.0_r8 /)
-
   character(len=8) :: ccn_name(psat)= (/'CCN1','CCN2','CCN3','CCN4','CCN5','CCN6','CCN7'/)
 
   ! indices in state and pbuf structures
@@ -77,8 +76,8 @@ module oslo_aero_ndrop
   integer, allocatable :: mam_idx(:,:)        ! table for local indexing of modal aero number and mmr
   integer :: ncnst_tot                        ! total number of mode number conc + mode species
 
-  ! Indices for MAM species in the ptend%q array.  Needed for prognostic aerosol case.
-  integer, allocatable :: mam_cnst_idx(:,:)
+  integer  :: tracer_index(0:nmodes,max_tracers_per_mode)  ! tracer index
+  real(r8) :: sumFraction2(pcnst,pver)
 
   logical :: tendencyCounted(pcnst) = .false. ! set flags true for constituents with non-zero tendencies
   integer :: n_aerosol_tracers
@@ -93,8 +92,7 @@ module oslo_aero_ndrop
   end type ptr2d_t
 
   ! modal aerosols
-  logical :: prog_modal_aero     ! true when modal aerosols are prognostic
-  logical :: lq(pcnst) = .false. ! set flags true for constituents with non-zero tendencies
+  logical :: lq(pcnst) = .false.      ! set flags true for constituents with non-zero tendencies
 
 !===============================================================================
 contains
@@ -102,7 +100,7 @@ contains
 
   subroutine ndrop_init_oslo()
 
-    integer            :: ii, l, lptr, m, mm
+    integer            :: ii, itrac, ispec, imode, mm, ilev, isat
     integer            :: nspec_max    ! max number of species in a mode
     character(len=32)  :: tmpname
     character(len=32)  :: tmpname_cw
@@ -142,24 +140,42 @@ contains
          voltonumblo_amode(ntot_amode), &
          voltonumbhi_amode(ntot_amode)  )
 
-    do m = 1,ntot_amode
-       nspec_amode(m) = getNumberOfTracersInMode(m)
+    do imode = 1,ntot_amode
+       nspec_amode(imode) = getNumberOfTracersInMode(imode)
     enddo
 
-    ! Init the table for local indexing of mam number conc and mmr.
+    do imode = 1,ntot_amode
+      do ispec = 1,nspec_amode(imode)
+        tracer_index(imode,ispec) = getTracerIndex(imode,ispec,.false.)
+      end do
+    end do
+
+    sumFraction2(:,:) = 0.0_r8
+    do ilev=top_lev, pver
+      do itrac=1,pcnst
+        do imode=1,ntot_amode
+          do ispec=1,nspec_amode(imode)
+            if (tracer_index(imode,ispec) == itrac) then
+              sumFraction2(itrac,ilev) = sumFraction2(itrac,ilev) + 1.0_r8
+            endif
+          end do ! tracers in mode
+        end do ! mode
+      end do
+    end do
+
+    ! Init the table for local indexing of mam number conc
     ! This table uses species index 0 for the number conc.
 
     ! Find max number of species in all the modes, and the total
     ! number of mode number concentrations + mode species
     nspec_max = nspec_amode(1)
     ncnst_tot = nspec_amode(1) + 1
-    do m = 2, ntot_amode
-       nspec_max = max(nspec_max, nspec_amode(m))
-       ncnst_tot = ncnst_tot + nspec_amode(m) + 1
+    do imode = 2, ntot_amode
+       nspec_max = max(nspec_max, nspec_amode(imode))
+       ncnst_tot = ncnst_tot + nspec_amode(imode) + 1
     end do
 
     allocate(mam_idx(ntot_amode,0:nspec_max))
-    allocate(mam_cnst_idx(ntot_amode,0:nspec_max))
     allocate(fieldname(ncnst_tot))
     allocate(fieldname_cw(ncnst_tot))
 
@@ -167,19 +183,17 @@ contains
     ! This indexing is used by the pointer arrays used to reference state and pbuf
     ! fields.
     ii = 0
-    do m = 1, ntot_amode
-       do l = 0, nspec_amode(m)
+    do imode = 1, ntot_amode
+       do ispec = 0, nspec_amode(imode)
           ii = ii + 1
-          mam_idx(m,l) = ii
+          mam_idx(imode,ispec) = ii
        end do
     end do
 
     ! Add dropmixnuc tendencies for all modal aerosol species
 
-    call phys_getopts(history_amwg_out = history_amwg, &
-         history_aerosol_out = history_aerosol, prog_modal_aero_out=prog_modal_aero)
+    call phys_getopts(history_amwg_out=history_amwg, history_aerosol_out=history_aerosol)
 
-    prog_modal_aero = .TRUE.
     n_aerosol_tracers = getNumberOfAerosolTracers()
     call fillAerosolTracerList(aerosolTracerList)
     call fillInverseAerosolTracerList(aerosolTracerList, inverseAerosolTracerList, n_aerosol_tracers)
@@ -192,15 +206,15 @@ contains
     lq(:) = .false.  !Initialize
 
     !Set up tendencies for tracers (output)
-    do m=1,ntot_amode
-       do l=1,nspec_amode(m)
-          lptr = getTracerIndex(m,l,.false.)
+    do imode=1,ntot_amode
+       do ispec=1,nspec_amode(imode)
+          itrac = tracer_index(imode,ispec)
 
-          if(.NOT. lq(lptr))then
+          if(.NOT. lq(itrac))then
              !add dropmixnuc tendencies
-             mm=mam_idx(m,l)
-             fieldname(mm)=trim(cnst_name(lptr))//"_mixnuc1"
-             fieldname_cw(mm)=trim(getCloudTracerName(lptr))//"_mixnuc1"
+             mm=mam_idx(imode,ispec)
+             fieldname(mm)=trim(cnst_name(itrac))//"_mixnuc1"
+             fieldname_cw(mm)=trim(getCloudTracerName(itrac))//"_mixnuc1"
 
              long_name = trim(fieldname(mm)) // ' dropmixnuc column tendency'
              call addfld(trim(fieldname(mm)), horiz_only ,'A', "kg/m2/s",long_name)
@@ -214,14 +228,14 @@ contains
              endif
 
              !Do tendencies of this tracer
-             lq(lptr)=.TRUE.
+             lq(itrac)=.TRUE.
           endif
        enddo
     enddo
-    do m=1,ntot_amode
+    do imode=1,ntot_amode
        modeString="  "
-       write(modeString,"(I2)"),m
-       if(m .lt. 10) modeString="0"//adjustl(modeString)
+       write(modeString,"(I2)"),imode
+       if(imode < 10) modeString="0"//adjustl(modeString)
        varName = "NMR"//trim(modeString)
        call addfld(varName, (/ 'lev' /),'A', 'm  ', 'number median radius mode '//modeString)
        if(history_aerosol)call add_default(varName, 1, ' ')
@@ -251,8 +265,8 @@ contains
     call addfld('CCN7',(/ 'lev' /), 'A','#/cm3','CCN concentration at S=1.0%')
 
     if(history_aerosol)then
-       do l = 1, psat
-          call add_default(ccn_name(l), 1, ' ')
+       do isat = 1, psat
+          call add_default(ccn_name(isat), 1, ' ')
        enddo
     end if
 
@@ -324,10 +338,9 @@ contains
     real(r8), parameter :: wmixmin = 0.1_r8     ! minimum turbulence vertical velocity (m/s)
     real(r8) :: sq2pi
 
-    integer  :: i, k, l, m, mm, n
+    integer  :: icol, ilev, ispec, imode, mm, isubmix, mode_cnt, itrac, itrac2, isat
     integer  :: km1, kp1
     integer  :: nnew, nsav, ntemp
-    integer  :: lptr
     integer  :: nsubmix, nsubmix_bnd
     integer, save :: count_submix(100)
     integer  :: phase                           ! phase of aerosol
@@ -344,7 +357,7 @@ contains
     real(r8) :: srcn(pver)                      ! droplet source rate (/s)
     real(r8) :: cs(pcols,pver)                  ! air density (kg/m3)
     real(r8) :: csbot(pver)                     ! air density at bottom (interface) of layer (kg/m3)
-    real(r8) :: csbot_cscen(pver)               ! csbot(i)/cs(i,k)
+    real(r8) :: csbot_cscen(pver)               ! csbot(icol)/cs(icol,ilev)
     real(r8) :: dz(pcols,pver)                  ! geometric thickness of layers (m)
 
     real(r8) :: wtke(pcols,pver)                ! turbulent vertical velocity at base of layer k (m/s)
@@ -357,24 +370,24 @@ contains
     real(r8) :: wdiab                           ! diabatic vertical velocity
     real(r8) :: ekd(pver)                       ! diffusivity for droplets (m2/s)
     real(r8) :: ekk(0:pver)                     ! density*diffusivity for droplets (kg/m3 m2/s)
-    real(r8) :: ekkp(pver)                      ! zn*zs*density*diffusivity
-    real(r8) :: ekkm(pver)                      ! zn*zs*density*diffusivity
-
+    real(r8) :: ekkp(pver)                      ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
+    real(r8) :: ekkm(pver)                      ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
+                                                ! above layer ilev  (ilev,ilev+1 interface)
     real(r8) :: dum, dumc
     real(r8) :: tmpa
     real(r8) :: dact
     real(r8) :: fluxntot                        ! (#/cm2/s)
     real(r8) :: dtmix
     real(r8) :: alogarg
-    real(r8) :: overlapp(pver), overlapm(pver)  ! cloud overlap
-
+    real(r8) :: overlapp(pver), overlapm(pver)  ! cloud overlap below, cloud overlap above
     real(r8) :: nsource(pcols,pver)             ! droplet number source (#/kg/s)
-    real(r8) :: ndropmix(pcols,pver)            ! droplet number mixing (#/kg/s)
-    real(r8) :: ndropcol(pcols)                 ! column droplet number (#/m2)
+    real(r8) :: ndropmix(pcols,pver)            ! droplet number mixing (#/kg/s) (diagnostic)
+    real(r8) :: ndropcol(pcols)                 ! column droplet number (#/m2) (diagnostic)
     real(r8) :: cldo_tmp, cldn_tmp
     real(r8) :: tau_cld_regenerate
+    real(r8) :: tau_cld_regenerate_exp
     real(r8) :: zeroaer(pver)
-    real(r8) :: taumix_internal_pver_inv        ! 1/(internal mixing time scale for k=pver) (1/s)
+    real(r8) :: taumix_internal_pver_inv        ! 1/(internal mixing time scale for ilev=pver) (1/s)
 
     real(r8), allocatable :: nact(:,:)          ! fractional aero. number  activation rate (/s)
     real(r8), allocatable :: mact(:,:)          ! fractional aero. mass    activation rate (/s)
@@ -408,7 +421,7 @@ contains
 
     real(r8), allocatable :: coltend(:,:)       ! column tendency for diagnostic output
     real(r8), allocatable :: coltend_cw(:,:)    ! column tendency
-    real(r8)              :: ccn(pcols,pver,psat)    ! number conc of aerosols activated at supersat
+    real(r8)              :: ccn(pcols,pverp,psat) ! number conc of aerosols activated at supersat
 
     !for gas species turbulent mixing
     real(r8), pointer     :: rgas(:, :, :)
@@ -423,23 +436,18 @@ contains
     real(r8)              :: volumeCore(pcols,pver,nmodes)
     real(r8)              :: volumeCoat(pcols,pver,nmodes)
     integer               :: tracerIndex
-    integer               :: cloudTracerIndex
+    integer               :: cloud_tracer_index
     integer               :: kcomp
     integer               :: speciesMap(nmodes)
     real(r8), allocatable :: fn_tmp(:), fm_tmp(:)
     real(r8), allocatable :: fluxn_tmp(:), fluxm_tmp(:)
     real(r8)              :: componentFraction
-    real(r8)              :: componentFractionOK(pver,nmodes,pcnst)
-    real(r8)              :: sumFraction
+    real(r8)              :: componentFractionOK(nmodes,pcnst,pver)
+    real(r8)              :: sumFraction(pcnst,pver)
     logical               :: alert
     real(r8), dimension(pver, pcnst) :: massBalance
     real(r8), dimension(pver, pcnst) :: newMass
     real(r8), dimension(pver,pcnst)  :: newCloud, oldCloud, newAerosol, oldAerosol, deltaCloud
-    integer                          :: kCrit, lptr2
-    logical                          :: stopMe
-    integer                          :: iDebug=1, lDebug=15
-    real(r8)                         :: mixRatioToMass
-    real(r8),dimension(pcnst)        :: debugSumFraction
     real(r8), allocatable            :: lnsigman(:)
     character(len=2)                 :: modeString
     character(len=20)                :: varname
@@ -483,248 +491,298 @@ contains
 
     dtinv = 1._r8/dtmicro
 
-    allocate( &
-         nact(pver,ntot_amode),          &
-         mact(pver,ntot_amode),          &
-         raer(ncnst_tot),                &
-         qqcw(ncnst_tot),                &
-         raercol(pver,ncnst_tot,2),      &
-         raercol_cw(pver,ncnst_tot,2),   &
-         coltend(pcols,ncnst_tot),       &
-         coltend_cw(pcols,ncnst_tot),    &
-         naermod(ntot_amode),            &
-         hygro(ntot_amode),              &
-         lnsigman(ntot_amode),           &           !variable std. deviation (CAM-Oslo)
-         raercol_tracer(pver,n_aerosol_tracers,2), &
+    allocate(                                         &
+         nact(pver,ntot_amode),                       &
+         mact(pver,ntot_amode),                       &
+         raer(ncnst_tot),                             &
+         qqcw(ncnst_tot),                             &
+         raercol(pver,ncnst_tot,2),                   &
+         raercol_cw(pver,ncnst_tot,2),                &
+         coltend(pcols,ncnst_tot),                    &
+         coltend_cw(pcols,ncnst_tot),                 &
+         naermod(ntot_amode),                         &
+         hygro(ntot_amode),                           &
+         lnsigman(ntot_amode),                        & !variable std. deviation (CAM-Oslo)
+         raercol_tracer(pver,n_aerosol_tracers,2),    &
          raercol_cw_tracer(pver,n_aerosol_tracers,2), &
-         mact_tracer(pver,n_aerosol_tracers),      &
-         mfullact_tracer(pver,n_aerosol_tracers),  &
-         vaerosol(ntot_amode),           &
-         fn(ntot_amode),                 &
-         fm(ntot_amode),                 &
-         fluxn(ntot_amode),              &
+         mact_tracer(pver,n_aerosol_tracers),         &
+         mfullact_tracer(pver,n_aerosol_tracers),     &
+         vaerosol(ntot_amode),                        &
+         fn(ntot_amode),                              &
+         fm(ntot_amode),                              &
+         fluxn(ntot_amode),                           &
          fluxm(ntot_amode)               )
 
     ! Init pointers to mode number and specie mass mixing ratios in
     ! intersitial and cloud borne phases.
     ! Need a list of all aerosol species ==> store in raer (mm)
     ! or qqcw for cloud-borne aerosols (?)
-    do m=1,nmodes  !All aerosol modes
+    do imode=1,nmodes  !All aerosol modes
 
        !NOTE: SEVERAL POINTERS POINT TO SAME FIELD, E.G. CONDENSATE WHICH IS IN SEVERAL MODES
-       do l = 1, nspec_amode(m)
-          tracerIndex      =  getTracerIndex(m,l,.false.)                   !Index in q
-          cloudTracerIndex =  getCloudTracerIndex(m,l)              !Index in phys-buffer
-          mm               =  mam_idx(m,l)                          !Index in raer/qqcw
-          raer(mm)%fld =>  state%q(:,:,tracerIndex)                 !NOTE: These are total fields (for example condensate)
-          call pbuf_get_field(pbuf, CloudTracerIndex, qqcw(mm)%fld) !NOTE: These are total fields (for example condensate)
+       do ispec = 1, nspec_amode(imode)
+          tracerIndex =  tracer_index(imode,ispec)           !Index in q
+          cloud_tracer_index = CloudTracerIndex(tracerIndex) !Index in phys-buffer
+          mm = mam_idx(imode,ispec)                          !Index in raer/qqcw
+          raer(mm)%fld =>  state%q(:,:,tracerIndex)          !NOTE: These are total fields (for example condensate)
+          call pbuf_get_field(pbuf, cloud_tracer_index, qqcw(mm)%fld) !NOTE: These are total fields (for example condensate)
        enddo
     enddo
-    allocate(                             &
-         fn_tmp(ntot_amode),                 &
-         fm_tmp(ntot_amode),                 &
-         fluxn_tmp(ntot_amode),              &
-         fluxm_tmp(ntot_amode)               )
+    allocate(                   &
+         fn_tmp(ntot_amode),    &
+         fm_tmp(ntot_amode),    &
+         fluxn_tmp(ntot_amode), &
+         fluxm_tmp(ntot_amode))
 
-    wtke = 0._r8
+    ! Initialize turbulent vertical velocity at base of layers (m/s)
+    wtke(:,:) = 0._r8
 
-    if (prog_modal_aero) then
-       ! aerosol tendencies
-       call physics_ptend_init(ptend, state%psetcols, 'ndrop', lq=lq)
-    else
-       ! no aerosol tendencies
-       call physics_ptend_init(ptend, state%psetcols, 'ndrop')
-    end if
+    ! aerosol tendencies
+    call physics_ptend_init(ptend, state%psetcols, 'ndrop', lq=lq)
 
     !Improve this later by using only cloud points ?
-    do k = top_lev, pver
-       do i=1,ncol
-          cs(i,k)  = pmid(i,k)/(rair*temp(i,k))        ! air density (kg/m3)
+    do ilev = top_lev, pver
+       do icol=1,ncol
+          cs(icol,ilev) = pmid(icol,ilev)/(rair*temp(icol,ilev))        ! air density (kg/m3)
        end do
     end do
 
     !Output this
+    call t_startf('ndrop_calculateNumberMedianRadius')
     call calculateNumberMedianRadius(numberConcentration, volumeConcentration, lnSigma, numberMedianRadius, ncol)
-    do n=1,nmodes
-       sigma(:ncol,:,n) = DEXP(lnSigma(:ncol,:,n))
+    do imode=1,nmodes
+       sigma(:ncol,:,imode) = DEXP(lnSigma(:ncol,:,imode))
        modeString="  "
-       write(modeString,"(I2)"),n
-       if(n .lt. 10) modeString="0"//adjustl(modeString)
+       write(modeString,"(I2)"),imode
+       if(imode < 10) modeString="0"//adjustl(modeString)
        varName = "NMR"//trim(modeString)
-       call outfld(varName, numberMedianRadius(:ncol,:,n), ncol, lchnk)
+       call outfld(varName, numberMedianRadius(:ncol,:,imode), ncol, lchnk)
        varName = "NCONC"//trim(modeString)
-       call outfld(varName, numberConcentration(:ncol,:,n),ncol, lchnk)
+       call outfld(varName, numberConcentration(:ncol,:,imode),ncol, lchnk)
        varName = "VCONC"//trim(modeString)
-       call outfld(varName, volumeConcentration(:ncol,:,n), ncol,lchnk)
+       call outfld(varName, volumeConcentration(:ncol,:,imode), ncol,lchnk)
        varName = "SIGMA"//trim(modeString)
-       call outfld(varName, sigma(:ncol,:,n), ncol,lchnk)
+       call outfld(varName, sigma(:ncol,:,imode), ncol,lchnk)
        varName = "HYGRO"//trim(modeString)
-       call outfld(varName, hygroscopicity(:ncol,:,n), ncol,lchnk)
+       call outfld(varName, hygroscopicity(:ncol,:,imode), ncol,lchnk)
     end do
+    call t_stopf('ndrop_calculateNumberMedianRadius')
 
     alert = .FALSE.
-    do k=top_lev,pver
-       mm = k - top_lev + 1
-       do m=1,nmodes
-          if(.NOT. alert .and. &
-               ANY(numberConcentration(:ncol,k,m) .lt. 0.0_r8 ))then
+    do ilev=top_lev,pver
+       mm = ilev - top_lev + 1
+       do imode=1,nmodes
+          if(.NOT. alert .and. ANY(numberConcentration(:ncol,ilev,imode) < 0.0_r8 ))then
              alert = .TRUE.
-             lptr = k
-             print*,"STRANGE numberconc", m, minval(numberConcentration(:ncol,:,:))*1.e-6_r8, "#/cm3", k, mm
+             print*,"STRANGE numberconc", imode, minval(numberConcentration(:ncol,:,:))*1.e-6_r8, "#/cm3", ilev, mm
           endif
        enddo
     enddo
     if (alert)then
-       print*,"strange stuff here "
-       call endrun()
+       call endrun("strange number concentration")
     endif
 
+    ! tau_cld_regenerate = time scale for regeneration of cloudy air
+    ! by (horizontal) exchange with clear air
+    tau_cld_regenerate = 3600.0_r8 * 3.0_r8
+    tau_cld_regenerate_exp = exp(-dtmicro/tau_cld_regenerate)
+
     ! overall_main_i_loop
-    do i = 1, ncol
+    do icol = 1, ncol
 
-       coltend(i,:)=0.0_r8
-       coltend_cw(i,:) = 0.0_r8
+       coltend(icol,:)=0.0_r8
+       coltend_cw(icol,:) = 0.0_r8
 
-       do k = top_lev, pver-1
-          zs(k) = 1._r8/(zm(i,k) - zm(i,k+1))
+       do ilev = top_lev, pver-1
+          zs(ilev) = 1._r8/(zm(icol,ilev) - zm(icol,ilev+1))
        end do
        zs(pver) = zs(pver-1)
 
        ! load number nucleated into qcld on cloud boundaries
-       do k = top_lev, pver
+       do ilev = top_lev, pver
 
-          qcld(k)  = ncldwtr(i,k)
-          qncld(k) = 0._r8
-          srcn(k)  = 0._r8
-          cs(i,k)  = pmid(i,k)/(rair*temp(i,k))        ! air density (kg/m3)
-          dz(i,k)  = 1._r8/(cs(i,k)*gravit*rpdel(i,k)) ! layer thickness in m
+          qcld(ilev)  = ncldwtr(icol,ilev)
+          qncld(ilev) = 0._r8
+          srcn(ilev)  = 0._r8
+          cs(icol,ilev)  = pmid(icol,ilev)/(rair*temp(icol,ilev))        ! air density (kg/m3)
+          dz(icol,ilev)  = 1._r8/(cs(icol,ilev)*gravit*rpdel(icol,ilev)) ! layer thickness in m
 
-          do m = 1, ntot_amode
-             nact(k,m) = 0._r8
-             mact(k,m) = 0._r8
+          do imode = 1, ntot_amode
+             nact(ilev,imode) = 0._r8
+             mact(ilev,imode) = 0._r8
           end do
 
-          zn(k) = gravit*rpdel(i,k)
+          zn(ilev) = gravit*rpdel(icol,ilev)
 
-          if (k < pver) then
-             ekd(k)   = kvh(i,k+1)
-             ekd(k)   = max(ekd(k), zkmin)
-             ekd(k)   = min(ekd(k), zkmax)
-             csbot(k) = 2.0_r8*pint(i,k+1)/(rair*(temp(i,k) + temp(i,k+1)))
-             csbot_cscen(k) = csbot(k)/cs(i,k)
+          if (ilev < pver) then
+             ekd(ilev)   = kvh(icol,ilev+1)
+             ekd(ilev)   = max(ekd(ilev), zkmin)
+             ekd(ilev)   = min(ekd(ilev), zkmax)
+             csbot(ilev) = 2.0_r8*pint(icol,ilev+1)/(rair*(temp(icol,ilev) + temp(icol,ilev+1)))
+             csbot_cscen(ilev) = csbot(ilev)/cs(icol,ilev)
           else
-             ekd(k)   = 0._r8
-             csbot(k) = cs(i,k)
-             csbot_cscen(k) = 1.0_r8
+             ekd(ilev)   = 0._r8
+             csbot(ilev) = cs(icol,ilev)
+             csbot_cscen(ilev) = 1.0_r8
           end if
 
-          ! rce-comment - define wtke at layer centers for new-cloud activation
-          !    and at layer boundaries for old-cloud activation
-          wtke_cen(i,k) = wsub(i,k)
-          wtke(i,k)     = wsub(i,k)
-          wtke_cen(i,k) = max(wtke_cen(i,k), wmixmin)
-          wtke(i,k)     = max(wtke(i,k), wmixmin)
-          nsource(i,k) = 0._r8
+          ! define wtke at layer centers for new-cloud activation
+          ! and at layer boundaries for old-cloud activation
+          wtke_cen(icol,ilev) = wsub(icol,ilev)
+          wtke(icol,ilev)     = wsub(icol,ilev)
+          wtke_cen(icol,ilev) = max(wtke_cen(icol,ilev), wmixmin)
+          wtke(icol,ilev)     = max(wtke(icol,ilev), wmixmin)
+          nsource(icol,ilev) = 0._r8
 
-       end do  ! k
+       end do  ! ilev
 
        nsav = 1
        nnew = 2
 
        !get constituent fraction
+       call t_startf('ndrop_getConstituentFraction')
+
+       call t_startf('ndrop_getConstituentFraction_calc_aersolFraction')
        componentFractionOK(:,:,:) = 0.0_r8
-       do k=top_lev, pver
-          do m = 1,ntot_amode
-             if(m .le. nbmodes)then
-                do l = 1, nspec_amode(m)
-                   !calculate fraction of component "l" in mode "m" based on concentrations in clear air
-                   componentFractionOK(k,m,getTracerIndex(m,l,.false.))       &
-                        = getConstituentFraction(CProcessModes(i,k), &
-                        f_c(i,k), f_bc(i,k), f_aq(i,k), f_so4_cond(i,k), f_soa(i,k),  &
-                        Cam(i,k,m), f_acm(i,k,m), f_bcm(i,k,m), f_aqm(i,k,m), &
-                        f_so4_condm(i,k,m), f_soam(i,k,m), getTracerIndex(m,l,.false.)  )
-                end do
-             else
-                do l = 1, nspec_amode(m)
-                   componentFractionOK(k,m,getTracerIndex(m,l,.false.)) = 1.0_r8
-                end do
-             endif
-          end do
+       do ilev=top_lev, pver
+         do imode = 1,ntot_amode
+           if (imode <= nbmodes)then
+             do ispec = 1, nspec_amode(imode)
+               !calculate fraction of component "ispec" in mode "imode" based on concentrations in clear air
+               tracerIndex = tracer_index(imode,ispec)
 
-          !Loop over all tracers ==> check that sums to one
-          !for all tracers which exist in the oslo-modes
-          do l=1,pcnst
-             sumFraction = 0.0_r8
-             do m=1,ntot_amode
-                sumFraction = sumFraction + componentFractionOK(k,m,l)
+               if (l_so4_a1 == tracerIndex) then !so4 condensation
+                  componentFractionOK(imode,tracerIndex,ilev)= (Cam(icol,ilev,imode) &
+                       *(1.0_r8 - f_acm(icol,ilev,imode)) & !sulfate fraction
+                       *(1.0_r8 - f_aqm(icol,ilev,imode)) & !fraction not from aq phase
+                       *(f_so4_condm(icol,ilev,imode)))   & !fraction being condensate
+                       /(CProcessModes(icol,ilev)*(1.0_r8-f_c(icol,ilev))*(1.0_r8-f_aq(icol,ilev))*f_so4_cond(icol,ilev)+smallNumber) !total so4 condensate
+
+               else if (l_so4_ac == tracerIndex) then ! so4 coagulation
+                  componentFractionOK(imode,tracerIndex,ilev) = (Cam(icol,ilev,imode) &
+                       *(1.0_r8 - f_acm(icol,ilev,imode)) &         !sulfate fraction
+                       *(1.0_r8 - f_aqm(icol,ilev,imode)) &         !fraction not from aq phase
+                       *(1.0_r8 - f_so4_condm(icol,ilev,imode))) &  !fraction not being condensate
+                       /(CProcessModes(icol,ilev)*(1.0_r8-f_c(icol,ilev))*(1.0_r8-f_aq(icol,ilev))*(1.0_r8-f_so4_cond(icol,ilev)) + smallNumber)
+
+               else if (l_so4_a2 == tracerIndex) then  !so4 wet phase
+                  componentFractionOK(imode,tracerIndex,ilev) = (Cam(icol,ilev,imode) &
+                       *(1.0_r8-f_acm(icol,ilev,imode)) & !sulfate fraction
+                       *f_aqm(icol,ilev,imode))         & !aq phase fraction of sulfate
+                       /(CProcessModes(icol,ilev)*(1.0_r8-f_c(icol,ilev))*(f_aq(icol,ilev))+smallNumber)
+
+               else if (l_bc_ac == tracerIndex)then  !bc coagulated
+                  componentFractionOK(imode,tracerIndex,ilev) = (Cam(icol,ilev,imode) &
+                       *f_acm(icol,ilev,imode)  & ! carbonaceous fraction
+                       *f_bcm(icol,ilev,imode)) & ! bc fraction of carbonaceous
+                       /(CProcessModes(icol,ilev)*f_c(icol,ilev)*f_bc(icol,ilev)+smallNumber)
+
+               else if (l_om_ac == tracerIndex ) then  !oc coagulated
+                  componentFractionOK(imode,tracerIndex,ilev) = (Cam(icol,ilev,imode) &
+                       *f_acm(icol,ilev,imode)            &  ! carbonaceous fraction
+                       *(1.0_r8-f_bcm(icol,ilev,imode))   &  ! oc fraction of carbonaceous
+                       *(1.0_r8-f_soam(icol,ilev,imode))) &  ! oc fraction which is soa
+                       /(CProcessModes(icol,ilev)*f_c(icol,ilev)*(1.0_r8-f_bc(icol,ilev))*(1.0_r8-f_soa(icol,ilev))+smallNumber)
+
+               else if (l_soa_a1 == tracerIndex) then !SOA condensate
+                  componentFractionOK(imode,tracerIndex,ilev) = Cam(icol,ilev,imode) &
+                       *f_acm(icol,ilev,imode)           &  !carbonaceous fraction
+                       *(1.0_r8 -f_bcm(icol,ilev,imode)) &  !om fraction
+                       *(f_soam(icol,ilev,imode))        &  !fraction of OM is SOA
+                       /(CProcessModes(icol,ilev)*f_c(icol,ilev)*(1.0_r8 -f_bc(icol,ilev))*f_soa(icol,ilev) + smallNumber)
+               end if
+               if (componentFractionOK(imode,tracerIndex,ilev) >  1.0_r8)then
+                  componentFractionOK(imode,tracerIndex,ilev) = 1.0_r8
+               endif
              end do
-             if(sumFraction .gt. 1.e-2_r8)then  !Just scale what comes out if componentFraction is larger than 1%
-                do m=1,ntot_amode
-                   componentFractionOK(k,m,l) = &
-                        componentFractionOK(k,m,l)/sumFraction
-                end do
-             else       !negative or zero fraction for this species
-                !distribute equal fraction to all receiver modes
-                sumFraction = 0.0_r8
-                do m=1,ntot_amode
-                   do lptr=1,getNumberOfTracersInMode(m)
-                      if(getTracerIndex(m,lptr,.FALSE.) .eq. l ) then
-                         sumFraction = sumFraction + 1.0_r8
-                      endif
-                   end do ! tracers in mode
-                end do    ! mode
-                do m=1,ntot_amode
-                   componentFractionOK(k,m,l)=1.0_r8/max(1.e-30_r8, sumFraction)
-                end do !modes
-             endif
-          end do !tracers
-       end do    !levels
-       !debug sum fraction for "i" done
+           else
+             do ispec = 1, nspec_amode(imode)
+               tracerIndex = tracer_index(imode,ispec)
+               componentFractionOK(imode,tracerIndex,ilev) = 1.0_r8
+             end do
+           endif
+         end do
+       end do
+       call t_stopf('ndrop_getConstituentFraction_calc_aersolFraction')
 
-       debugSumFraction(:) = 0.0_r8 !sum of component lDebug in level k
-       do m = 1, nmodes ! Number of modes
+       !Loop over all tracers ==> check that sums to one
+       !for all tracers which exist in the oslo-modes
+
+       call t_startf('ndrop_getConstituentFraction_check_trackerNormalization1')
+       sumFraction(:,:) = 0.0_r8
+       do ilev=top_lev, pver
+         do itrac=1,pcnst
+           do imode=1,ntot_amode
+             sumFraction(itrac,ilev) = sumFraction(itrac,ilev) + componentFractionOK(imode,itrac,ilev)
+           end do
+         end do
+       end do
+       call t_stopf('ndrop_getConstituentFraction_check_trackerNormalization1')
+
+       call t_startf('ndrop_getConstituentFraction_check_trackerNormalization2')
+       do ilev=top_lev, pver
+         do itrac=1,pcnst
+           if (sumFraction(itrac,ilev) > 1.e-2_r8) then
+             !Just scale what comes out if componentFraction is larger than 1%
+             do imode=1,ntot_amode
+               componentFractionOK(imode,itrac,ilev) = componentFractionOK(imode,itrac,ilev)/sumFraction(itrac,ilev)
+             end do
+           else
+             ! negative or zero fraction for this species
+             ! distribute equal fraction to all receiver modes
+             do imode=1,ntot_amode
+               componentFractionOK(imode,itrac,ilev)=1.0_r8/max(1.e-30_r8, sumFraction2(itrac,ilev))
+             end do !modes
+           endif
+         end do !tracers
+       end do  !levels
+       call t_stopf('ndrop_getConstituentFraction_check_trackerNormalization2')
+
+       call t_stopf('ndrop_getConstituentFraction')
+
+       call t_startf('ndrop_getNumberConc')
+       do imode = 1, nmodes ! Number of modes
           !Get number concentration of this mode
-          mm =mam_idx(m,0)
-          do k= top_lev,pver
-             raercol(k,mm,nsav) = numberConcentration(i,k,m)/cs(i,k) !#/kg air
+          mm = mam_idx(imode,0)
+          do ilev= top_lev,pver
+             raercol(ilev,mm,nsav) = numberConcentration(icol,ilev,imode)/cs(icol,ilev) !#/kg air
              !In oslo model, number concentrations are diagnostics, so
-             !Approximate number concentration in each mode by total
+             !approximate number concentration in each mode by total
              !cloud number concentration scaled by how much is available of
              !each mode
-             raercol_cw(k,mm,nsav) = ncldwtr(i,k)*numberConcentration(i,k,m)&
-                  /max(1.e-30_r8, sum(numberConcentration(i,k,1:nmodes)))
+             raercol_cw(ilev,mm,nsav) = ncldwtr(icol,ilev)*numberConcentration(icol,ilev,imode) &
+                                    /max(1.e-30_r8, sum(numberConcentration(icol,ilev,1:nmodes)))
           enddo
 
           !These are the mass mixing ratios
-          do l = 1, nspec_amode(m)
-             mm = mam_idx(m,l)      !index of tracer (all unique)
+          do ispec = 1, nspec_amode(imode)
+             mm = mam_idx(imode,ispec)      !index of tracer (all unique)
              raercol(:,mm,nsav) = 0.0_r8
              raercol_cw(:,mm,nsav) = 0.0_r8
              !Several of the fields (raer(mm)%fld point to the same
              !field in q. To avoid double counting, we take into
              !account the component fraction in the mode
-             do k=top_lev,pver
-                if(m .gt. nbmodes) then
+             do ilev=top_lev,pver
+                if(imode > nbmodes) then
                    componentFraction = 1.0_r8
                 else
-                   componentFraction = componentFractionOK(k,m,getTracerIndex(m,l,.false.))
+                   tracerIndex = tracer_index(imode,ispec)
+                   componentFraction = componentFractionOK(imode,tracerIndex,ilev)
                 endif
                 !Assign to the components used here i.e. distribute condensate/coagulate to modes
-                raercol_cw(k,mm,nsav) = qqcw(mm)%fld(i,k)*componentFraction
-                raercol(k,mm,nsav)    = raer(mm)%fld(i,k)*componentFraction
-             enddo ! k (levels)
-          end do   ! l (species)
-       end do      ! m (modes)
+                raercol_cw(ilev,mm,nsav) = qqcw(mm)%fld(icol,ilev)*componentFraction
+                raercol(ilev,mm,nsav)    = raer(mm)%fld(icol,ilev)*componentFraction
+             enddo ! ilev (levels)
+          end do   ! ispec (species)
+       end do      ! imode (modes)
+       call t_stopf('ndrop_getNumberConc')
 
        ! droplet nucleation/aerosol activation
+       call t_startf('ndrop_nucleation_activation')
 
-       ! tau_cld_regenerate = time scale for regeneration of cloudy air
-       !    by (horizontal) exchange with clear air
-       tau_cld_regenerate = 3600.0_r8 * 3.0_r8
-
-       ! k-loop for growing/shrinking cloud calcs .............................
+       ! ilev-loop for growing/shrinking cloud calcs .............................
        ! grow_shrink_main_k_loop: &
-       do k = top_lev, pver
+       do ilev = top_lev, pver
 
           ! This code was designed for liquid clouds, but the cloudbourne
           ! aerosol can be either from liquid or ice clouds. For the ice clouds,
@@ -736,68 +794,68 @@ contains
           ! liquid cloud is present.
 
           ! shrinking ice cloud ......................................................
-          cldo_tmp = cldo(i,k) * (1._r8 - cldliqf(i,k))
-          cldn_tmp = cldn(i,k) * (1._r8 - cldliqf(i,k))
+          cldo_tmp = cldo(icol,ilev) * (1._r8 - cldliqf(icol,ilev))
+          cldn_tmp = cldn(icol,ilev) * (1._r8 - cldliqf(icol,ilev))
 
           if (cldn_tmp < cldo_tmp) then
 
              ! convert activated aerosol to interstitial in decaying cloud
 
-             dumc = (cldn_tmp - cldo_tmp)/cldo_tmp * (1._r8 - cldliqf(i,k))
-             do m = 1, ntot_amode
-                mm = mam_idx(m,0)
-                dact   = raercol_cw(k,mm,nsav)*dumc
-                raercol_cw(k,mm,nsav) = raercol_cw(k,mm,nsav) + dact   ! cloud-borne aerosol
-                raercol(k,mm,nsav)    = raercol(k,mm,nsav) - dact
-                do l = 1, nspec_amode(m)
-                   mm = mam_idx(m,l)
-                   dact    = raercol_cw(k,mm,nsav)*dumc
-                   raercol_cw(k,mm,nsav) = raercol_cw(k,mm,nsav) + dact  ! cloud-borne aerosol
-                   raercol(k,mm,nsav)    = raercol(k,mm,nsav) - dact
+             dumc = (cldn_tmp - cldo_tmp)/cldo_tmp * (1._r8 - cldliqf(icol,ilev))
+             do imode = 1, ntot_amode
+                mm = mam_idx(imode,0)
+                dact   = raercol_cw(ilev,mm,nsav)*dumc
+                raercol_cw(ilev,mm,nsav) = raercol_cw(ilev,mm,nsav) + dact   ! cloud-borne aerosol
+                raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) - dact
+                do ispec = 1, nspec_amode(imode)
+                   mm = mam_idx(imode,ispec)
+                   dact    = raercol_cw(ilev,mm,nsav)*dumc
+                   raercol_cw(ilev,mm,nsav) = raercol_cw(ilev,mm,nsav) + dact  ! cloud-borne aerosol
+                   raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) - dact
                 end do
              end do
           end if
 
           ! shrinking liquid cloud ......................................................
-          !    treat the reduction of cloud fraction from when cldn(i,k) < cldo(i,k)
+          !    treat the reduction of cloud fraction from when cldn(icol,ilev) < cldo(icol,ilev)
           !    and also dissipate the portion of the cloud that will be regenerated
-          cldo_tmp = lcldo(i,k)
-          cldn_tmp = lcldn(i,k) * exp( -dtmicro/tau_cld_regenerate )
+          cldo_tmp = lcldo(icol,ilev)
+          cldn_tmp = lcldn(icol,ilev) * tau_cld_regenerate_exp
           !    alternate formulation
-          !    cldn_tmp = cldn(i,k) * max( 0.0_r8, (1.0_r8-dtmicro/tau_cld_regenerate) )
+          !    cldn_tmp = cldn(icol,ilev) * max( 0.0_r8, (1.0_r8-dtmicro/tau_cld_regenerate) )
 
           ! fraction is also provided.
           if (cldn_tmp < cldo_tmp) then
              !  droplet loss in decaying cloud
-             nsource(i,k) = nsource(i,k) + qcld(k)*(cldn_tmp - cldo_tmp)/cldo_tmp*cldliqf(i,k)*dtinv
-             qcld(k)      = qcld(k)*(1._r8 + (cldn_tmp - cldo_tmp)/cldo_tmp)
+             nsource(icol,ilev) = nsource(icol,ilev) + qcld(ilev)*(cldn_tmp - cldo_tmp)/cldo_tmp*cldliqf(icol,ilev)*dtinv
+             qcld(ilev) = qcld(ilev)*(1._r8 + (cldn_tmp - cldo_tmp)/cldo_tmp)
 
              ! convert activated aerosol to interstitial in decaying cloud
-             dumc = (cldn_tmp - cldo_tmp)/cldo_tmp * cldliqf(i,k)
-             do m = 1, ntot_amode
-                mm = mam_idx(m,0)
-                dact   = raercol_cw(k,mm,nsav)*dumc
-                raercol_cw(k,mm,nsav) = raercol_cw(k,mm,nsav) + dact   ! cloud-borne aerosol
-                raercol(k,mm,nsav)    = raercol(k,mm,nsav) - dact
-                do l = 1, nspec_amode(m)
-                   mm = mam_idx(m,l)
-                   dact    = raercol_cw(k,mm,nsav)*dumc
-                   raercol_cw(k,mm,nsav) = raercol_cw(k,mm,nsav) + dact  ! cloud-borne aerosol
-                   raercol(k,mm,nsav)    = raercol(k,mm,nsav) - dact
+             dumc = (cldn_tmp - cldo_tmp)/cldo_tmp * cldliqf(icol,ilev)
+             do imode = 1, ntot_amode
+                mm = mam_idx(imode,0)
+                dact   = raercol_cw(ilev,mm,nsav)*dumc
+                raercol_cw(ilev,mm,nsav) = raercol_cw(ilev,mm,nsav) + dact   ! cloud-borne aerosol
+                raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) - dact
+                do ispec = 1, nspec_amode(imode)
+                   mm = mam_idx(imode,ispec)
+                   dact    = raercol_cw(ilev,mm,nsav)*dumc
+                   raercol_cw(ilev,mm,nsav) = raercol_cw(ilev,mm,nsav) + dact  ! cloud-borne aerosol
+                   raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) - dact
                 end do
              end do
           end if
 
           ! growing liquid cloud ......................................................
-          !    treat the increase of cloud fraction from when cldn(i,k) > cldo(i,k)
+          !    treat the increase of cloud fraction from when cldn(icol,ilev) > cldo(icol,ilev)
           !    and also regenerate part of the cloud
           cldo_tmp = cldn_tmp
-          cldn_tmp = lcldn(i,k)
+          cldn_tmp = lcldn(icol,ilev)
 
           if (cldn_tmp-cldo_tmp > 0.01_r8) then
 
              ! use wtke at layer centers for new-cloud activation
-             wbar  = wtke_cen(i,k)
+             wbar  = wtke_cen(icol,ilev)
              wmix  = 0._r8
              wmin  = 0._r8
              wmax  = 10._r8
@@ -807,40 +865,40 @@ contains
              naermod(:) = 0.0_r8
              vaerosol(:) = 0.0_r8
              hygro(:) = 0.0_r8
-             lnsigman(:) = log(2.0_r8)
+             lnsigman(:) = alog2
 
-             m = 0
-             do kcomp = 1,nmodes
-                if(hasAerosol(i,k,kcomp)) then
-                   m = m + 1
-                   naermod(m) = numberConcentration(i,k,kcomp)
-                   vaerosol(m) = volumeConcentration(i,k,kcomp)
-                   hygro(m) =    hygroscopicity(i,k,kcomp)
-                   lnsigman(m) = lnsigma(i,k,kcomp)
-                   speciesMap(m) = kcomp
+             mode_cnt = 0
+             do imode = 1,nmodes
+                if(hasAerosol(icol,ilev,imode)) then
+                   mode_cnt = mode_cnt + 1
+                   naermod(mode_cnt) = numberConcentration(icol,ilev,imode)
+                   vaerosol(mode_cnt) = volumeConcentration(icol,ilev,imode)
+                   hygro(mode_cnt) = hygroscopicity(icol,ilev,imode)
+                   lnsigman(mode_cnt) = lnsigma(icol,ilev,imode)
+                   speciesMap(mode_cnt) = imode
                 end if
              end do
-             numberOfModes = m
+             numberOfModes = mode_cnt
 
              ! Call the activation procedure
-             if (numberOfModes .gt. 0)then
+             if (numberOfModes > 0)then
                 if (use_hetfrz_classnuc) then
                    call activate_modal_oslo( wbar, wmix, wdiab, wmin, wmax,       &
-                        temp(i,k), cs(i,k), naermod, numberOfModes,          &
-                        vaerosol, hygro, fn_in(i,k,1:nmodes), fm, fluxn,     &
-                        fluxm, flux_fullact(k), lnsigman)
+                        temp(icol,ilev), cs(icol,ilev), naermod, numberOfModes,          &
+                        vaerosol, hygro, fn_in(icol,ilev,1:nmodes), fm, fluxn,     &
+                        fluxm, flux_fullact(ilev), lnsigman)
                 else
                    call activate_modal_oslo( wbar, wmix, wdiab, wmin, wmax,       &
-                        temp(i,k), cs(i,k), naermod, numberOfModes,          &
+                        temp(icol,ilev), cs(icol,ilev), naermod, numberOfModes,          &
                         vaerosol, hygro, fn, fm, fluxn,                      &
-                        fluxm, flux_fullact(k), lnsigman)
+                        fluxm, flux_fullact(ilev), lnsigman)
                 end if
              endif
 
              dumc = (cldn_tmp - cldo_tmp)
 
              if (use_hetfrz_classnuc) then
-                fn_tmp(:) = fn_in(i,k,1:nmodes)
+                fn_tmp(:) = fn_in(icol,ilev,1:nmodes)
              else
                 fn_tmp(:) = fn(:)
              end if
@@ -848,136 +906,138 @@ contains
              fluxn_tmp(:) = fluxn(:)
              fluxm_tmp(:) = fluxm(:)
              fn(:) = 0.0_r8
-             fn_in(i,k,:) = 0.0_r8
+             fn_in(icol,ilev,:) = 0.0_r8
              fm(:) = 0.0_r8
              fluxn(:)=0.0_r8
              fluxm(:)= 0.0_r8
-             do m = 1, numberOfModes   !Number of coexisting modes to be used for activation
-                kcomp = speciesMap(m)       !This is the CAM-oslo mode (modes 1-14 may be activated, mode 0 not)
+             do imode = 1, numberOfModes   !Number of coexisting modes to be used for activation
+                kcomp = speciesMap(imode)       !This is the CAM-oslo mode (modes 1-14 may be activated, mode 0 not)
                 if (use_hetfrz_classnuc) then
-                   fn_in(i,k,kcomp) = fn_tmp(m)
+                   fn_in(icol,ilev,kcomp) = fn_tmp(imode)
                 else
-                   fn(kcomp) = fn_tmp(m)
+                   fn(kcomp) = fn_tmp(imode)
                 end if
-                fm(kcomp) = fm_tmp(m)
-                fluxn(kcomp) = fluxn_tmp(m)
-                fluxm(kcomp) = fluxm_tmp(m)
+                fm(kcomp) = fm_tmp(imode)
+                fluxn(kcomp) = fluxn_tmp(imode)
+                fluxm(kcomp) = fluxm_tmp(imode)
              enddo
-             do m = 1, ntot_amode
-                mm = mam_idx(m,0)
+             do imode = 1, ntot_amode
+                mm = mam_idx(imode,0)
                 if (use_hetfrz_classnuc) then
-                   dact   = dumc*fn_in(i,k,m)*numberConcentration(i,k,m)/cs(i,k) !#/kg_{air}
+                   dact   = dumc*fn_in(icol,ilev,imode)*numberConcentration(icol,ilev,imode)/cs(icol,ilev) !#/kg_{air}
                 else
-                   dact   = dumc*fn(m)*numberConcentration(i,k,m)/cs(i,k) !#/kg_{air}
+                   dact   = dumc*fn(imode)*numberConcentration(icol,ilev,imode)/cs(icol,ilev) !#/kg_{air}
                 end if
-                qcld(k) = qcld(k) + dact
-                nsource(i,k) = nsource(i,k) + dact*dtinv
-                raercol_cw(k,mm,nsav) = raercol_cw(k,mm,nsav) + dact  ! cloud-borne aerosol
-                raercol(k,mm,nsav)    = raercol(k,mm,nsav) - dact
-                dum = dumc*fm(m)
-                do l = 1, nspec_amode(m)
-                   mm = mam_idx(m,l)
-                   if(m .gt. nbmodes)then
+                qcld(ilev) = qcld(ilev) + dact
+                nsource(icol,ilev) = nsource(icol,ilev) + dact*dtinv
+                raercol_cw(ilev,mm,nsav) = raercol_cw(ilev,mm,nsav) + dact  ! cloud-borne aerosol
+                raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) - dact
+                dum = dumc*fm(imode)
+                do ispec = 1, nspec_amode(imode)
+                   mm = mam_idx(imode,ispec)
+                   if(imode > nbmodes)then
                       constituentFraction = 1.0_r8
                    else
-                      constituentFraction = componentFractionOK(k,m,getTracerIndex(m,l,.false.)  )
+                      tracerIndex = tracer_index(imode,ispec)
+                      constituentFraction = componentFractionOK(imode,tracerIndex,ilev)
                    endif
 
-                   dact    = dum*raer(mm)%fld(i,k)*constituentFraction
-                   raercol_cw(k,mm,nsav) = raercol_cw(k,mm,nsav) + dact  ! cloud-borne aerosol
-                   raercol(k,mm,nsav)    = raercol(k,mm,nsav) - dact
+                   dact    = dum*raer(mm)%fld(icol,ilev)*constituentFraction
+                   raercol_cw(ilev,mm,nsav) = raercol_cw(ilev,mm,nsav) + dact  ! cloud-borne aerosol
+                   raercol(ilev,mm,nsav)    = raercol(ilev,mm,nsav) - dact
                 enddo
              enddo
           endif  ! cldn_tmp-cldo_tmp > 0.01_r8
 
        enddo  ! grow_shrink_main_k_loop
-       ! end of k-loop for growing/shrinking cloud calcs ......................
+       ! end of ilev-loop for growing/shrinking cloud calcs ......................
+       call t_stopf('ndrop_nucleation_activation')
 
        ! ......................................................................
-       ! start of k-loop for calc of old cloud activation tendencies ..........
+       ! start of ilev-loop for calc of old cloud activation tendencies ..........
        !
        ! use current cloud fraction (cldn) exclusively
-       ! consider case of cldo(:)=0, cldn(k)=1, cldn(k+1)=0
+       ! consider case of cldo(:)=0, cldn(ilev)=1, cldn(ilev+1)=0
        ! previous code (which used cldo below here) would have no cloud-base activation
-       ! into layer k.  however, activated particles in k mix out to k+1,
+       ! into layer ilev.  however, activated particles in ilev mix out to ilev+1,
        ! so they are incorrectly depleted with no replacement
 
+       call t_startf('ndrop_oldcloud_activation')
        ! old_cloud_main_k_loop
-       do k = top_lev, pver
-          kp1 = min0(k+1, pver)
+       do ilev = top_lev, pver
+          kp1 = min0(ilev+1, pver)
           taumix_internal_pver_inv = 0.0_r8
 
-          if (lcldn(i,k) > 0.01_r8) then
+          if (lcldn(icol,ilev) > 0.01_r8) then
 
              wdiab = 0._r8
              wmix  = 0._r8                       ! single updraft
-             wbar  = wtke(i,k)                   ! single updraft
-             if (k == pver) wbar = wtke_cen(i,k) ! single updraft
+             wbar  = wtke(icol,ilev)                   ! single updraft
+             if (ilev == pver) wbar = wtke_cen(icol,ilev) ! single updraft
              wmax  = 10._r8
              wmin  = 0._r8
 
-             if (lcldn(i,k) - lcldn(i,kp1) > 0.01_r8 .or. k == pver) then
+             if (lcldn(icol,ilev) - lcldn(icol,kp1) > 0.01_r8 .or. ilev == pver) then
 
                 ! cloud base
+                ! ekd(ilev) = wtke(icol,ilev)*dz(icol,ilev)/sq2pi
+                ! first, should probably have 1/zs(ilev) here rather than dz(icol,ilev) because
+                !    the turbulent flux is proportional to ekd(ilev)*zs(ilev),
+                !    while the dz(icol,ilev) is used to get flux divergences
+                !    and mixing ratio tendency/change
+                ! second and more importantly, using a single updraft velocity here
+                !    means having monodisperse turbulent updraft and downdrafts.
+                !    The sq2pi factor assumes a normal draft spectrum.
+                !    The fluxn/fluxm from activate must be consistent with the
+                !    fluxes calculated in explmix.
+                ekd(ilev) = wbar/zs(ilev)
 
-                ! ekd(k) = wtke(i,k)*dz(i,k)/sq2pi
-                ! rce-comments
-                !   first, should probably have 1/zs(k) here rather than dz(i,k) because
-                !      the turbulent flux is proportional to ekd(k)*zs(k),
-                !      while the dz(i,k) is used to get flux divergences
-                !      and mixing ratio tendency/change
-                !   second and more importantly, using a single updraft velocity here
-                !      means having monodisperse turbulent updraft and downdrafts.
-                !      The sq2pi factor assumes a normal draft spectrum.
-                !      The fluxn/fluxm from activate must be consistent with the
-                !      fluxes calculated in explmix.
-                ekd(k) = wbar/zs(k)
-
-                alogarg = max(1.e-20_r8, 1._r8/lcldn(i,k) - 1._r8)
+                alogarg = max(1.e-20_r8, 1._r8/lcldn(icol,ilev) - 1._r8)
                 wmin    = wbar + wmix*0.25_r8*sq2pi*log(alogarg)
                 phase   = 1   ! interstitial
                 naermod(:) = 0.0_r8
                 vaerosol(:) = 0.0_r8
                 hygro(:) = 0.0_r8
-                lnsigman(:) = log(2.0_r8)
+                lnsigman(:) = alog2
 
-                m=0
-                do kcomp = 1,nmodes
-                   if(hasAerosol(i,kp1,kcomp) .eqv. .TRUE.)then
-                      m = m + 1
-                      naermod(m) = numberConcentration(i,kp1,kcomp)
-                      vaerosol(m) = volumeConcentration(i,kp1,kcomp)
-                      hygro(m) =    hygroscopicity(i,kp1,kcomp)
-                      lnsigman(m) = lnsigma(i,kp1,kcomp)
-                      speciesMap(m) = kcomp
+                mode_cnt=0
+                do imode = 1,nmodes
+                   if(hasAerosol(icol,kp1,imode) .eqv. .TRUE.)then
+                      mode_cnt = mode_cnt + 1
+                      naermod(mode_cnt) = numberConcentration(icol,kp1,imode)
+                      vaerosol(mode_cnt) = volumeConcentration(icol,kp1,imode)
+                      hygro(mode_cnt) =    hygroscopicity(icol,kp1,imode)
+                      lnsigman(mode_cnt) = lnsigma(icol,kp1,imode)
+                      speciesMap(mode_cnt) = imode
                    end if
                 end do
-                numberOfModes = m
-                if(numberOfModes .gt. 0)then
+                numberOfModes = mode_cnt
+
+                if(numberOfModes > 0)then
                    if (use_hetfrz_classnuc) then
                       call activate_modal_oslo(wbar, wmix, wdiab, wmin, wmax, &
-                           temp(i,k), cs(i,k), naermod, numberOfModes ,  &
-                           vaerosol, hygro, fn_in(i,k,:), fm, fluxn,     &
-                           fluxm, flux_fullact(k), lnsigman)
+                           temp(icol,ilev), cs(icol,ilev), naermod, numberOfModes ,  &
+                           vaerosol, hygro, fn_in(icol,ilev,:), fm, fluxn,     &
+                           fluxm, flux_fullact(ilev), lnsigman)
                    else
                       call activate_modal_oslo(wbar, wmix, wdiab, wmin, wmax, &
-                           temp(i,k), cs(i,k), naermod, numberOfModes ,  &
+                           temp(icol,ilev), cs(icol,ilev), naermod, numberOfModes ,  &
                            vaerosol, hygro, fn, fm, fluxn,               &
-                           fluxm, flux_fullact(k), lnsigman)
+                           fluxm, flux_fullact(ilev), lnsigman)
                    end if
                 endif
 
                 !Difference in cloud fraction this layer and above!
                 !we are here because there are more clouds above, and some
                 !aerosols go into  that layer! ==> calculate additional cloud fraction
-                if (k < pver) then
-                   dumc = lcldn(i,k) - lcldn(i,kp1)
+                if (ilev < pver) then
+                   dumc = lcldn(icol,ilev) - lcldn(icol,kp1)
                 else
-                   dumc = lcldn(i,k)
+                   dumc = lcldn(icol,ilev)
                 endif
 
                 if (use_hetfrz_classnuc) then
-                   fn_tmp(:) = fn_in(i,k,1:nmodes)
+                   fn_tmp(:) = fn_in(icol,ilev,1:nmodes)
                 else
                    fn_tmp(:) = fn(:)
                 end if
@@ -985,38 +1045,39 @@ contains
                 fluxn_tmp(:) = fluxn(:)
                 fluxm_tmp(:) = fluxm(:)
                 fn(:) = 0.0_r8
-                fn_in(i,k,:) = 0.0_r8
+                fn_in(icol,ilev,:) = 0.0_r8
                 fm(:) = 0.0_r8
                 fluxn(:)=0.0_r8
                 fluxm(:)= 0.0_r8
-                do m = 1, numberOfModes   !Number of coexisting modes to be used for activation
-                   kcomp = speciesMap(m)       !This is the CAM-oslo mode (modes 1-14 may be activated, mode 0 not)
+
+                do imode = 1, numberOfModes        !Number of coexisting modes to be used for activation
+                   kcomp = speciesMap(imode)       !This is the CAM-oslo mode (modes 1-14 may be activated, mode 0 not)
                    if (use_hetfrz_classnuc) then
-                      fn_in(i,k,kcomp) = fn_tmp(m)
+                      fn_in(icol,ilev,kcomp) = fn_tmp(imode)
                    else
-                      fn(kcomp) = fn_tmp(m)
+                      fn(kcomp) = fn_tmp(imode)
                    end if
-                   fm(kcomp) = fm_tmp(m)
-                   fluxn(kcomp) = fluxn_tmp(m)
-                   fluxm(kcomp) = fluxm_tmp(m)
+                   fm(kcomp) = fm_tmp(imode)
+                   fluxn(kcomp) = fluxn_tmp(imode)
+                   fluxm(kcomp) = fluxm_tmp(imode)
                 enddo
 
                 fluxntot = 0.0_r8
 
-                ! flux of activated mass into layer k (in kg/m2/s)
-                !    = "actmassflux" = dumc*fluxm*raercol(kp1,lmass)*csbot(k)
+                ! flux of activated mass into layer ilev (in kg/m2/s)
+                !    = "actmassflux" = dumc*fluxm*raercol(kp1,lmass)*csbot(ilev)
                 ! source of activated mass (in kg/kg/s) = flux divergence
-                !    = actmassflux/(cs(i,k)*dz(i,k))
-                ! so need factor of csbot_cscen = csbot(k)/cs(i,k)
-                !                            dum=1./(dz(i,k))
-                dum=csbot_cscen(k)/(dz(i,k))
+                !    = actmassflux/(cs(icol,ilev)*dz(icol,ilev))
+                ! so need factor of csbot_cscen = csbot(ilev)/cs(icol,ilev)
+                !                            dum=1./(dz(icol,ilev))
+                dum=csbot_cscen(ilev)/(dz(icol,ilev))
 
-                ! code for k=pver was changed to use the following conceptual model
-                ! in k=pver, there can be no cloud-base activation unless one considers
+                ! code for ilev=pver was changed to use the following conceptual model
+                ! in ilev=pver, there can be no cloud-base activation unless one considers
                 !    a scenario such as the layer being partially cloudy,
                 !    with clear air at bottom and cloudy air at top
                 ! assume this scenario, and that the clear/cloudy portions mix with
-                !    a timescale taumix_internal = dz(i,pver)/wtke_cen(i,pver)
+                !    a timescale taumix_internal = dz(icol,pver)/wtke_cen(icol,pver)
                 ! in the absence of other sources/sinks, qact (the activated particle
                 !    mixratio) attains a steady state value given by
                 !       qact_ss = fcloud*fact*qtot
@@ -1032,101 +1093,97 @@ contains
                 !
                 ! steve --
                 !    you will likely want to change this.  i did not really understand
-                !       what was previously being done in k=pver
-                !    in the cam3_5_3 code, wtke(i,pver) appears to be equal to the
+                !       what was previously being done in ilev=pver
+                !    in the cam3_5_3 code, wtke(icol,pver) appears to be equal to the
                 !       droplet deposition velocity which is quite small
                 !    in the cam3_5_37 version, wtke is done differently and is much
-                !       larger in k=pver, so the activation is stronger there
+                !       larger in ilev=pver, so the activation is stronger there
                 !
-                if (k == pver) then
-                   taumix_internal_pver_inv = flux_fullact(k)/dz(i,k)
+                if (ilev == pver) then
+                   taumix_internal_pver_inv = flux_fullact(ilev)/dz(icol,ilev)
                 end if
 
-                do m = 1, ntot_amode
-                   mm = mam_idx(m,0)
-                   fluxn(m) = fluxn(m)*dumc
-                   fluxm(m) = fluxm(m)*dumc
-                   nact(k,m) = nact(k,m) + fluxn(m)*dum
-                   mact(k,m) = mact(k,m) + fluxm(m)*dum
-                   if (k < pver) then
+                do imode = 1, ntot_amode
+                   mm = mam_idx(imode,0)
+                   fluxn(imode) = fluxn(imode)*dumc
+                   fluxm(imode) = fluxm(imode)*dumc
+                   nact(ilev,imode) = nact(ilev,imode) + fluxn(imode)*dum
+                   mact(ilev,imode) = mact(ilev,imode) + fluxm(imode)*dum
+                   if (ilev < pver) then
                       ! note that kp1 is used here
                       fluxntot = fluxntot &
-                           + fluxn(m)*raercol(kp1,mm,nsav)*cs(i,k)
+                           + fluxn(imode)*raercol(kp1,mm,nsav)*cs(icol,ilev)
                    else
-                      tmpa = raercol(kp1,mm,nsav)*fluxn(m) &
-                           + raercol_cw(kp1,mm,nsav)*(fluxn(m) &
-                           - taumix_internal_pver_inv*dz(i,k))
-                      fluxntot = fluxntot + max(0.0_r8, tmpa)*cs(i,k)
+                      tmpa = raercol(kp1,mm,nsav)*fluxn(imode) &
+                           + raercol_cw(kp1,mm,nsav)*(fluxn(imode) &
+                           - taumix_internal_pver_inv*dz(icol,ilev))
+                      fluxntot = fluxntot + max(0.0_r8, tmpa)*cs(icol,ilev)
                    end if
                 end do
-                srcn(k)      = srcn(k) + fluxntot/(cs(i,k)*dz(i,k))
-                nsource(i,k) = nsource(i,k) + fluxntot/(cs(i,k)*dz(i,k))
-             endif  ! (cldn(i,k) - cldn(i,kp1) > 0.01 .or. k == pver)
+                srcn(ilev)      = srcn(ilev) + fluxntot/(cs(icol,ilev)*dz(icol,ilev))
+                nsource(icol,ilev) = nsource(icol,ilev) + fluxntot/(cs(icol,ilev)*dz(icol,ilev))
+             endif  ! (cldn(icol,ilev) - cldn(icol,kp1) > 0.01 .or. ilev == pver)
 
-          else  ! i.e: cldn(i,k) < 0.01_r8
+          else  ! i.e: cldn(icol,ilev) < 0.01_r8
 
              ! no liquid cloud
-             nsource(i,k) = nsource(i,k) - qcld(k)*dtinv
-             qcld(k)      = 0.0_r8
+             nsource(icol,ilev) = nsource(icol,ilev) - qcld(ilev)*dtinv
+             qcld(ilev) = 0.0_r8
 
-             if (cldn(i,k) < 0.01_r8) then
+             if (cldn(icol,ilev) < 0.01_r8) then
                 ! no ice cloud either
-
                 ! convert activated aerosol to interstitial in decaying cloud
+                do imode = 1, ntot_amode
+                   mm = mam_idx(imode,0)
+                   raercol(ilev,mm,nsav) = raercol(ilev,mm,nsav) + raercol_cw(ilev,mm,nsav)  ! cloud-borne aerosol
+                   raercol_cw(ilev,mm,nsav) = 0._r8
 
-                do m = 1, ntot_amode
-                   mm = mam_idx(m,0)
-                   raercol(k,mm,nsav)    = raercol(k,mm,nsav) + raercol_cw(k,mm,nsav)  ! cloud-borne aerosol
-                   raercol_cw(k,mm,nsav) = 0._r8
-
-                   do l = 1, nspec_amode(m)
-                      mm = mam_idx(m,l)
-                      raercol(k,mm,nsav)    = raercol(k,mm,nsav) + raercol_cw(k,mm,nsav) ! cloud-borne aerosol
-                      raercol_cw(k,mm,nsav) = 0._r8
+                   do ispec = 1, nspec_amode(imode)
+                      mm = mam_idx(imode,ispec)
+                      raercol(ilev,mm,nsav) = raercol(ilev,mm,nsav) + raercol_cw(ilev,mm,nsav) ! cloud-borne aerosol
+                      raercol_cw(ilev,mm,nsav) = 0._r8
                    end do
                 end do
              end if
           end if
 
        end do  ! old_cloud_main_k_loop
+       call t_stopf('ndrop_oldcloud_activation')
 
        ! switch nsav, nnew so that nnew is the updated aerosol
        ntemp = nsav
        nsav  = nnew
        nnew  = ntemp
 
+       call t_startf('ndrop_newdroplets')
        ! load new droplets in layers above, below clouds
-
        dtmin = dtmicro
        ekk(top_lev-1) = 0.0_r8
-       ekk(pver) = 0.0_r8
-       do k = top_lev, pver-1
-          ! rce-comment -- ekd(k) is eddy-diffusivity at k/k+1 interface
-          !   want ekk(k) = ekd(k) * (density at k/k+1 interface)
-          !   so use pint(i,k+1) as pint is 1:pverp
-          !           ekk(k)=ekd(k)*2.*pint(i,k)/(rair*(temp(i,k)+temp(i,k+1)))
-          !           ekk(k)=ekd(k)*2.*pint(i,k+1)/(rair*(temp(i,k)+temp(i,k+1)))
-          ekk(k) = ekd(k)*csbot(k)
+       do ilev = top_lev, pver-1
+          ! ekd(ilev) is eddy-diffusivity at ilev/ilev+1 interface
+          ! want ekk(ilev) = ekd(ilev) * (density at ilev/ilev+1 interface)
+          ekk(ilev) = ekd(ilev)*csbot(ilev)
        end do
+       ekk(pver) = 0.0_r8
 
-       do k = top_lev, pver
-          km1     = max0(k-1, top_lev)
-          ekkp(k) = zn(k)*ekk(k)*zs(k)
-          ekkm(k) = zn(k)*ekk(k-1)*zs(km1)
-          tinv    = ekkp(k) + ekkm(k)
-
-          ! rce-comment -- tinv is the sum of all first-order-loss-rates
-          !    for the layer.  for most layers, the activation loss rate
-          !    (for interstitial particles) is accounted for by the loss by
-          !    turb-transfer to the layer above.
-          !    k=pver is special, and the loss rate for activation within
-          !    the layer must be added to tinv.  if not, the time step
-          !    can be too big, and explmix can produce negative values.
-          !    the negative values are reset to zero, resulting in an
-          !    artificial source.
-          if (k == pver) tinv = tinv + taumix_internal_pver_inv
-
-          if (tinv .gt. 1.e-6_r8) then
+       do ilev = top_lev, pver
+          km1 = max0(ilev-1, top_lev)
+          ekkp(ilev) = zn(ilev)*ekk(ilev)*zs(ilev)
+          ekkm(ilev) = zn(ilev)*ekk(ilev-1)*zs(km1)
+          tinv    = ekkp(ilev) + ekkm(ilev)
+          ! tinv is the sum of all first-order-loss-rates
+          ! for the layer.  for most layers, the activation loss rate
+          ! (for interstitial particles) is accounted for by the loss by
+          ! turb-transfer to the layer above.
+          ! ilev=pver is special, and the loss rate for activation within
+          ! the layer must be added to tinv.  if not, the time step
+          ! can be too big, and explmix can produce negative values.
+          ! the negative values are reset to zero, resulting in an
+          ! artificial source.
+          if (ilev == pver) then
+             tinv = tinv + taumix_internal_pver_inv
+          end if
+          if (tinv > 1.e-6_r8) then
              dtt   = 1._r8/tinv
              dtmin = min(dtmin, dtt)
           end if
@@ -1142,31 +1199,31 @@ contains
        count_submix(nsubmix_bnd) = count_submix(nsubmix_bnd) + 1
        dtmix = dtmicro/nsubmix
 
-       do k = top_lev, pver
-          kp1 = min(k+1, pver)
-          km1 = max(k-1, top_lev)
+       do ilev = top_lev, pver
+          kp1 = min(ilev+1, pver)
+          km1 = max(ilev-1, top_lev)
           ! maximum overlap assumption
-          if (cldn(i,kp1) > 1.e-10_r8) then
-             overlapp(k) = min(cldn(i,k)/cldn(i,kp1), 1._r8)
+          if (cldn(icol,kp1) > 1.e-10_r8) then
+             overlapp(ilev) = min(cldn(icol,ilev)/cldn(icol,kp1), 1._r8)
           else
-             overlapp(k) = 1._r8
+             overlapp(ilev) = 1._r8
           end if
-          if (cldn(i,km1) > 1.e-10_r8) then
-             overlapm(k) = min(cldn(i,k)/cldn(i,km1), 1._r8)
+          if (cldn(icol,km1) > 1.e-10_r8) then
+             overlapm(ilev) = min(cldn(icol,ilev)/cldn(icol,km1), 1._r8)
           else
-             overlapm(k) = 1._r8
+             overlapm(ilev) = 1._r8
           end if
        end do
 
-       !    the activation source(k) = mact(k,m)*raercol(kp1,lmass)
+       !    the activation source(ilev) = mact(ilev,imode)*raercol(kp1,lmass)
        !       should not exceed the rate of transfer of unactivated particles
-       !       from kp1 to k which = ekkp(k)*raercol(kp1,lmass)
+       !       from kp1 to ilev which = ekkp(ilev)*raercol(kp1,lmass)
        !    however it might if things are not "just right" in subr activate
        !    the following is a safety measure to avoid negatives in explmix
-       do k = top_lev, pver-1
-          do m = 1, ntot_amode
-             nact(k,m) = min( nact(k,m), ekkp(k) )
-             mact(k,m) = min( mact(k,m), ekkp(k) )
+       do imode = 1, ntot_amode
+          do ilev = top_lev, pver-1
+             nact(ilev,imode) = min( nact(ilev,imode), ekkp(ilev) )
+             mact(ilev,imode) = min( mact(ilev,imode), ekkp(ilev) )
           end do
        end do
 
@@ -1177,66 +1234,67 @@ contains
        raercol_cw_tracer(:,:,:) = 0.0_r8
        mact_tracer(:,:) = 0.0_r8
        mfullact_tracer(:,:) = 0.0_r8
-       do m=1,ntot_amode
-          do l=1,nspec_amode(m)
-             lptr = getTracerIndex(m,l,.FALSE.)  !which tracer are we talking about
-             lptr2  = inverseAerosolTracerList(lptr)    !which index is this in the list of aerosol-tracers
-             mm = mam_idx(m,l)
-             raercol_tracer(:,lptr2,nnew) = raercol_tracer(:,lptr2,nnew) &
-                  + raercol(:,mm,nnew)
+       do imode=1,ntot_amode
+          do ispec=1,nspec_amode(imode)
+             itrac = tracer_index(imode,ispec)  !which tracer are we talking about
+             itrac2  = inverseAerosolTracerList(itrac)    !which index is this in the list of aerosol-tracers
+             mm = mam_idx(imode,ispec)
+             do ilev = top_lev,pver
+                raercol_tracer(ilev,itrac2,nnew) = raercol_tracer(ilev,itrac2,nnew) + raercol(ilev,mm,nnew)
+                raercol_cw_tracer(ilev,itrac2,nnew) = raercol_cw_tracer(ilev,itrac2,nnew) + raercol_cw(ilev,mm,nnew)
+                mact_tracer(ilev,itrac2) = mact_tracer(ilev,itrac2) + mact(ilev,imode)*raercol(ilev,mm,nnew)
+                mfullact_tracer(ilev,itrac2) = mfullact_tracer(ilev,itrac2) + raercol(ilev,mm,nnew)
+             end do
+          end do !ispec
+       end do    !imode
 
-             raercol_cw_tracer(:,lptr2,nnew) = raercol_cw_tracer(:,lptr2,nnew)&
-                  + raercol_cw(:,mm,nnew)
-
-             mact_tracer(:,lptr2) = mact_tracer(:,lptr2) + mact(:,m)*raercol(:,mm,nnew)
-             mfullact_tracer(:,lptr2) = mfullact_tracer(:,lptr2) + raercol(:,mm,nnew)
-
-          end do !l
-       end do    !m
-
-       do lptr2=1,n_aerosol_tracers
-          mact_tracer(:,lptr2) = mact_tracer(:,lptr2) /(mfullact_tracer(:,lptr2) + smallNumber)
+       do itrac=1,n_aerosol_tracers
+          mact_tracer(:,itrac) = mact_tracer(:,itrac) /(mfullact_tracer(:,itrac) + smallNumber)
        end do
+       call t_stopf('ndrop_newdroplets')
 
        ! old_cloud_nsubmix_loop
-       do n = 1, nsubmix
+       call t_startf('ndrop_oldcloud_nsubmix')
+       do isubmix = 1, nsubmix
           qncld(:) = qcld(:)
+
           ! switch nsav, nnew so that nsav is the updated aerosol
           ntemp   = nsav
           nsav    = nnew
           nnew    = ntemp
-          srcn(:) = 0.0_r8
 
           !First mix cloud droplet number concentration
-          do m = 1, ntot_amode
-             mm = mam_idx(m,0)
-
-             ! update droplet source
-             ! rce-comment- activation source in layer k involves particles from k+1
-             !	       srcn(:)=srcn(:)+nact(:,m)*(raercol(:,mm,nsav))
-             srcn(top_lev:pver-1) = srcn(top_lev:pver-1) + nact(top_lev:pver-1,m)*(raercol(top_lev+1:pver,mm,nsav))
-
-             ! rce-comment- new formulation for k=pver
-             !              srcn(  pver  )=srcn(  pver  )+nact(  pver  ,m)*(raercol(  pver,mm,nsav))
-             tmpa = raercol(pver,mm,nsav)*nact(pver,m) &
-                  + raercol_cw(pver,mm,nsav)*(nact(pver,m) - taumix_internal_pver_inv)
-             srcn(pver) = srcn(pver) + max(0.0_r8,tmpa)
+          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
+          srcn(:) = 0.0_r8
+          do imode = 1, ntot_amode
+             mm = mam_idx(imode,0)
+             do ilev = top_lev,pver
+                if (ilev < pver) then
+                   ! update droplet source - activation source in layer ilev involves particles from ilev+1
+                   srcn(ilev) = srcn(ilev) + nact(ilev,imode)*(raercol(ilev+1,mm,nsav))
+                else
+                   ! new formulation for ilev=pver
+                   tmpa = raercol(ilev,mm,nsav)*nact(ilev,imode) &
+                        + raercol_cw(ilev,mm,nsav)*(nact(ilev,imode)-taumix_internal_pver_inv)
+                   srcn(ilev) = srcn(ilev) + max(0.0_r8,tmpa)
+                end if
+             end do
           end do
+          call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDropNumConc')
 
           !mixing of cloud droplets
-          call explmix_oslo(qcld, srcn, ekkp, ekkm, overlapp,  &
-               overlapm, qncld, zero, zero, pver, dtmix, .false.)
+          call t_startf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
+          call explmix_oslo(qcld, srcn, ekkp, ekkm, overlapp, overlapm, qncld, zero, zero, pver, dtmix, .false.)
 
-          !Mix number concentrations consistently!!
-          do m = 1, ntot_amode
-             mm = mam_idx(m,0)
-             ! rce-comment -   activation source in layer k involves particles from k+1
-             !	              source(:)= nact(:,m)*(raercol(:,mm,nsav))
-             source(top_lev:pver-1) = nact(top_lev:pver-1,m)*(raercol(top_lev+1:pver,mm,nsav))
-             ! rce-comment - new formulation for k=pver
-             !               source(  pver  )= nact(  pver,  m)*(raercol(  pver,mm,nsav))
-             tmpa = raercol(pver,mm,nsav)*nact(pver,m) &
-                  + raercol_cw(pver,mm,nsav)*(nact(pver,m) - taumix_internal_pver_inv)
+          ! Mix number concentrations consistently!!
+          do imode = 1, ntot_amode
+             mm = mam_idx(imode,0)
+             ! activation source in layer ilev involves particles from ilev+1
+             source(top_lev:pver-1) = nact(top_lev:pver-1,imode)*(raercol(top_lev+1:pver,mm,nsav))
+
+             ! new formulation for ilev=pver
+             tmpa = raercol(pver,mm,nsav)*nact(pver,imode) &
+                  + raercol_cw(pver,mm,nsav)*(nact(pver,imode) - taumix_internal_pver_inv)
              source(pver) = max(0.0_r8, tmpa)
              flxconv = 0._r8
 
@@ -1247,42 +1305,45 @@ contains
                   overlapm, raercol(:,mm,nsav), zero, flxconv, pver, dtmix, .true., raercol_cw(:,mm,nsav))
           end do
 
-          do lptr2=1,n_aerosol_tracers
-             source(top_lev:pver-1) = mact_tracer(top_lev:pver-1,lptr2) &
-                  *(raercol_tracer(top_lev+1:pver,lptr2,nsav))
+          do itrac=1,n_aerosol_tracers
+             source(top_lev:pver-1) = mact_tracer(top_lev:pver-1,itrac) &
+                                     *(raercol_tracer(top_lev+1:pver,itrac,nsav))
 
-             tmpa = raercol_tracer(pver,lptr2,nsav)*mact_tracer(pver,lptr2) &
-                  + raercol_cw_tracer(pver,lptr2,nsav)*(mact_tracer(pver,lptr2) - taumix_internal_pver_inv)
+             tmpa = raercol_tracer(pver,itrac,nsav)*mact_tracer(pver,itrac) &
+                  + raercol_cw_tracer(pver,itrac,nsav)*(mact_tracer(pver,itrac) - taumix_internal_pver_inv)
 
              source(pver) = max(0.0_r8, tmpa)
              flxconv = 0.0_r8
 
-             call explmix_oslo(raercol_cw_tracer(:,lptr2,nnew), source, ekkp, ekkm, overlapp, &
-                  overlapm, raercol_cw_tracer(:,lptr2,nsav), zero, zero, pver,  dtmix, .false.)
+             call explmix_oslo(raercol_cw_tracer(:,itrac,nnew), source, ekkp, ekkm, overlapp, &
+                  overlapm, raercol_cw_tracer(:,itrac,nsav), zero, zero, pver,  dtmix, .false.)
 
-             call explmix_oslo(raercol_tracer(:,lptr2,nnew), source, ekkp, ekkm, overlapp,  &
-                  overlapm, raercol_tracer(:,lptr2,nsav), zero, flxconv, pver, dtmix, .true., &
-                  raercol_cw_tracer(:,lptr2,nsav))
-
+             call explmix_oslo(raercol_tracer(:,itrac,nnew), source, ekkp, ekkm, overlapp,  &
+                  overlapm, raercol_tracer(:,itrac,nsav), zero, flxconv, pver, dtmix, .true., &
+                  raercol_cw_tracer(:,itrac,nsav))
           end do !Number of aerosol tracers
-       end do ! old_cloud_nsubmix_loop
+          call t_stopf('ndrop_oldcloud_nsubmix_mix_CloudDrop')
 
-       !Set back to the original framework
-       !Could probably continue in tracer-space from here
-       !but return back to mixture for easier use of std. NCAR code
+       end do ! old_cloud_nsubmix_loop
+       call t_stopf('ndrop_oldcloud_nsubmix')
+
+       call t_startf('ndrop_rest')
+       ! Set back to the original framework
+       ! Could probably continue in tracer-space from here
+       ! but return back to mixture for easier use of std. NCAR code
        tendencyCounted(:)=.FALSE.
-       do m = 1, ntot_amode
-          do l=1,nspec_amode(m)
-             mm=mam_idx(m,l)
-             lptr = getTracerIndex(m,l,.FALSE.)
-             lptr2 = inverseAerosolTracerList(lptr)
+       do imode = 1, ntot_amode
+          do ispec=1,nspec_amode(imode)
+             mm=mam_idx(imode,ispec)
+             itrac = tracer_index(imode,ispec)
+             itrac2 = inverseAerosolTracerList(itrac)
              !All the tracer-space contains sum of all
              !modes ==> put in first available component
              !and zero in others.
-             if(.not.tendencyCounted(lptr))then
-                raercol(:,mm,nnew) = raercol_tracer(:,lptr2,nnew)
-                raercol_cw(:,mm,nnew) = raercol_cw_tracer(:,lptr2,nnew)
-                tendencyCounted(lptr) = .TRUE.
+             if(.not.tendencyCounted(itrac))then
+                raercol(:,mm,nnew) = raercol_tracer(:,itrac2,nnew)
+                raercol_cw(:,mm,nnew) = raercol_cw_tracer(:,itrac2,nnew)
+                tendencyCounted(itrac) = .TRUE.
              else
                 raercol(:,mm,nnew) = 0.0_r8
                 raercol_cw(:,mm,nnew) = 0.0_r8
@@ -1291,115 +1352,110 @@ contains
        end do
 
        ! evaporate particles again if no cloud
-
-       do k = top_lev, pver
-          if (cldn(i,k) == 0._r8) then
+       do ilev = top_lev, pver
+          if (cldn(icol,ilev) == 0._r8) then
              ! no ice or liquid cloud
-             qcld(k)=0._r8
+             qcld(ilev)=0._r8
 
              ! convert activated aerosol to interstitial in decaying cloud
-             do m = 1, ntot_amode
-                mm = mam_idx(m,0)
-                raercol(k,mm,nnew)    = raercol(k,mm,nnew) + raercol_cw(k,mm,nnew)
-                raercol_cw(k,mm,nnew) = 0._r8
+             do imode = 1, ntot_amode
+                mm = mam_idx(imode,0)
+                raercol(ilev,mm,nnew)    = raercol(ilev,mm,nnew) + raercol_cw(ilev,mm,nnew)
+                raercol_cw(ilev,mm,nnew) = 0._r8
 
-                do l = 1, nspec_amode(m)
-                   mm = mam_idx(m,l)
-                   raercol(k,mm,nnew)    = raercol(k,mm,nnew) + raercol_cw(k,mm,nnew)
-                   raercol_cw(k,mm,nnew) = 0._r8
+                do ispec = 1, nspec_amode(imode)
+                   mm = mam_idx(imode,ispec)
+                   raercol(ilev,mm,nnew)    = raercol(ilev,mm,nnew) + raercol_cw(ilev,mm,nnew)
+                   raercol_cw(ilev,mm,nnew) = 0._r8
                 end do
              end do
           end if
        end do
 
        ! droplet number
-       ndropcol(i) = 0._r8
+       ndropcol(icol) = 0._r8
 
        !Initialize tendnd to zero in all layers since values are set in only top_lev,pver
        !Without this the layers above top_lev would be un-initialized
-       tendnd(i,:) = 0.0_r8
+       tendnd(icol,:) = 0.0_r8
 
-       do k = top_lev, pver
-          ndropmix(i,k) = (qcld(k) - ncldwtr(i,k))*dtinv - nsource(i,k)
-          tendnd(i,k)   = (max(qcld(k), 1.e-6_r8) - ncldwtr(i,k))*dtinv
-          ndropcol(i)   = ndropcol(i) + ncldwtr(i,k)*pdel(i,k)
+       do ilev = top_lev, pver
+          ndropmix(icol,ilev) = (qcld(ilev) - ncldwtr(icol,ilev))*dtinv - nsource(icol,ilev)
+          tendnd(icol,ilev) = (max(qcld(ilev), 1.e-6_r8) - ncldwtr(icol,ilev))*dtinv
+          ndropcol(icol) = ndropcol(icol) + ncldwtr(icol,ilev)*pdel(icol,ilev)
        end do
-       ndropcol(i) = ndropcol(i)/gravit
+       ndropcol(icol) = ndropcol(icol)/gravit
 
-       if (prog_modal_aero) then
+       raertend = 0._r8
+       qqcwtend = 0._r8
 
-          raertend = 0._r8
-          qqcwtend = 0._r8
+       coltend_cw(icol,:)=0.0_r8
+       coltend(icol,:) = 0.0_r8
 
-          coltend_cw(i,:)=0.0_r8
-          coltend(i,:) = 0.0_r8
+       !Need to initialize first because process modes arrive several times
+       tendencyCounted(:) = .FALSE.
+       do imode=1,ntot_amode
+         do ispec = 1,nspec_amode(imode)
+           itrac = tracer_index(imode,ispec)
+           mm = mam_idx(imode,ispec)
 
-          !Need to initialize first because process modes arrive several times
-          tendencyCounted(:) = .FALSE.
-          do m=1,ntot_amode
-             do l = 1,getNumberOfTracersInMode(m)
-                lptr = getTracerIndex(m,l,.false.)
-                mm = mam_idx(m,l)
+           !column tendencies for output
+           if(.NOT. tendencyCounted(itrac))then
+             coltend_cw(icol,itrac) = coltend_cw(icol,itrac) &
+                  + sum( pdel(icol,top_lev:pver)*(raercol_cw(top_lev:pver,mm,nnew) & !New, splitted,
+                  - qqcw(mm)%fld(icol,top_lev:pver) ) )/gravit*dtinv      !Old, total
+             tendencyCounted(itrac) = .TRUE.
+           else  !Already subtracted total old value, just add new
+             coltend_cw(icol,itrac) = coltend_cw(icol,itrac)  &
+                  + sum(pdel(icol,top_lev:pver)*raercol_cw(top_lev:pver,mm,nnew))/gravit*dtinv !total already subtracted
+           end if
 
-                !column tendencies for output
-                if(.NOT. tendencyCounted(lptr))then
-                   coltend_cw(i,lptr) = coltend_cw(i,lptr) &
-                        + sum( pdel(i,top_lev:pver)*(raercol_cw(top_lev:pver,mm,nnew) & !New, splitted,
-                        - qqcw(mm)%fld(i,top_lev:pver) ) )/gravit*dtinv      !Old, total
-                   tendencyCounted(lptr) = .TRUE.
-                else  !Already subtracted total old value, just add new
-                   coltend_cw(i,lptr) = coltend_cw(i,lptr)  &
-                        + sum(pdel(i,top_lev:pver)*raercol_cw(top_lev:pver,mm,nnew))/gravit*dtinv !total already subtracted
-                end if
+           ptend%q(icol,:,itrac) = 0.0_r8  !Initialize tendencies
+           qqcw(mm)%fld(icol,:) = 0.0_r8  !Throw out old concentrations before summing new ones
+         end do  ! Tracers
+       end do     ! Modes
 
-                ptend%q(i,:,lptr) = 0.0_r8  !Initialize tendencies
-                qqcw(mm)%fld(i,:) = 0.0_r8  !Throw out old concentrations before summing new ones
-             end do  ! Tracers
-          end do     ! Modes
+       !First, sum up all the tracer mass concentrations
+       do imode = 1, ntot_amode
+         do ispec = 1, nspec_amode(imode)
+           mm   = mam_idx(imode,ispec)                !tracer indices for aerosol mass mixing ratios in raer-arrays
+           itrac = tracer_index(imode,ispec)           !index in q-array (1-pcnst)
 
-          !First, sum up all the tracer mass concentrations
-          do m = 1, ntot_amode
-             do l = 1, nspec_amode(m)
-                mm   = mam_idx(m,l)                !tracer indices for aerosol mass mixing ratios in raer-arrays
-                lptr = getTracerIndex(m,l,.false.) !index in q-array (1-pcnst)
+           !This is a bit tricky since in our scheme the tracers can arrive several times
+           !the same tracer can exist in several modes, e.g. condensate!!
+           !Here we sum this into "qqcw" and "ptend" so that they contain TOTAL of those tracers
 
-                !This is a bit tricky since in our scheme the tracers can arrive several times
-                !the same tracer can exist in several modes, e.g. condensate!!
-                !Here we sum this into "qqcw" and "ptend" so that they contain TOTAL of those tracers
+           !raercol and raercol_cw do not have totals, they have process-tracers splitted onto modes
 
-                !raercol and raercol_cw do not have totals, they have process-tracers splitted onto modes
+           !Tendency at this point is the sum (original value subtracted below)
+           ptend%q(icol,top_lev:pver,itrac) = ptend%q(icol,top_lev:pver,itrac) + raercol(top_lev:pver,mm,nnew)
+           !for cloud water concentrations, we don't get tendency , only new concentration
+           qqcw(mm)%fld(icol,top_lev:pver) = qqcw(mm)%fld(icol,top_lev:pver) + raercol_cw(top_lev:pver,mm,nnew)
 
-                !Tendency at this point is the sum (original value subtracted below)
-                ptend%q(i,top_lev:pver,lptr)   =    ptend%q(i,top_lev:pver,lptr) + raercol(top_lev:pver,mm,nnew)
-                !for cloud water concentrations, we don't get tendency , only new concentration
-                qqcw(mm)%fld(i,top_lev:pver)   =    qqcw(mm)%fld(i,top_lev:pver) + raercol_cw(top_lev:pver,mm,nnew)
+         end do
+       end do
 
-             end do
-          end do
+       !Need this check due to some tracers (e.g. condensate) several times
+       tendencyCounted(:) = .FALSE.
 
-          !Need this check due to some tracers (e.g. condensate) several times
-          tendencyCounted(:) = .FALSE.
+       ! Recalculating cloud-borne aerosol number mixing ratios
+       do imode=1,ntot_amode
+         !Now that all new aerosol masses are summed up, we subtract the original concentrations to obtain the tendencies
+         do ispec= 1,nspec_amode(imode)
+           mm = mam_idx(imode,ispec)
+           itrac = tracer_index(imode,ispec)
+           if(.NOT. tendencyCounted(itrac)) then
+             ptend%q(icol,top_lev:pver,itrac) = (ptend%q(icol,top_lev:pver,itrac) - raer(mm)%fld(icol,top_lev:pver))*dtinv
+             coltend(icol,itrac) = sum(pdel(icol,top_lev:pver)*ptend%q(icol,top_lev:pver,itrac))/gravit !Save column tendency
+             tendencyCounted(itrac) = .TRUE.
+           endif
+         end do !species
+       end do !modes
+       call t_stopf('ndrop_rest')
 
-          ! Recalculating cloud-borne aerosol number mixing ratios
-          do m=1,ntot_amode
+    end do  ! overall_main_icol_loop
 
-             !Now that all new aerosol masses are summed up, we subtract the original concentrations to obtain the tendencies
-             do l= 1,nspec_amode(m)
-                mm = mam_idx(m,l)
-                lptr = getTracerIndex(m,l,.false.)
-                if(.NOT. tendencyCounted(lptr)) then
-                   ptend%q(i,top_lev:pver,lptr) = (ptend%q(i,top_lev:pver,lptr) - raer(mm)%fld(i,top_lev:pver))*dtinv
-                   coltend(i,lptr) = sum(pdel(i,top_lev:pver)*ptend%q(i,top_lev:pver,lptr))/gravit !Save column tendency
-                   tendencyCounted(lptr) = .TRUE.
-                endif
-             end do !species
-          end do    !modes
-
-       end if  !prog_modal_aero
-
-    end do  ! overall_main_i_loop
-
-    ! end of main loop over i/longitude ....................................
+    ! end of main loop over icol/longitude ....................................
 
     call outfld('NDROPCOL', ndropcol(:ncol),   ncol, lchnk)
     call outfld('NDROPSRC', nsource(:ncol,:),  ncol, lchnk)
@@ -1409,20 +1465,20 @@ contains
     if (history_aerosol) then
        call ccncalc_oslo(state, pbuf, cs, hasAerosol, numberConcentration, volumeConcentration, &
             hygroscopicity, lnSigma, ccn)
-       do l = 1, psat
-          call outfld(ccn_name(l), ccn(:,:,l), pcols, lchnk)
+       do isat = 1, psat
+          call outfld(ccn_name(isat), ccn(:,:,isat), pcols, lchnk)
        enddo
     end if
 
     tendencyCounted(:)=.FALSE.
-    do m = 1, ntot_amode
-       do l = 1, nspec_amode(m)
-          mm = mam_idx(m,l)
-          lptr = getTracerIndex(m,l,.false.)
-          if(.NOT. tendencyCounted(lptr))then
-             call outfld(fieldname(mm), coltend(:ncol,lptr), ncol, lchnk)
-             call outfld(fieldname_cw(mm), coltend_cw(:ncol,lptr), ncol, lchnk)
-             tendencyCounted(lptr)=.TRUE.
+    do imode = 1, ntot_amode
+       do ispec = 1, nspec_amode(imode)
+          mm = mam_idx(imode,ispec)
+          itrac = tracer_index(imode,ispec)
+          if(.NOT. tendencyCounted(itrac))then
+             call outfld(fieldname(mm), coltend(:ncol,itrac), ncol, lchnk)
+             call outfld(fieldname_cw(mm), coltend_cw(:ncol,itrac), ncol, lchnk)
+             tendencyCounted(itrac)=.TRUE.
           endif
        end do
     end do
@@ -1466,9 +1522,9 @@ contains
     real(r8), intent(in) :: qold(pver)     ! mixing ratio from previous time step
     real(r8), intent(in) :: src(pver)      ! source due to activation/nucleation (/s)
     real(r8), intent(in) :: ekkp(pver)     ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
-                                           ! below layer k  (k,k+1 interface)
+                                           ! below layer ilev  (ilev,ilev+1 interface)
     real(r8), intent(in) :: ekkm(pver)     ! zn*zs*density*diffusivity (kg/m3 m2/s) at interface
-                                           ! above layer k  (k,k+1 interface)
+                                           ! above layer ilev  (ilev,ilev+1 interface)
     real(r8), intent(in) :: overlapp(pver) ! cloud overlap below
     real(r8), intent(in) :: overlapm(pver) ! cloud overlap above
     real(r8), intent(in) :: surfrate       ! surface exchange rate (/s)
@@ -1479,33 +1535,35 @@ contains
                                                    ! *** this should only be present if the current species
                                                    ! is unactivated number/sfc/mass
 
-    integer k,kp1,km1
+    integer ilev,kp1,km1
 
     if ( is_unact ) then
        ! the qactold*(1-overlap) terms are resuspension of activated material
-       do k=top_lev,pver
-          kp1=min(k+1,pver)
-          km1=max(k-1,top_lev)
-          q(k) = qold(k) + dt*( - src(k) + ekkp(k)*(qold(kp1) - qold(k) +       &
-               qactold(kp1)*(1.0_r8-overlapp(k)))               &
-               + ekkm(k)*(qold(km1) - qold(k) +     &
-               qactold(km1)*(1.0_r8-overlapm(k))) )
-          q(k)=max(q(k),0._r8)
+       do ilev=top_lev,pver
+          kp1=min(ilev+1,pver)
+          km1=max(ilev-1,top_lev)
+          q(ilev) = qold(ilev) + dt*(-src(ilev) &
+               + ekkp(ilev)*(qold(kp1) - qold(ilev) + qactold(kp1)*(1.0_r8-overlapp(ilev))) &
+               + ekkm(ilev)*(qold(km1) - qold(ilev) + qactold(km1)*(1.0_r8-overlapm(ilev))) )
+          q(ilev) = max(q(ilev),0._r8)
        end do
 
        ! diffusion loss at base of lowest layer
-       q(pver)=q(pver)-surfrate*qold(pver)*dt+flxconv*dt
-       q(pver)=max(q(pver),0._r8)
+       q(pver) = q(pver) - surfrate*qold(pver)*dt + flxconv*dt
+       q(pver) = max(q(pver),0._r8)
     else
-       do k=top_lev,pver
-          kp1=min(k+1,pver)
-          km1=max(k-1,top_lev)
-          q(k) = qold(k) + dt*(src(k) + ekkp(k)*(overlapp(k)*qold(kp1)-qold(k)) +      &
-               ekkm(k)*(overlapm(k)*qold(km1)-qold(k)) )
-          q(k) = max(q(k),0._r8) ! force to non-negative if (q(k)<-1.e-30) then
+       do ilev=top_lev,pver
+          kp1=min(ilev+1,pver)
+          km1=max(ilev-1,top_lev)
+          q(ilev) = qold(ilev) + dt*(src(ilev) &
+               + ekkp(ilev)*(overlapp(ilev)*qold(kp1)-qold(ilev)) &
+               + ekkm(ilev)*(overlapm(ilev)*qold(km1)-qold(ilev)) )
+          q(ilev) = max(q(ilev),0._r8) ! force to non-negative if (q(ilev)<-1.e-30) then
        end do
-       q(pver)=q(pver)-surfrate*qold(pver)*dt+flxconv*dt ! diffusion loss at base of lowest layer
-       q(pver)=max(q(pver),0._r8) ! force to non-negative if(q(pver)<-1.e-30)then
+
+       ! diffusion loss at base of lowest layer
+       q(pver) = q(pver) - surfrate*qold(pver)*dt + flxconv*dt ! diffusion loss at base of lowest layer
+       q(pver) = max(q(pver),0._r8) ! force to non-negative if(q(pver)<-1.e-30)then
     end if
 
   end subroutine explmix_oslo
@@ -1545,66 +1603,64 @@ contains
     real(r8) , intent(out) :: fluxm(:)     ! flux of activated aerosol mass fraction into cloud (cm/s)
     real(r8) , intent(out) :: flux_fullact ! flux of activated aerosol fraction assuming 100% activation (cm/s)
 
-    ! used for consistency check -- this should match (ekd(k)*zs(k))
+    ! used for consistency check -- this should match (ekd(ilev)*zs(ilev))
     ! also, fluxm/flux_fullact gives fraction of aerosol mass flux!that is activated
 
     ! local
     integer, parameter:: nx=200
-    integer iquasisect_option, isectional
-    real(r8) integ,integf
+    integer  :: iquasisect_option, isectional
+    real(r8) :: integ,integf
     real(r8), parameter :: p0 = 1013.25e2_r8    ! reference pressure (Pa)
-    real(r8) xmin(nmode),xmax(nmode) ! ln(r) at section interfaces
-    real(r8) volmin(nmode),volmax(nmode) ! volume at interfaces
-    real(r8) tmass ! total aerosol mass concentration (g/cm3)
-    real(r8) sign(nmode)    ! geometric standard deviation of size distribution
-    real(r8) rm ! number mode radius of aerosol at max supersat (cm)
-    real(r8) pres ! pressure (Pa)
-    real(r8) path ! mean free path (m)
-    real(r8) diff ! diffusivity (m2/s)
-    real(r8) conduct ! thermal conductivity (Joule/m/sec/deg)
-    real(r8) diff0,conduct0
-    real(r8) es ! saturation vapor pressure
-    real(r8) qs ! water vapor saturation mixing ratio
-    real(r8) dqsdt ! change in qs with temperature
-    real(r8) dqsdp ! change in qs with pressure
-    real(r8) g ! thermodynamic function (m2/s)
-    real(r8) zeta(nmode), eta(nmode)
-    real(r8) lnsmax ! ln(smax)
-    real(r8) alpha
-    real(r8) gamma
-    real(r8) beta
-    real(r8) sqrtg
+    real(r8) :: xmin(nmode),xmax(nmode) ! ln(r) at section interfaces
+    real(r8) :: volmin(nmode),volmax(nmode) ! volume at interfaces
+    real(r8) :: tmass ! total aerosol mass concentration (g/cm3)
+    real(r8) :: sign(nmode)    ! geometric standard deviation of size distribution
+    real(r8) :: rm ! number mode radius of aerosol at max supersat (cm)
+    real(r8) :: pres ! pressure (Pa)
+    real(r8) :: path ! mean free path (m)
+    real(r8) :: diff ! diffusivity (m2/s)
+    real(r8) :: conduct ! thermal conductivity (Joule/m/sec/deg)
+    real(r8) :: diff0,conduct0
+    real(r8) :: es ! saturation vapor pressure
+    real(r8) :: qs ! water vapor saturation mixing ratio
+    real(r8) :: dqsdt ! change in qs with temperature
+    real(r8) :: dqsdp ! change in qs with pressure
+    real(r8) :: g ! thermodynamic function (m2/s)
+    real(r8) :: zeta(nmode), eta(nmode)
+    real(r8) :: lnsmax ! ln(smax)
+    real(r8) :: alpha
+    real(r8) :: gamma
+    real(r8) :: beta
+    real(r8) :: sqrtg
     real(r8) :: amcube(nmode) ! cube of dry mode radius (m)
     real(r8) :: lnsm(nmode) ! ln(smcrit)
-    real(r8) smc(nmode) ! critical supersaturation for number mode radius
-    real(r8) sumflx_fullact
-    real(r8) sumflxn(nmode)
-    real(r8) sumflxm(nmode)
-    real(r8) sumfn(nmode)
-    real(r8) sumfm(nmode)
-    real(r8) fnold(nmode)   ! number fraction activated
-    real(r8) fmold(nmode)   ! mass fraction activated
-    real(r8) exp45logsig_var(nmode)  !variable std. dev (CAM-Oslo)
+    real(r8) :: smc(nmode) ! critical supersaturation for number mode radius
+    real(r8) :: sumflx_fullact
+    real(r8) :: sumflxn(nmode)
+    real(r8) :: sumflxm(nmode)
+    real(r8) :: sumfn(nmode)
+    real(r8) :: sumfm(nmode)
+    real(r8) :: fnold(nmode)   ! number fraction activated
+    real(r8) :: fmold(nmode)   ! mass fraction activated
+    real(r8) :: exp45logsig_var(nmode)  !variable std. dev (CAM-Oslo)
     real(r8), target :: f1_var(nmode), f2_var(nmode)
-    real(r8) wold,gold
-    real(r8) alogam
-    real(r8) rlo,rhi,xint1,xint2,xint3,xint4
-    real(r8) wmin,wmax,w,dw,dwmax,dwmin,wnuc,dwnew,wb
-    real(r8) dfmin,dfmax,fnew,fold,fnmin,fnbar,fsbar,fmbar
-    real(r8) alw,sqrtalw
-    real(r8) smax
-    real(r8) x,arg
-    real(r8) xmincoeff,xcut,volcut,surfcut
-    real(r8) z,z1,z2,wf1,wf2,zf1,zf2,gf1,gf2,gf
-    real(r8) etafactor1,etafactor2(nmode),etafactor2max
-    real(r8) grow
+    real(r8) :: wold,gold
+    real(r8) :: alogam
+    real(r8) :: rlo,rhi,xint1,xint2,xint3,xint4
+    real(r8) :: wmin,wmax,w,dw,dwmax,dwmin,wnuc,dwnew,wb
+    real(r8) :: dfmin,dfmax,fnew,fold,fnmin,fnbar,fsbar,fmbar
+    real(r8) :: alw,sqrtalw
+    real(r8) :: smax
+    real(r8) :: x,arg
+    real(r8) :: xmincoeff,xcut,volcut,surfcut
+    real(r8) :: z,z1,z2,wf1,wf2,zf1,zf2,gf1,gf2,gf
+    real(r8) :: etafactor1,etafactor2(nmode),etafactor2max
+    real(r8) :: grow
+    integer  :: imode,n
     character(len=*), parameter :: subname='activate_modal'
-    integer m,n
     ! numerical integration parameters
     real(r8), parameter :: eps=0.3_r8,fmax=0.99_r8,sds=3._r8
-
     real(r8), parameter :: namin=1.e6_r8   ! minimum aerosol number concentration (/m3)
-
     integer ndist(nx)  ! accumulates frequency distribution of integration bins required
     data ndist/nx*0/
     save ndist
@@ -1615,9 +1671,9 @@ contains
     fluxm(:)=0._r8
     flux_fullact=0._r8
 
-    if(nmode.eq.1.and.na(1).lt.1.e-20_r8)return
+    if(nmode == 1.and. na(1) < 1.e-20_r8)return
 
-    if(sigw.le.1.e-5_r8.and.wbar.le.0._r8)return
+    if(sigw <= 1.e-5_r8 .and. wbar <= 0._r8)return
 
     pres = rair*rhoair*tair
     diff0 = 0.211e-4_r8*(p0/pres)*(tair/t0)**1.94_r8
@@ -1634,33 +1690,33 @@ contains
     sqrtg = sqrt(grow)
     beta  = 2._r8*pi*rhoh2o*grow*gamma
 
-    do m=1,nmode
+    do imode=1,nmode
 
-       if(volume(m).gt.1.e-39_r8.and.na(m).gt.1.e-39_r8)then
+       if(volume(imode) > 1.e-39_r8 .and. na(imode) > 1.e-39_r8) then
           ! number mode radius (m)
-          exp45logsig_var(m) = exp(4.5_r8*lnsigman(m)*lnsigman(m))
-          amcube(m) = (3._r8*volume(m)/(4._r8*pi*exp45logsig_var(m)*na(m)))  ! only if variable size dist
-          f1_var(m) = 0.5_r8*exp(2.5_r8*lnsigman(m)*lnsigman(m))
-          f2_var(m) = 1._r8 + 0.25_r8*lnsigman(m)
+          exp45logsig_var(imode) = exp(4.5_r8*lnsigman(imode)*lnsigman(imode))
+          amcube(imode) = (3._r8*volume(imode)/(4._r8*pi*exp45logsig_var(imode)*na(imode)))  ! only if variable size dist
+          f1_var(imode) = 0.5_r8*exp(2.5_r8*lnsigman(imode)*lnsigman(imode))
+          f2_var(imode) = 1._r8 + 0.25_r8*lnsigman(imode)
 
           ! growth coefficent Abdul-Razzak & Ghan 1998 eqn 16
           ! should depend on mean radius of mode to account for gas kinetic effects
           ! see Fountoukis and Nenes, JGR2005 and Meskhidze et al., JGR2006
           ! for approriate size to use for effective diffusivity.
-          etafactor2(m) = 1._r8/(na(m)*beta*sqrtg)
-          if(hygro(m).gt.1.e-10_r8)then
-             smc(m) = 2._r8*aten*sqrt(aten/(27._r8*hygro(m)*amcube(m))) ! only if variable size dist
+          etafactor2(imode) = 1._r8/(na(imode)*beta*sqrtg)
+          if(hygro(imode) > 1.e-10_r8)then
+             smc(imode) = 2._r8*aten*sqrt(aten/(27._r8*hygro(imode)*amcube(imode))) ! only if variable size dist
           else
-             smc(m) = 100._r8
+             smc(imode) = 100._r8
           endif
        else
-          smc(m) = 1._r8
-          etafactor2(m) = etafactor2max ! this should make eta big if na is very small.
+          smc(imode) = 1._r8
+          etafactor2(imode) = etafactor2max ! this should make eta big if na is very small.
        endif
-       lnsm(m) = log(smc(m)) ! only if variable size dist
+       lnsm(imode) = log(smc(imode)) ! only if variable size dist
     enddo
 
-    if(sigw.gt.1.e-5_r8)then ! spectrum of updrafts
+    if(sigw > 1.e-5_r8)then ! spectrum of updrafts
 
        wmax = min(wmaxf,wbar+sds*sigw)
        wmin = max(wminf,-wdiab)
@@ -1671,13 +1727,13 @@ contains
        dfmax = 0.2_r8
        dfmin = 0.1_r8
        if (wmax <= w) return
-       do m=1,nmode
-          sumflxn(m) = 0._r8
-          sumfn(m) = 0._r8
-          fnold(m) = 0._r8
-          sumflxm(m) = 0._r8
-          sumfm(m) = 0._r8
-          fmold(m) = 0._r8
+       do imode=1,nmode
+          sumflxn(imode) = 0._r8
+          sumfn(imode) = 0._r8
+          fnold(imode) = 0._r8
+          sumflxm(imode) = 0._r8
+          sumfm(imode) = 0._r8
+          fmold(imode) = 0._r8
        enddo
        sumflx_fullact = 0._r8
 
@@ -1693,9 +1749,9 @@ contains
           sqrtalw=sqrt(alw)
           etafactor1=alw*sqrtalw
 
-          do m=1,nmode
-             eta(m)=etafactor1*etafactor2(m)
-             zeta(m)=twothird*sqrtalw*aten/sqrtg
+          do imode=1,nmode
+             eta(imode)=etafactor1*etafactor2(imode)
+             zeta(imode)=twothird*sqrtalw*aten/sqrtg
           enddo
 
           call maxsat_oslo(zeta,eta,nmode,smc,smax,f1_var,f2_var)
@@ -1707,9 +1763,9 @@ contains
 
 
           dwnew = dw
-          if(fnew-fold.gt.dfmax.and.n.gt.1)then
+          if (fnew-fold > dfmax .and. n>1)then
              ! reduce updraft increment for greater accuracy in integration
-             if (dw .gt. 1.01_r8*dwmin) then
+             if (dw > 1.01_r8*dwmin) then
                 dw=0.7_r8*dw
                 dw=max(dw,dwmin)
                 w=wold+dw
@@ -1719,7 +1775,7 @@ contains
              endif
           endif
 
-          if(fnew-fold.lt.dfmin)then
+          if(fnew-fold<dfmin)then
              ! increase updraft increment to accelerate integration
              dwnew=min(1.5_r8*dw,dwmax)
           endif
@@ -1730,28 +1786,28 @@ contains
           fnmin=1._r8
           xmincoeff=alogaten-twothird*(lnsmax-alog2)-alog3
 
-          do m=1,nmode
+          do imode=1,nmode
               ! modal
-             x=twothird*(lnsm(m)-lnsmax)/(sq2*lnsigman(m))
-             fn(m)=0.5_r8*(1._r8-erf(x))
-             fnmin=min(fn(m),fnmin)
+             x=twothird*(lnsm(imode)-lnsmax)/(sq2*lnsigman(imode))
+             fn(imode)=0.5_r8*(1._r8-erf(x))
+             fnmin=min(fn(imode),fnmin)
              ! integration is second order accurate
              ! assumes linear variation of f*g with w
-             fnbar=(fn(m)*g+fnold(m)*gold)
-             arg=x-1.5_r8*sq2*lnsigman(m)
-             fm(m)=0.5_r8*(1._r8-erf(arg))
-             fmbar=(fm(m)*g+fmold(m)*gold)
+             fnbar=(fn(imode)*g+fnold(imode)*gold)
+             arg=x-1.5_r8*sq2*lnsigman(imode)
+             fm(imode)=0.5_r8*(1._r8-erf(arg))
+             fmbar=(fm(imode)*g+fmold(imode)*gold)
              wb=(w+wold)
-             if(w.gt.0._r8)then
-                sumflxn(m)=sumflxn(m)+sixth*(wb*fnbar           &
-                     +(fn(m)*g*w+fnold(m)*gold*wold))*dw
-                sumflxm(m)=sumflxm(m)+sixth*(wb*fmbar           &
-                     +(fm(m)*g*w+fmold(m)*gold*wold))*dw
+             if(w > 0._r8)then
+                sumflxn(imode)=sumflxn(imode)+sixth*(wb*fnbar           &
+                     +(fn(imode)*g*w+fnold(imode)*gold*wold))*dw
+                sumflxm(imode)=sumflxm(imode)+sixth*(wb*fmbar           &
+                     +(fm(imode)*g*w+fmold(imode)*gold*wold))*dw
              endif
-             sumfn(m)=sumfn(m)+0.5_r8*fnbar*dw
-             fnold(m)=fn(m)
-             sumfm(m)=sumfm(m)+0.5_r8*fmbar*dw
-             fmold(m)=fm(m)
+             sumfn(imode)=sumfn(imode)+0.5_r8*fnbar*dw
+             fnold(imode)=fn(imode)
+             sumfm(imode)=sumfm(imode)+0.5_r8*fmbar*dw
+             fmold(imode)=fm(imode)
           enddo
           ! same form as sumflxm but replace the fm with 1.0
           sumflx_fullact = sumflx_fullact &
@@ -1767,14 +1823,14 @@ contains
              write(iulog,*)'wmin=',wmin,' w=',w,' wmax=',wmax,' dw=',dw
              write(iulog,*)'wbar=',wbar,' sigw=',sigw,' wdiab=',wdiab
              write(iulog,*)'wnuc=',wnuc
-             write(iulog,*)'na=',(na(m),m=1,nmode)
-             write(iulog,*)'fn=',(fn(m),m=1,nmode)
+             write(iulog,*)'na=',(na(imode),imode=1,nmode)
+             write(iulog,*)'fn=',(fn(imode),imode=1,nmode)
              ! dump all subr parameters to allow testing with standalone code
              ! (build a driver that will read input and call activate)
              write(iulog,*)'wbar,sigw,wdiab,tair,rhoair,nmode='
              write(iulog,*) wbar,sigw,wdiab,tair,rhoair,nmode
              write(iulog,*)'na=',na
-             write(iulog,*)'volume=', (volume(m),m=1,nmode)
+             write(iulog,*)'volume=', (volume(imode),imode=1,nmode)
              write(iulog,*)'hydro='
              write(iulog,*) hygro
              call endrun(subname)
@@ -1783,7 +1839,7 @@ contains
        enddo
 
        ndist(n)=ndist(n)+1
-       if(w.lt.wmaxf)then
+       if(w<wmaxf)then
 
           ! contribution from all updrafts stronger than wmax
           ! assuming constant f (close to fmax)
@@ -1803,11 +1859,11 @@ contains
           gf=(gf1-gf2)
           integf=wbar*sigw*0.5_r8*sq2*sqpi*(erf(zf2)-erf(zf1))+sigw*sigw*gf
 
-          do m=1,nmode
-             sumflxn(m)=sumflxn(m)+integf*fn(m)
-             sumfn(m)=sumfn(m)+fn(m)*integ
-             sumflxm(m)=sumflxm(m)+integf*fm(m)
-             sumfm(m)=sumfm(m)+fm(m)*integ
+          do imode=1,nmode
+             sumflxn(imode)=sumflxn(imode)+integf*fn(imode)
+             sumfn(imode)=sumfn(imode)+fn(imode)*integ
+             sumflxm(imode)=sumflxm(imode)+integf*fm(imode)
+             sumfm(imode)=sumfm(imode)+fm(imode)*integ
           enddo
           ! same form as sumflxm but replace the fm with 1.0
           sumflx_fullact = sumflx_fullact + integf
@@ -1815,22 +1871,22 @@ contains
        endif
 
 
-       do m=1,nmode
-          fn(m)=sumfn(m)/(sq2*sqpi*sigw)
-          ! fn(m)=sumfn(m)/(sumg)
-          if(fn(m).gt.1.01_r8)then
-             write(iulog,*)'fn=',fn(m),' > 1 in activate'
-             write(iulog,*)'w,m,na,amcube=',w,m,na(m),amcube(m)
-             write(iulog,*)'integ,sumfn,sigw=',integ,sumfn(m),sigw
+       do imode=1,nmode
+          fn(imode)=sumfn(imode)/(sq2*sqpi*sigw)
+          ! fn(imode)=sumfn(imode)/(sumg)
+          if(fn(imode) > 1.01_r8)then
+             write(iulog,*)'fn=',fn(imode),' > 1 in activate'
+             write(iulog,*)'w,imode,na,amcube=',w,imode,na(imode),amcube(imode)
+             write(iulog,*)'integ,sumfn,sigw=',integ,sumfn(imode),sigw
              call endrun('activate')
           endif
-          fluxn(m)=sumflxn(m)/(sq2*sqpi*sigw)
-          fm(m)=sumfm(m)/(sq2*sqpi*sigw)
-          ! fm(m)=sumfm(m)/(sumg)
-          if(fm(m).gt.1.01_r8)then
-             write(iulog,*)'fm=',fm(m),' > 1 in activate'
+          fluxn(imode)=sumflxn(imode)/(sq2*sqpi*sigw)
+          fm(imode)=sumfm(imode)/(sq2*sqpi*sigw)
+          ! fm(imode)=sumfm(imode)/(sumg)
+          if(fm(imode) > 1.01_r8)then
+             write(iulog,*)'fm=',fm(imode),' > 1 in activate'
           endif
-          fluxm(m)=sumflxm(m)/(sq2*sqpi*sigw)
+          fluxm(imode)=sumflxm(imode)/(sq2*sqpi*sigw)
        enddo
        ! same form as fluxm
        flux_fullact = sumflx_fullact/(sq2*sqpi*sigw)
@@ -1840,31 +1896,31 @@ contains
        ! single updraft
        wnuc=wbar+wdiab
 
-       if(wnuc.gt.0._r8)then
+       if(wnuc > 0._r8)then
           w=wbar
           alw=alpha*wnuc
           sqrtalw=sqrt(alw)
           etafactor1=alw*sqrtalw
 
-          do m = 1,nmode
-             eta(m) = etafactor1*etafactor2(m)
-             zeta(m) = twothird*sqrtalw*aten/sqrtg
-             f1_var(m) = 0.5_r8*exp(2.5_r8*lnsigman(m)*lnsigman(m))
-             f2_var(m) = 1._r8 + 0.25_r8*lnsigman(m)
+          do imode = 1,nmode
+             eta(imode) = etafactor1*etafactor2(imode)
+             zeta(imode) = twothird*sqrtalw*aten/sqrtg
+             f1_var(imode) = 0.5_r8*exp(2.5_r8*lnsigman(imode)*lnsigman(imode))
+             f2_var(imode) = 1._r8 + 0.25_r8*lnsigman(imode)
           enddo
 
           call maxsat_oslo(zeta,eta,nmode,smc,smax,f1_var, f2_var)
 
           lnsmax=log(smax)
           xmincoeff=alogaten-twothird*(lnsmax-alog2)-alog3
-          do m = 1,nmode
-             x = twothird*(lnsm(m)-lnsmax)/(sq2*lnsigman(m))
-             fn(m) = 0.5_r8*(1._r8-erf(x))
-             arg = x-1.5_r8*sq2*lnsigman(m)
-             fm(m) = 0.5_r8*(1._r8-erf(arg))
-             if (wbar.gt.0._r8)then
-                fluxn(m) = fn(m)*w
-                fluxm(m) = fm(m)*w
+          do imode = 1,nmode
+             x = twothird*(lnsm(imode)-lnsmax)/(sq2*lnsigman(imode))
+             fn(imode) = 0.5_r8*(1._r8-erf(x))
+             arg = x-1.5_r8*sq2*lnsigman(imode)
+             fm(imode) = 0.5_r8*(1._r8-erf(arg))
+             if (wbar > 0._r8)then
+                fluxn(imode) = fn(imode)*w
+                fluxm(imode) = fm(imode)*w
              endif
           enddo
           flux_fullact = w
@@ -1891,15 +1947,15 @@ contains
     real(r8), intent(out) :: smax ! maximum supersaturation
 
     ! local variables
-    integer  :: m  ! mode index
+    integer  :: imode  ! mode index
     real(r8) :: sum, g1, g2, g1sqrt, g2sqrt
     real(r8), pointer :: f1_used(:), f2_used(:)
 
     f1_used => f1_in
     f2_used => f2_in
 
-    do m=1,nmode
-       if(zeta(m).gt.1.e5_r8*eta(m).or.smc(m)*smc(m).gt.1.e5_r8*eta(m))then
+    do imode=1,nmode
+       if(zeta(imode) > 1.e5_r8*eta(imode) .or. smc(imode)*smc(imode) > 1.e5_r8*eta(imode))then
           ! weak forcing. essentially none activated
           smax=1.e-20_r8
        else
@@ -1907,19 +1963,19 @@ contains
           exit
        endif
        ! No significant activation in any mode.  Do nothing.
-       if (m == nmode) return
+       if (imode == nmode) return
     enddo
 
     sum = 0.0_r8
-    do m = 1,nmode
-       if(eta(m).gt.1.e-20_r8)then
-          g1 = zeta(m)/eta(m)
+    do imode = 1,nmode
+       if(eta(imode) > 1.e-20_r8)then
+          g1 = zeta(imode)/eta(imode)
           g1sqrt = sqrt(g1)
           g1 = g1sqrt*g1
-          g2 = smc(m)/sqrt(eta(m)+3._r8*zeta(m))
+          g2 = smc(imode)/sqrt(eta(imode)+3._r8*zeta(imode))
           g2sqrt = sqrt(g2)
           g2 = g2sqrt*g2
-          sum = sum+(f1_used(m)*g1+f2_used(m)*g2)/(smc(m)*smc(m))
+          sum = sum+(f1_used(imode)*g1+f2_used(imode)*g2)/(smc(imode)*smc(imode))
        else
           sum = 1.e20_r8
        endif
@@ -1964,7 +2020,7 @@ contains
     real(r8) :: arg               ! factor in eqn 15 ARGII
     real(r8) :: argfactor         ! Coefficient in ARGI/ARGII
     real(r8) :: exp45logsig_var   ! mathematical constants
-    integer  :: lsat,m,i,k        ! mathematical constants
+    integer  :: lsat,imode,icol,ilev        ! mathematical constants
     real(r8) :: smcoefcoef,smcoef ! mathematical constants
     real(r8), pointer   :: tair(:,:)        ! air temperature (K)
     real(r8), parameter :: twothird=2.0_r8/3.0_r8
@@ -1986,38 +2042,38 @@ contains
 
     ccn(:,:,:) = 0._r8
 
-    do m=1,nmodes
-       do k=top_lev,pver
-          do i=1,ncol
-             if (hasAerosol(i,k,m)) then
+    do imode=1,nmodes
+       do ilev=top_lev,pver
+          do icol=1,ncol
+             if (hasAerosol(icol,ilev,imode)) then
 
                 !Curvature-parameter "A" in ARGI (eqn 5)
-                a = surften_coef/tair(i,k)
+                a = surften_coef/tair(icol,ilev)
 
                 !standard factor for transforming size distr, volume ==> number (google psd.pdf by zender)
-                exp45logsig_var = exp(4.5_r8*lnsigma(i,k,m)*lnsigma(i,k,m))
+                exp45logsig_var = exp(4.5_r8*lnsigma(icol,ilev,imode)*lnsigma(icol,ilev,imode))
 
                 ! Numbe rmedian radius (power of three)
                 ! By definition of lognormal distribution only if variable size dist
-                amcube =(3._r8*volumeConcentration(i,k,m) /(4._r8*pi*exp45logsig_var*numberConcentration(i,k,m)))
+                amcube =(3._r8*volumeConcentration(icol,ilev,imode) /(4._r8*pi*exp45logsig_var*numberConcentration(icol,ilev,imode)))
 
                 !This is part of eqn 9 in ARGII where A smcoefcoef is 2/3^(3/2)
                 smcoef = smcoefcoef * a * sqrt(a)
 
                 !This is finally solving eqn 9 (solve for critical supersat of mode)
-                sm = smcoef / sqrt(hygroscopicity(i,k,m)*amcube) ! critical supersaturation
+                sm = smcoef / sqrt(hygroscopicity(icol,ilev,imode)*amcube) ! critical supersaturation
 
                 !Solve eqn 13 in ARGII
                 do lsat = 1,psat
 
                    !eqn 15 in ARGII
-                   argfactor = twothird/(sq2*lnSigma(i,k,m))
+                   argfactor = twothird/(sq2*lnSigma(icol,ilev,imode))
 
                    !eqn 15 in ARGII
                    arg = argfactor*log(sm/super(lsat))
 
-                   !eqn 13 i ARGII
-                   ccn(i,k,lsat) = ccn(i,k,lsat) + numberConcentration(i,k,m)*0.5_r8*(1._r8-erf(arg))
+                   !eqn 13 icol ARGII
+                   ccn(icol,ilev,lsat) = ccn(icol,ilev,lsat) + numberConcentration(icol,ilev,imode)*0.5_r8*(1._r8-erf(arg))
 
                 end do
              end if

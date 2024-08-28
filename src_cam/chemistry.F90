@@ -795,7 +795,8 @@ end function chem_is_active
        call cnst_get_ind(solsym(m), n, abort=.false.)
 
        if ( n>0 ) then
-          if (has_emis(m) .or. aero_has_emis(solsym(m)) .or. ocean_emis_species(solsym(m)) .or. srf_emis_diag(n)) then
+          ! TODO: the following is commented out as a temporary fix to get SFDMS on the history file
+          !if (has_emis(m) .or. aero_has_emis(solsym(m)) .or. ocean_emis_species(solsym(m)) .or. srf_emis_diag(n)) then
              srf_emis_diag(n) = .true.
 
              if (sflxnam(n)(3:5) == 'num') then  ! name is in the form of "SF****"
@@ -815,7 +816,7 @@ end function chem_is_active
                 endif
              endif
 
-          endif
+          !endif
        endif
     end do
 
@@ -921,9 +922,10 @@ end function chem_is_active
        n = map2chm(m)
        if ( n /= h2o_ndx .and. n > 0 ) then
           cam_in%cflx(:ncol,m) = cam_in%cflx(:ncol,m) + sflx(:ncol,n)
-          if (srf_emis_diag(m)) then
+          ! TODO: the following is commented out as a temporary fix to get SFDMS on the history file
+          ! if (srf_emis_diag(m)) then
              call outfld( sflxnam(m), cam_in%cflx(:ncol,m), ncol,lchnk )
-          endif
+          ! endif
        endif
     enddo
 

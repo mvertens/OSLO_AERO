@@ -24,6 +24,7 @@ module oslo_aero_microp
   use cam_history,            only: addfld, add_default, outfld
   use cam_logfile,            only: iulog
   use cam_abortutils,         only: endrun
+  use perf_mod,               only: t_startf, t_stopf
   !
   use oslo_aero_ndrop,        only: ndrop_init_oslo, dropmixnuc_oslo
   use oslo_aero_conc,         only: oslo_aero_conc_calc
@@ -34,7 +35,6 @@ module oslo_aero_microp
   use oslo_aero_share,        only: nmodes_oslo => nmodes
   use oslo_aero_share,        only: MODE_IDX_DST_A2, MODE_IDX_DST_A3, MODE_IDX_SO4_AC, MODE_IDX_OMBC_INTMIX_COAT_AIT
   use oslo_aero_share,        only: lifeCycleNumberMedianRadius, l_dst_a2, l_dst_a3, l_bc_ai
-  use oslo_aero_share,        only: getNumberOfTracersInMode, getTracerIndex, getCloudTracerIndex
 
   implicit none
   private
@@ -90,18 +90,19 @@ contains
     real(r8) :: microp_aero_bulk_scale  = 2._r8    ! prescribed aerosol bulk sulfur scale factor
 
     ! NOTE: the following are not currently used - but are needed to have the namelist work in cam
-    real(r8) :: microp_aero_npccn_scale = unset_r8 ! prescribed aerosol bulk sulfur scale factor
-    real(r8) :: microp_aero_wsub_scale  = unset_r8 ! subgrid vertical velocity (liquid) scale factor
-    real(r8) :: microp_aero_wsubi_scale = unset_r8 ! subgrid vertical velocity (ice) scale factor
-    real(r8) :: microp_aero_wsub_min    = unset_r8 ! subgrid vertical velocity (liquid) minimum
-    real(r8) :: microp_aero_wsubi_min   = unset_r8 ! subgrid vertical velocity (ice) minimum
+    real(r8) :: microp_aero_npccn_scale = unset_r8  ! prescribed aerosol bulk sulfur scale factor
+    real(r8) :: microp_aero_wsub_scale = unset_r8   ! subgrid vertical velocity (liquid) scale factor
+    real(r8) :: microp_aero_wsubi_scale = unset_r8  ! subgrid vertical velocity (ice) scale factor
+    real(r8) :: microp_aero_wsub_min = unset_r8     ! subgrid vertical velocity (liquid) minimum (before scale factor)
+    real(r8) :: microp_aero_wsub_min_asf = unset_r8 ! subgrid vertical velocity (liquid) minimum (after scale factor)
+    real(r8) :: microp_aero_wsubi_min = unset_r8    ! subgrid vertical velocity (ice) minimum
 
     ! Local variables
     integer :: unitn, ierr
     character(len=*), parameter :: subname = 'microp_aero_readnl'
 
-    namelist /microp_aero_nl/ microp_aero_bulk_scale, microp_aero_npccn_scale, microp_aero_wsub_min, &
-                              microp_aero_wsubi_min, microp_aero_wsub_scale, microp_aero_wsubi_scale
+   namelist /microp_aero_nl/ microp_aero_bulk_scale, microp_aero_npccn_scale, microp_aero_wsub_min, &
+                             microp_aero_wsubi_min, microp_aero_wsub_scale, microp_aero_wsubi_scale, microp_aero_wsub_min_asf
     !-----------------------------------------------------------------------------
 
     if (masterproc) then
@@ -213,7 +214,7 @@ contains
 
     ! local workspace
     ! all units mks unless otherwise stated
-    integer :: i, k, m
+    integer :: icol, ilev, m
     integer :: itim_old
     type(physics_state) :: state1                             ! Local copy of state variable
     type(physics_ptend) :: ptend_loc
@@ -299,13 +300,15 @@ contains
 
     ! save copy of cloud borne aerosols for use in heterogeneous freezing
     if (use_hetfrz_classnuc) then
+       call t_startf('oslo_microp_hetfrz_save')
        call hetfrz_classnuc_oslo_save_cbaero(state, pbuf)
+       call t_stopf('oslo_microp_hetfrz_save')
     end if
 
     ! initialize time-varying parameters
-    do k = top_lev, pver
-       do i = 1, ncol
-          rho(i,k) = state1%pmid(i,k)/(rair*state1%t(i,k))
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          rho(icol,ilev) = state1%pmid(icol,ilev)/(rair*state1%t(icol,ilev))
        end do
     end do
 
@@ -332,29 +335,29 @@ contains
     wsub(:ncol,:top_lev-1)  = 0.20_r8
     wsubi(:ncol,:top_lev-1) = 0.001_r8
 
-    do k = top_lev, pver
-       do i = 1, ncol
+    do ilev = top_lev, pver
+       do icol = 1, ncol
 
           select case (trim(eddy_scheme))
           case ('diag_TKE', 'CLUBB_SGS')
-             wsub(i,k) = sqrt(0.5_r8*(tke(i,k) + tke(i,k+1))*(2._r8/3._r8))
-             wsub(i,k) = min(wsub(i,k),10._r8)
+             wsub(icol,ilev) = sqrt(0.5_r8*(tke(icol,ilev) + tke(icol,ilev+1))*(2._r8/3._r8))
+             wsub(icol,ilev) = min(wsub(icol,ilev),10._r8)
           case default
              ! get sub-grid vertical velocity from diff coef.
              ! following morrison et al. 2005, JAS
              ! assume mixing length of 30 m
-             dum = (kvh(i,k) + kvh(i,k+1))/2._r8/30._r8
+             dum = (kvh(icol,ilev) + kvh(icol,ilev+1))/2._r8/30._r8
              ! use maximum sub-grid vertical vel of 10 m/s
              dum = min(dum, 10._r8)
              ! set wsub to value at current vertical level
-             wsub(i,k)  = dum
+             wsub(icol,ilev)  = dum
           end select
 
-          wsubi(i,k) = max(0.001_r8, wsub(i,k))
+          wsubi(icol,ilev) = max(0.001_r8, wsub(icol,ilev))
           if (.not. use_preexisting_ice) then
-             wsubi(i,k) = min(wsubi(i,k), 0.2_r8)
+             wsubi(icol,ilev) = min(wsubi(icol,ilev), 0.2_r8)
           endif
-          wsub(i,k)  = max(0.20_r8, wsub(i,k))
+          wsub(icol,ilev)  = max(0.20_r8, wsub(icol,ilev))
 
        end do
     end do
@@ -365,40 +368,45 @@ contains
     if (trim(eddy_scheme) == 'CLUBB_SGS') deallocate(tke)
 
     ! Get size distributed interstitial aerosol
+    call t_startf('microp_aero_conc_calc')
     call oslo_aero_conc_calc(ncol, state%q, rho, CProcessModes, &
          f_c, f_bc, f_aq, f_so4_cond, f_soa, cam, f_acm, f_bcm, f_aqm, f_so4_condm, f_soam, &
          numberConcentration, volumeConcentration, hygroscopicity, lnsigma, hasAerosol, volumeCore, volumeCoat)
+    call t_stopf('microp_aero_conc_calc')
 
     ! -----------------
     ! ICE Nucleation
     ! -----------------
+    call t_startf('oslo_microp_ice_nucleation')
     call nucleate_ice_oslo_calc(state1, wsubi, pbuf, deltatin, ptend_loc, numberConcentration)
 
     call physics_ptend_sum(ptend_loc, ptend_all, ncol)
     call physics_update(state1, ptend_loc, deltatin)
 
     ! get liquid cloud fraction, check for minimum
-    do k = top_lev, pver
-       do i = 1, ncol
-          lcldm(i,k) = max(ast(i,k), mincld)
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          lcldm(icol,ilev) = max(ast(icol,ilev), mincld)
        end do
     end do
+    call t_stopf('oslo_microp_ice_nucleation')
 
     ! -----------------
     ! Droplet Activation
     ! -----------------
 
+    call t_startf('microp_droplet_activation')
     ! partition cloud fraction into liquid water part
     lcldn = 0._r8
     lcldo = 0._r8
     cldliqf = 0._r8
-    do k = top_lev, pver
-       do i = 1, ncol
-          qcld = state1%q(i,k,cldliq_idx) + state1%q(i,k,cldice_idx)
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          qcld = state1%q(icol,ilev,cldliq_idx) + state1%q(icol,ilev,cldice_idx)
           if (qcld > qsmall) then
-             lcldn(i,k)   = cldn(i,k)*state1%q(i,k,cldliq_idx)/qcld
-             lcldo(i,k)   = cldo(i,k)*state1%q(i,k,cldliq_idx)/qcld
-             cldliqf(i,k) = state1%q(i,k,cldliq_idx)/qcld
+             lcldn(icol,ilev)   = cldn(icol,ilev)*state1%q(icol,ilev,cldliq_idx)/qcld
+             lcldo(icol,ilev)   = cldo(icol,ilev)*state1%q(icol,ilev,cldliq_idx)/qcld
+             cldliqf(icol,ilev) = state1%q(icol,ilev,cldliq_idx)/qcld
           end if
        end do
     end do
@@ -443,27 +451,30 @@ contains
 
     ! Contact freezing  (-40<T<-3 C) (Young, 1974) with hooks into simulated dust
     ! estimate rndst and nanco for 4 dust bins here to pass to MG microphysics
-    do k = top_lev, pver
-       do i = 1, ncol
-          if (state1%t(i,k) < 269.15_r8) then
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          if (state1%t(icol,ilev) < 269.15_r8) then
              !fxm: I think model uses bins, not modes.. But to get it
              !approximately correct, use mode radius in first version
-             nacon(i,k,2) = numberConcentration(i,k,MODE_IDX_DST_A2)
-             nacon(i,k,3) = numberConcentration(i,k,MODE_IDX_DST_A3)
-             rndst(i,k,2) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A2)
-             rndst(i,k,3) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A3)
-             nacon(i,k,1) = 0.0_r8 !Set to zero to make sure
-             nacon(i,k,4) = 0.0_r8 !Set to zero to make sure
+             nacon(icol,ilev,2) = numberConcentration(icol,ilev,MODE_IDX_DST_A2)
+             nacon(icol,ilev,3) = numberConcentration(icol,ilev,MODE_IDX_DST_A3)
+             rndst(icol,ilev,2) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A2)
+             rndst(icol,ilev,3) = lifeCycleNumberMedianRadius(MODE_IDX_DST_A3)
+             nacon(icol,ilev,1) = 0.0_r8 !Set to zero to make sure
+             nacon(icol,ilev,4) = 0.0_r8 !Set to zero to make sure
           end if
        end do
     end do
+    call t_stopf('microp_droplet_activation')
 
     ! heterogeneous freezing
     if (use_hetfrz_classnuc) then
+       call t_startf('microp_hetfrz_calc')
        call hetfrz_classnuc_oslo_calc(state1, deltatin, factnum, pbuf, &
             numberConcentration, volumeConcentration, &
             f_acm, f_bcm, f_aqm, f_so4_condm, f_soam, &
             hygroscopicity, lnsigma, cam, volumeCore, volumeCoat)
+       call t_stopf('microp_hetfrz_calc')
     end if
 
   end subroutine oslo_aero_microp_run

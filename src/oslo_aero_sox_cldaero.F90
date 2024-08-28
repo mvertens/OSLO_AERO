@@ -55,7 +55,7 @@ contains
             //' -- should not invoke sox_cldaero_init ')
     endif
 
-    id_so4_1a = chemistryIndex(l_so4_a2) 
+    id_so4_1a = chemistryIndex(l_so4_a2)
 
   end subroutine sox_cldaero_init
 
@@ -73,18 +73,17 @@ contains
     type(cldaero_conc_t), pointer :: conc_obj
 
     ! local variables
-    integer :: l,n
-    integer :: i,k
+    integer :: icol,ilev
 
     conc_obj => cldaero_allocate()
 
-    do k = 1,pver
-       do i = 1,ncol
-          if (cldfrc(i,k) >0._r8) then
-             conc_obj%xlwc(i,k) = lwc(i,k) *cfact(i,k) ! cloud water L(water)/L(air)
-             conc_obj%xlwc(i,k) = conc_obj%xlwc(i,k) / cldfrc(i,k) ! liquid water in the cloudy fraction of cell
+    do ilev = 1,pver
+       do icol = 1,ncol
+          if (cldfrc(icol,ilev) >0._r8) then
+             conc_obj%xlwc(icol,ilev) = lwc(icol,ilev) *cfact(icol,ilev) ! cloud water L(water)/L(air)
+             conc_obj%xlwc(icol,ilev) = conc_obj%xlwc(icol,ilev) / cldfrc(icol,ilev) ! liquid water in the cloudy fraction of cell
           else
-             conc_obj%xlwc(i,k) = 0._r8
+             conc_obj%xlwc(icol,ilev) = 0._r8
           endif
        enddo
     enddo
@@ -92,10 +91,10 @@ contains
     conc_obj%no3c(:,:) = 0._r8
 
     ! Set concenctration of cloud so4
-    conc_obj%so4c(:ncol,:) = qcw(:ncol,:,id_so4_1a) 
+    conc_obj%so4c(:ncol,:) = qcw(:ncol,:,id_so4_1a)
 
     ! current version does not have nh3/nh4 tracers -  so so4 is assumed to be nh4hso4
-    ! the partial neutralization of so4 is handled by using a 
+    ! the partial neutralization of so4 is handled by using a
     ! -1 charge (instead of -2) in the electro-neutrality equation
     conc_obj%nh4c(:ncol,:) = 0._r8
 
@@ -121,7 +120,7 @@ contains
     integer,  intent(in)    :: loffset
     real(r8), intent(in)    :: dtime         ! time step (sec)
     real(r8), intent(in)    :: mbar(:,:)     ! mean wet atmospheric mass ( amu )
-    real(r8), intent(in)    :: pdel(:,:) 
+    real(r8), intent(in)    :: pdel(:,:)
     real(r8), intent(in)    :: press(:,:)
     real(r8), intent(in)    :: tfld(:,:)
     real(r8), intent(in)    :: cldnum(:,:)
@@ -163,7 +162,7 @@ contains
     real(r8) :: dqdt_aq, dqdt_wr, dqdt
     real(r8) :: fwetrem, sumf, uptkrate
     real(r8) :: delnh3, delnh4
-    integer  :: l, n, m, i,k
+    integer  :: itrac, imode, icol,ilev
     integer  :: ntot_msa_c
     real(r8) :: xl
 
@@ -173,35 +172,36 @@ contains
     dqdt_aqhprxn(:,:) = 0.0_r8
     dqdt_aqo3rxn(:,:) = 0.0_r8
 
-    lev_loop: do k = 1,pver
-       col_loop: do i = 1,ncol
-          cloud: if (cldfrc(i,k) >= 1.0e-5_r8) then
-             xl = xlwc(i,k) ! / cldfrc(i,k)
+    lev_loop: do ilev = 1,pver
+       col_loop: do icol = 1,ncol
+          cloud: if (cldfrc(icol,ilev) >= 1.0e-5_r8) then
+             xl = xlwc(icol,ilev) ! / cldfrc(icol,ilev)
 
-             IF (XL .ge. 1.e-8_r8) THEN !! WHEN CLOUD IS PRESENTED
+             IF (xl >= 1.e-8_r8) THEN !! WHEN CLOUD IS PRESENTED
 
-                delso4_o3rxn = xso4(i,k) - xso4_init(i,k)
+                delso4_o3rxn = xso4(icol,ilev) - xso4_init(icol,ilev)
 
                 if (id_nh3>0) then
-                   delnh3 = nh3g(i,k) - xnh3(i,k)
+                   delnh3 = nh3g(icol,ilev) - xnh3(icol,ilev)
                    delnh4 = - delnh3
                 endif
 
-                !In the case of OSLO-AEROSOLS, 
+                !In the case of OSLO-AEROSOLS,
                 !set no MSA in cloud droplets
                 ntot_msa_c = 0
 
                 !   average uptake rate over dtime
-                uptkrate = cldaero_uptakerate( xl, cldnum(i,k), cfact(i,k), cldfrc(i,k), tfld(i,k),  press(i,k) )
+                uptkrate = cldaero_uptakerate( xl, cldnum(icol,ilev), cfact(icol,ilev), &
+                     cldfrc(icol,ilev), tfld(icol,ilev),  press(icol,ilev) )
 
                 ! average uptake rate over dtime
                 uptkrate = (1.0_r8 - exp(-min(100._r8,dtime*uptkrate))) / dtime
 
                 !   dso4dt_gasuptk = so4_c tendency from h2so4 gas uptake (mol/mol/s)
                 !   dmsadt_gasuptk = msa_c tendency from msa   gas uptake (mol/mol/s)
-                dso4dt_gasuptk = xh2so4(i,k) * uptkrate
+                dso4dt_gasuptk = xh2so4(icol,ilev) * uptkrate
                 if (id_msa > 0) then
-                   dmsadt_gasuptk = xmsa(i,k) * uptkrate
+                   dmsadt_gasuptk = xmsa(icol,ilev) * uptkrate
                 else
                    dmsadt_gasuptk = 0.0_r8
                 end if
@@ -220,22 +220,22 @@ contains
                 !      the uptake of highly soluble aerosol precursor gases (h2so4, msa, ...)
                 !      AND the wetremoval of dissolved, unreacted so2 and h2o2
 
-                dso4dt_aqrxn = (delso4_o3rxn + delso4_hprxn(i,k)) / dtime
-                dso4dt_hprxn = delso4_hprxn(i,k) / dtime
+                dso4dt_aqrxn = (delso4_o3rxn + delso4_hprxn(icol,ilev)) / dtime
+                dso4dt_hprxn = delso4_hprxn(icol,ilev) / dtime
 
                 !   fwetrem = fraction of in-cloud-water material that is wet removed
-                !       fwetrem = max( 0.0_r8, (1.0_r8-exp(-min(100._r8,dtime*clwlrat(i,k)))) )
+                !       fwetrem = max( 0.0_r8, (1.0_r8-exp(-min(100._r8,dtime*clwlrat(icol,ilev)))) )
                 fwetrem = 0.0_r8    ! don't have so4 & msa wet removal here
 
                 !Update so4 in cloud water
-                l = id_so4_1a       !We only have one aq-phase tracer in CAM_OSLO
+                itrac = id_so4_1a       !We only have one aq-phase tracer in CAM_OSLO
 
-                dqdt_aqso4(i,k,l) = dso4dt_aqrxn*cldfrc(i,k)
-                dqdt_aqh2so4(i,k,l) = (dso4dt_gasuptk + dmsadt_gasuptk_toso4)*cldfrc(i,k)
-                dqdt_aq = dqdt_aqso4(i,k,l) + dqdt_aqh2so4(i,k,l)
+                dqdt_aqso4(icol,ilev,itrac) = dso4dt_aqrxn*cldfrc(icol,ilev)
+                dqdt_aqh2so4(icol,ilev,itrac) = (dso4dt_gasuptk + dmsadt_gasuptk_toso4)*cldfrc(icol,ilev)
+                dqdt_aq = dqdt_aqso4(icol,ilev,itrac) + dqdt_aqh2so4(icol,ilev,itrac)
                 dqdt_wr = -fwetrem*dqdt_aq  !wet removal set to zero above
                 dqdt= dqdt_aq + dqdt_wr
-                qcw(i,k,l) = qcw(i,k,l) + dqdt*dtime
+                qcw(icol,ilev,itrac) = qcw(icol,ilev,itrac) + dqdt*dtime
 
                 !Additional updates for MSA??
                 !      For gas species, tendency includes
@@ -246,38 +246,40 @@ contains
                 !      Need to multiply both these parts by cldfrc
 
                 !   h2so4 (g) & msa (g)
-                qin(i,k,id_h2so4) = qin(i,k,id_h2so4) - dso4dt_gasuptk * dtime * cldfrc(i,k)
-                if (id_msa > 0) qin(i,k,id_msa) = qin(i,k,id_msa) - dmsadt_gasuptk * dtime * cldfrc(i,k)
+                qin(icol,ilev,id_h2so4) = qin(icol,ilev,id_h2so4) - dso4dt_gasuptk * dtime * cldfrc(icol,ilev)
+                if (id_msa > 0) then
+                   qin(icol,ilev,id_msa) = qin(icol,ilev,id_msa) - dmsadt_gasuptk * dtime * cldfrc(icol,ilev)
+                end if
 
 
-                ! so2 -- the first order loss rate for so2 is frso2_c*clwlrat(i,k)
-                ! fwetrem = max( 0.0_r8, (1.0_r8-exp(-min(100._r8,dtime*frso2_c*clwlrat(i,k)))) )
+                ! so2 -- the first order loss rate for so2 is frso2_c*clwlrat(icol,ilev)
+                ! fwetrem = max( 0.0_r8, (1.0_r8-exp(-min(100._r8,dtime*frso2_c*clwlrat(icol,ilev)))) )
                 fwetrem = 0.0_r8   ! don't include so2 wet removal here
 
-                dqdt_wr = -fwetrem*xso2(i,k)/dtime*cldfrc(i,k)
-                dqdt_aq = -dso4dt_aqrxn*cldfrc(i,k)
+                dqdt_wr = -fwetrem*xso2(icol,ilev)/dtime*cldfrc(icol,ilev)
+                dqdt_aq = -dso4dt_aqrxn*cldfrc(icol,ilev)
                 dqdt = dqdt_aq + dqdt_wr
-                qin(i,k,id_so2) = qin(i,k,id_so2) + dqdt * dtime
+                qin(icol,ilev,id_so2) = qin(icol,ilev,id_so2) + dqdt * dtime
 
-                !   h2o2 -- the first order loss rate for h2o2 is frh2o2_c*clwlrat(i,k)
-                !       fwetrem = max( 0.0_r8, (1.0_r8-exp(-min(100._r8,dtime*frh2o2_c*clwlrat(i,k)))) )
+                !   h2o2 -- the first order loss rate for h2o2 is frh2o2_c*clwlrat(icol,ilev)
+                !       fwetrem = max( 0.0_r8, (1.0_r8-exp(-min(100._r8,dtime*frh2o2_c*clwlrat(icol,ilev)))) )
                 fwetrem = 0.0_r8   ! don't include h2o2 wet removal here
 
-                dqdt_wr = -fwetrem*xh2o2(i,k)/dtime*cldfrc(i,k)
-                dqdt_aq = -dso4dt_hprxn*cldfrc(i,k)
+                dqdt_wr = -fwetrem*xh2o2(icol,ilev)/dtime*cldfrc(icol,ilev)
+                dqdt_aq = -dso4dt_hprxn*cldfrc(icol,ilev)
                 dqdt = dqdt_aq + dqdt_wr
-                qin(i,k,id_h2o2) = qin(i,k,id_h2o2) + dqdt * dtime
+                qin(icol,ilev,id_h2o2) = qin(icol,ilev,id_h2o2) + dqdt * dtime
 
                 ! NH3
                 if (id_nh3>0) then
-                   dqdt_aq = delnh3/dtime*cldfrc(i,k)
+                   dqdt_aq = delnh3/dtime*cldfrc(icol,ilev)
                    dqdt = dqdt_aq
-                   qin(i,k,id_nh3) = qin(i,k,id_nh3) + dqdt * dtime
+                   qin(icol,ilev,id_nh3) = qin(icol,ilev,id_nh3) + dqdt * dtime
                 endif
 
                 !   for SO4 from H2O2/O3 budgets
-                dqdt_aqhprxn(i,k) = dso4dt_hprxn*cldfrc(i,k)
-                dqdt_aqo3rxn(i,k) = (dso4dt_aqrxn - dso4dt_hprxn)*cldfrc(i,k)
+                dqdt_aqhprxn(icol,ilev) = dso4dt_hprxn*cldfrc(icol,ilev)
+                dqdt_aqo3rxn(icol,ilev) = (dso4dt_aqrxn - dso4dt_hprxn)*cldfrc(icol,ilev)
 
              ENDIF !! WHEN CLOUD IS PRESENTED
 
@@ -286,65 +288,65 @@ contains
     enddo lev_loop
 
     ! Update the mixing ratios
-    do k = 1,pver
-       qcw(:,k,id_so4_1a) =  MAX( qcw(:,k,id_so4_1a), small_value )
-       qin(:,k,id_so2) =  MAX( qin(:,k,id_so2), small_value )
+    do ilev = 1,pver
+       qcw(:,ilev,id_so4_1a) =  MAX( qcw(:,ilev,id_so4_1a), small_value )
+       qin(:,ilev,id_so2) =  MAX( qin(:,ilev,id_so2), small_value )
        if ( id_nh3 > 0 ) then
-          qin(:,k,id_nh3) =  MAX( qin(:,k,id_nh3), small_value )
+          qin(:,ilev,id_nh3) =  MAX( qin(:,ilev,id_nh3), small_value )
        endif
     end do
 
     ! diagnostics
-    l = id_so4_1a !Index of the a2-tracer in cloud water
-    n = 1         !Only distribute to one "mode" 
-    aqso4(:,n)=0._r8
-    do k=1,pver
-       do i=1,ncol
-          aqso4(i,n)=aqso4(i,n)+dqdt_aqso4(i,k,l)*adv_mass(l)/mbar(i,k) &
-               *pdel(i,k)/gravit ! kg/m2/s
+    itrac = id_so4_1a !Index of the a2-tracer in cloud water
+    imode = 1         !Only distribute to one "mode"
+    aqso4(:,imode)=0._r8
+    do ilev=1,pver
+       do icol=1,ncol
+          aqso4(icol,imode)=aqso4(icol,imode)+dqdt_aqso4(icol,ilev,itrac)*adv_mass(itrac)/mbar(icol,ilev) &
+               *pdel(icol,ilev)/gravit ! kg/m2/s
        enddo
     enddo
 
-    aqh2so4(:,n)=0._r8
-    do k=1,pver
-       do i=1,ncol
-          aqh2so4(:,n)=aqh2so4(:,n)+dqdt_aqh2so4(i,k,l)*adv_mass(l)/mbar(i,k) &
-               *pdel(i,k)/gravit ! kg/m2/s
+    aqh2so4(:,imode)=0._r8
+    do ilev=1,pver
+       do icol=1,ncol
+          aqh2so4(:,imode)=aqh2so4(:,imode)+dqdt_aqh2so4(icol,ilev,itrac)*adv_mass(itrac)/mbar(icol,ilev) &
+               *pdel(icol,ilev)/gravit ! kg/m2/s
        enddo
     enddo
 
     aqso4_h2o2(:) = 0._r8
-    do k=1,pver
-       do i=1,ncol
-          aqso4_h2o2(i)=aqso4_h2o2(i)+dqdt_aqhprxn(i,k)*adv_mass(l)/mbar(i,k) &
-               *pdel(i,k)/gravit ! kg SO4 /m2/s
+    do ilev=1,pver
+       do icol=1,ncol
+          aqso4_h2o2(icol)=aqso4_h2o2(icol)+dqdt_aqhprxn(icol,ilev)*adv_mass(itrac)/mbar(icol,ilev) &
+               *pdel(icol,ilev)/gravit ! kg SO4 /m2/s
        enddo
     enddo
 
-    if (present(aqso4_h2o2_3d)) then 
+    if (present(aqso4_h2o2_3d)) then
        aqso4_h2o2_3d(:,:) = 0._r8
-       do k=1,pver
-          do i=1,ncol
-             aqso4_h2o2_3d(i,k)=dqdt_aqhprxn(i,k)*adv_mass(l)/mbar(i,k) &
-                  *pdel(i,k)/gravit ! kg SO4 /m2/s
+       do ilev=1,pver
+          do icol=1,ncol
+             aqso4_h2o2_3d(icol,ilev)=dqdt_aqhprxn(icol,ilev)*adv_mass(itrac)/mbar(icol,ilev) &
+                  *pdel(icol,ilev)/gravit ! kg SO4 /m2/s
           enddo
        enddo
     end if
 
     aqso4_o3(:)=0._r8
-    do k=1,pver
-       do i=1,ncol
-          aqso4_o3(i)=aqso4_o3(i)+dqdt_aqo3rxn(i,k)*adv_mass(l)/mbar(i,k) &
-               *pdel(i,k)/gravit ! kg SO4 /m2/s
+    do ilev=1,pver
+       do icol=1,ncol
+          aqso4_o3(icol)=aqso4_o3(icol)+dqdt_aqo3rxn(icol,ilev)*adv_mass(itrac)/mbar(icol,ilev) &
+               *pdel(icol,ilev)/gravit ! kg SO4 /m2/s
        enddo
     enddo
 
     if (present(aqso4_o3_3d)) then
        aqso4_o3_3d(:,:)=0._r8
-       do k=1,pver
-          do i=1,ncol
-             aqso4_o3_3d(i,k)=dqdt_aqo3rxn(i,k)*adv_mass(l)/mbar(i,k) &
-                  *pdel(i,k)/gravit ! kg SO4 /m2/s
+       do ilev=1,pver
+          do icol=1,ncol
+             aqso4_o3_3d(icol,ilev)=dqdt_aqo3rxn(icol,ilev)*adv_mass(itrac)/mbar(icol,ilev) &
+                  *pdel(icol,ilev)/gravit ! kg SO4 /m2/s
           enddo
        enddo
     end if
@@ -440,10 +442,10 @@ contains
     radxnum_cd = (volx34pi_cd*num_cd*num_cd)**0.3333333_r8
 
     ! apply bounds to rad_cd to avoid the occasional unphysical value
-    if (radxnum_cd .le. volx34pi_cd*4.0e4_r8) then
+    if (radxnum_cd <= volx34pi_cd*4.0e4_r8) then
        radxnum_cd = volx34pi_cd*4.0e4_r8
        rad_cd = 50.0e-4_r8
-    else if (radxnum_cd .ge. volx34pi_cd*4.0e8_r8) then
+    else if (radxnum_cd >= volx34pi_cd*4.0e8_r8) then
        radxnum_cd = volx34pi_cd*4.0e8_r8
        rad_cd = 0.5e-4_r8
     else

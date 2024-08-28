@@ -1,6 +1,7 @@
 module  oslo_aero_linear_interp
 
   use shr_kind_mod, only: r8 => shr_kind_r8
+  use perf_mod,     only: t_startf, t_stopf
 
   implicit none
   private
@@ -89,6 +90,7 @@ contains
 
     ! local variables
     real(r8) :: opt4d(2,2,2,2), opt3d(2,2,2), opt2d(2,2)
+    real(r8) :: factor
     !------------------------------------
 
     ! interpolation in the fifth dimension (except invd(5) factor)
@@ -126,8 +128,9 @@ contains
     opt2d(2,2) = d2mx(3)*opt3d(2,2,1) + dxm1(3)*opt3d(2,2,2)
 
     ! interpolation in the (fifth, fourth, third and) second dimension
-    optout1 = (d2mx(2)*opt2d(1,1) + dxm1(2)*opt2d(1,2))*(invd(5)*invd(4)*invd(3)*invd(2))
-    optout2 = (d2mx(2)*opt2d(2,1) + dxm1(2)*opt2d(2,2))*(invd(5)*invd(4)*invd(3)*invd(2))
+    factor = (invd(5)*invd(4)*invd(3)*invd(2))
+    optout1 = (d2mx(2)*opt2d(1,1) + dxm1(2)*opt2d(1,2))*factor
+    optout2 = (d2mx(2)*opt2d(2,1) + dxm1(2)*opt2d(2,2))*factor
 
   end subroutine lininterpol5dim
 

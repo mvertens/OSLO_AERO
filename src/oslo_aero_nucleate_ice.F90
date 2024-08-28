@@ -153,7 +153,6 @@ contains
 
     ! local variables
     integer :: ierr
-    integer :: m, n
     logical :: history_cesm_forcing
     character(len=*), parameter :: routine = 'nucleate_ice_oslo_init'
     !--------------------------------------------------------------------------------------------
@@ -181,7 +180,7 @@ contains
     call cnst_get_ind('NUMICE', numice_idx)
     qsatfac_idx = pbuf_get_index('QSATFAC', ierr)
 
-    if (((nucleate_ice_subgrid .eq. -1._r8) .or. (nucleate_ice_subgrid_strat .eq. -1._r8)) .and. (qsatfac_idx .eq. -1)) then
+    if (((nucleate_ice_subgrid == -1._r8) .or. (nucleate_ice_subgrid_strat == -1._r8)) .and. (qsatfac_idx == -1)) then
        call endrun(routine//': ERROR qsatfac is required when subgrid = -1 or subgrid_strat = -1')
     end if
 
@@ -283,7 +282,7 @@ contains
 
     integer :: lchnk, ncol
     integer :: itim_old
-    integer :: i, k, m
+    integer :: icol, ilev
 
     real(r8), pointer :: t(:,:)              ! input temperature (K)
     real(r8), pointer :: qn(:,:)             ! input water vapor mixing ratio (kg/kg)
@@ -383,27 +382,27 @@ contains
     ! tropopause level so that the cold point tropopause will use the stratospheric values.
     call tropopause_findChemTrop(state, troplev)
 
-    if ((nucleate_ice_subgrid .eq. -1._r8) .or. (nucleate_ice_subgrid_strat .eq. -1._r8)) then
+    if ((nucleate_ice_subgrid == -1._r8) .or. (nucleate_ice_subgrid_strat == -1._r8)) then
        call pbuf_get_field(pbuf, qsatfac_idx, qsatfac)
     end if
 
     trop_pd(:,:) = 0._r8
 
-    do k = top_lev, pver
-       do i = 1, ncol
-          trop_pd(i, troplev(i)) = 1._r8
+    do ilev = top_lev, pver
+       do icol = 1, ncol
+          trop_pd(icol, troplev(icol)) = 1._r8
 
-          if (k <= troplev(i)) then
-             if (nucleate_ice_subgrid_strat .eq. -1._r8) then
-                subgrid(i, k) = 1._r8 / qsatfac(i, k)
+          if (ilev <= troplev(icol)) then
+             if (nucleate_ice_subgrid_strat == -1._r8) then
+                subgrid(icol, ilev) = 1._r8 / qsatfac(icol, ilev)
              else
-                subgrid(i, k) = nucleate_ice_subgrid_strat
+                subgrid(icol, ilev) = nucleate_ice_subgrid_strat
              end if
           else
-             if (nucleate_ice_subgrid .eq. -1._r8) then
-                subgrid(i, k) = 1._r8 / qsatfac(i, k)
+             if (nucleate_ice_subgrid == -1._r8) then
+                subgrid(icol, ilev) = 1._r8 / qsatfac(icol, ilev)
              else
-                subgrid(i, k) = nucleate_ice_subgrid
+                subgrid(icol, ilev) = nucleate_ice_subgrid
              end if
           end if
        end do
@@ -431,21 +430,21 @@ contains
        INFreIN(:,:)  = 0.0_r8
     endif
 
-    do k = top_lev, pver
+    do ilev = top_lev, pver
        ! Get humidity and saturation vapor pressures
-       call qsat_water(t(:ncol,k), pmid(:ncol,k), es(:ncol), qs(:ncol), ncol, gam=gammas(:ncol))
+       call qsat_water(t(:ncol,ilev), pmid(:ncol,ilev), es(:ncol), qs(:ncol), ncol, gam=gammas(:ncol))
 
-       do i = 1, ncol
-          relhum(i,k) = qn(i,k)/qs(i)
-          icldm(i,k) = max(icecldf(i,k), mincld) ! get cloud fraction, check for minimum
+       do icol = 1, ncol
+          relhum(icol,ilev) = qn(icol,ilev)/qs(icol)
+          icldm(icol,ilev) = max(icecldf(icol,ilev), mincld) ! get cloud fraction, check for minimum
        end do
     end do
 
-    kloop: do k = top_lev, pver
-       iloop: do i = 1, ncol
+    kloop: do ilev = top_lev, pver
+       iloop: do icol = 1, ncol
 
           so4_num_st_cr_tot = 0._r8
-          freezing: if (t(i,k) < tmelt - 5._r8) then
+          freezing: if (t(icol,ilev) < tmelt - 5._r8) then
 
              ! compute aerosol number for so4, soot, and dust with units #/cm^3
              ! soot = accumulation mode
@@ -453,30 +452,30 @@ contains
              ! dust = coarse mode
              ! since modal has internal mixtures.
              ! Oslo aerosols have two modes.. Need mode-fractions
-             so4_num = (numberConcentration(i,k,MODE_IDX_SO4_AC))*1.0e-6_r8
-             dst_num = (numberConcentration(i,k,MODE_IDX_DST_A2) + numberConcentration(i,k,MODE_IDX_DST_A3))*1.0e-6_r8
-             !soot_num =  numberConcentration(i,k,MODE_IDX_OMBC_INTMIX_COAT_AIT)*1.0e-6_r8
-             dust_coarse_fraction = numberConcentration(i,k,MODE_IDX_DST_A3)*1.e-6_r8 / (dst_num+1.e-100_r8)
+             so4_num = (numberConcentration(icol,ilev,MODE_IDX_SO4_AC))*1.0e-6_r8
+             dst_num = (numberConcentration(icol,ilev,MODE_IDX_DST_A2) + numberConcentration(icol,ilev,MODE_IDX_DST_A3))*1.0e-6_r8
+             !soot_num =  numberConcentration(icol,ilev,MODE_IDX_OMBC_INTMIX_COAT_AIT)*1.0e-6_r8
+             dust_coarse_fraction = numberConcentration(icol,ilev,MODE_IDX_DST_A3)*1.e-6_r8 / (dst_num+1.e-100_r8)
 
              ! *** Turn off soot nucleation ***
              soot_num = 0.0_r8
 
              if (cam_physpkg_is("cam_dev")) then
                 call nucleati( &
-                     wsubi(i,k), t(i,k), pmid(i,k), relhum(i,k), icldm(i,k),   &
-                     qc(i,k), qi(i,k), ni(i,k), rho(i,k),                      &
-                     so4_num, dst_num, soot_num, subgrid(i,k),                 &
-                     naai(i,k), nihf(i,k), niimm(i,k), nidep(i,k), nimey(i,k), &
-                     wice(i,k), weff(i,k), fhom(i,k), regm(i,k),               &
+                     wsubi(icol,ilev), t(icol,ilev), pmid(icol,ilev), relhum(icol,ilev), icldm(icol,ilev),   &
+                     qc(icol,ilev), qi(icol,ilev), ni(icol,ilev), rho(icol,ilev),                      &
+                     so4_num, dst_num, soot_num, subgrid(icol,ilev),                 &
+                     naai(icol,ilev), nihf(icol,ilev), niimm(icol,ilev), nidep(icol,ilev), nimey(icol,ilev), &
+                     wice(icol,ilev), weff(icol,ilev), fhom(icol,ilev), regm(icol,ilev),               &
                      oso4_num, odst_num, osoot_num, &
                      call_frm_zm_in = .false., add_preexisting_ice_in = .false.)
              else
                 call nucleati( &
-                     wsubi(i,k), t(i,k), pmid(i,k), relhum(i,k), icldm(i,k),   &
-                     qc(i,k), qi(i,k), ni(i,k), rho(i,k),                      &
-                     so4_num, dst_num, soot_num, subgrid(i,k),                 &
-                     naai(i,k), nihf(i,k), niimm(i,k), nidep(i,k), nimey(i,k), &
-                     wice(i,k), weff(i,k), fhom(i,k), regm(i,k),               &
+                     wsubi(icol,ilev), t(icol,ilev), pmid(icol,ilev), relhum(icol,ilev), icldm(icol,ilev),   &
+                     qc(icol,ilev), qi(icol,ilev), ni(icol,ilev), rho(icol,ilev),                      &
+                     so4_num, dst_num, soot_num, subgrid(icol,ilev),                 &
+                     naai(icol,ilev), nihf(icol,ilev), niimm(icol,ilev), nidep(icol,ilev), nimey(icol,ilev), &
+                     wice(icol,ilev), weff(icol,ilev), fhom(icol,ilev), regm(icol,ilev),               &
                      oso4_num, odst_num, osoot_num)
              end if
 
@@ -489,7 +488,7 @@ contains
 
                 !Assume the coarse aerosols were activated first
                 !so only remove small ones if more than large ones are activated
-                if(odst_num .gt. dst_num*dust_coarse_fraction)then
+                if(odst_num > dst_num*dust_coarse_fraction)then
 
                    !A2-mode
                    numberFromSmallDustMode = odst_num - dst_num*dust_coarse_fraction
@@ -498,10 +497,10 @@ contains
                         - dst_num*dust_coarse_fraction)  & !fraction to coarse mode
                         / volumeToNumber(MODE_IDX_DST_A2) &
                         * rhopart(l_dst_a2) &
-                        /rho(i,k)*1e6_r8
+                        /rho(icol,ilev)*1e6_r8
 
-                   ptend%q(i,k,l_dst_a2) = -masslost*icldm(i,k)/ dtime
-                   cld_dst_a2(i,k) = cld_dst_a2(i,k) + masslost*icldm(i,k)
+                   ptend%q(icol,ilev,l_dst_a2) = -masslost*icldm(icol,ilev)/ dtime
+                   cld_dst_a2(icol,ilev) = cld_dst_a2(icol,ilev) + masslost*icldm(icol,ilev)
 
                 end if
 
@@ -509,10 +508,10 @@ contains
                 masslost = (odst_num - numberFromSmallDustMode) &
                      / volumeToNumber(MODE_IDX_DST_A3)    &
                      * rhopart(l_dst_a3)                  &
-                     / rho(i,k)*1e6_r8
+                     / rho(icol,ilev)*1e6_r8
 
-                ptend%q(i,k,l_dst_a3) = -masslost * icldm(i,k) / dtime
-                cld_dst_a3(i,k) = cld_dst_a3(i,k) + masslost*icldm(i,k)
+                ptend%q(icol,ilev,l_dst_a3) = -masslost * icldm(icol,ilev) / dtime
+                cld_dst_a3(icol,ilev) = cld_dst_a3(icol,ilev) + masslost*icldm(icol,ilev)
 
              end if
 
@@ -537,21 +536,21 @@ contains
              ! nucleation, and wsubi from CLUBB is probably not representative of
              ! wave driven varaibility in the polar stratosphere.
              if (nucleate_ice_use_troplev) then
-                if ((k < troplev(i)) .and. (nucleate_ice_strat > 0._r8) .and. (oso4_num > 0._r8)) then
-                   so4_num_ac = so4_num*rho(i,k)*1.0e-6_r8 !This is maximum sulfate which can activate
-                   dso4_num = max(0._r8, (nucleate_ice_strat * (so4_num_cr + so4_num_ac)) - oso4_num) * 1e6_r8 / rho(i,k)
-                   naai(i,k) = naai(i,k) + dso4_num
-                   nihf(i,k) = nihf(i,k) + dso4_num
+                if ((ilev < troplev(icol)) .and. (nucleate_ice_strat > 0._r8) .and. (oso4_num > 0._r8)) then
+                   so4_num_ac = so4_num*rho(icol,ilev)*1.0e-6_r8 !This is maximum sulfate which can activate
+                   dso4_num = max(0._r8, (nucleate_ice_strat * (so4_num_cr + so4_num_ac)) - oso4_num) * 1e6_r8 / rho(icol,ilev)
+                   naai(icol,ilev) = naai(icol,ilev) + dso4_num
+                   nihf(icol,ilev) = nihf(icol,ilev) + dso4_num
                 end if
              else
                 ! This maintains backwards compatibility with the previous version.
-                if (pmid(i,k) <= 12500._r8 .and. pmid(i,k) > 100._r8 .and. abs(state%lat(i)) >= 60._r8 * pi / 180._r8) then
-                   ramp = 1._r8 - min(1._r8, max(0._r8, (pmid(i,k) - 10000._r8) / 2500._r8))
+                if (pmid(icol,ilev) <= 12500._r8 .and. pmid(icol,ilev) > 100._r8 .and. abs(state%lat(icol)) >= 60._r8 * pi / 180._r8) then
+                   ramp = 1._r8 - min(1._r8, max(0._r8, (pmid(icol,ilev) - 10000._r8) / 2500._r8))
 
                    if (oso4_num > 0._r8) then
-                      dso4_num = (max(oso4_num, ramp * nucleate_ice_strat * so4_num) - oso4_num) * 1e6_r8 / rho(i,k)
-                      naai(i,k) = naai(i,k) + dso4_num
-                      nihf(i,k) = nihf(i,k) + dso4_num
+                      dso4_num = (max(oso4_num, ramp * nucleate_ice_strat * so4_num) - oso4_num) * 1e6_r8 / rho(icol,ilev)
+                      naai(icol,ilev) = naai(icol,ilev) + dso4_num
+                      nihf(icol,ilev) = nihf(icol,ilev) + dso4_num
                    end if
                 end if
              end if
@@ -559,78 +558,78 @@ contains
              if (cam_physpkg_is("cam_dev")) then
                 !Updates for pumas v1.21+
 
-                naai_hom(i,k) = nihf(i,k)/dtime
-                naai(i,k)= naai(i,k)/dtime
+                naai_hom(icol,ilev) = nihf(icol,ilev)/dtime
+                naai(icol,ilev)= naai(icol,ilev)/dtime
 
                 ! output activated ice (convert from #/kg -> #/m3/s)
-                nihf(i,k)  = nihf(i,k) *rho(i,k)/dtime
-                niimm(i,k) = niimm(i,k)*rho(i,k)/dtime
-                nidep(i,k) = nidep(i,k)*rho(i,k)/dtime
-                nimey(i,k) = nimey(i,k)*rho(i,k)/dtime
+                nihf(icol,ilev)  = nihf(icol,ilev) *rho(icol,ilev)/dtime
+                niimm(icol,ilev) = niimm(icol,ilev)*rho(icol,ilev)/dtime
+                nidep(icol,ilev) = nidep(icol,ilev)*rho(icol,ilev)/dtime
+                nimey(icol,ilev) = nimey(icol,ilev)*rho(icol,ilev)/dtime
 
                 if (use_preexisting_ice) then
-                   INnso4(i,k)   = so4_num*1e6_r8            ! (convert from #/cm3 -> #/m3)
-                   INnbc(i,k)    = soot_num*1e6_r8
-                   INndust(i,k)  = dst_num*1e6_r8
-                   INondust(i,k) = odst_num*1e6_r8
-                   INFreIN(i,k)  = 1.0_r8                    ! 1,ice nucleation occur
-                   INhet(i,k)    = (niimm(i,k) + nidep(i,k)) ! #/m3, nimey not in cirrus
-                   INhom(i,k)    = nihf(i,k)                 ! #/m3
-                   if (INhom(i,k).gt.1e3_r8)   then          ! > 1/L
-                      INFrehom(i,k)=1.0_r8                   ! 1, hom freezing occur
+                   INnso4(icol,ilev)   = so4_num*1e6_r8                        ! (convert from #/cm3 -> #/m3)
+                   INnbc(icol,ilev)    = soot_num*1e6_r8
+                   INndust(icol,ilev)  = dst_num*1e6_r8
+                   INondust(icol,ilev) = odst_num*1e6_r8
+                   INFreIN(icol,ilev)  = 1.0_r8                                ! 1,ice nucleation occur
+                   INhet(icol,ilev)    = (niimm(icol,ilev) + nidep(icol,ilev)) ! #/m3, nimey not in cirrus
+                   INhom(icol,ilev)    = nihf(icol,ilev)                       ! #/m3
+                   if (INhom(icol,ilev) > 1e3_r8)   then                       ! > 1/L
+                      INFrehom(icol,ilev)=1.0_r8                               ! 1, hom freezing occur
                    endif
 
                    ! exclude  no ice nucleaton
-                   if ((INFrehom(i,k) < 0.5_r8) .and. (INhet(i,k) < 1.0_r8))   then
-                      INnso4(i,k) =0.0_r8
-                      INnbc(i,k)  =0.0_r8
-                      INndust(i,k)=0.0_r8
-                      INondust(i,k)=0.0_r8
-                      INFreIN(i,k)=0.0_r8
-                      INhet(i,k) = 0.0_r8
-                      INhom(i,k) = 0.0_r8
-                      INFrehom(i,k)=0.0_r8
-                      wice(i,k) = 0.0_r8
-                      weff(i,k) = 0.0_r8
-                      fhom(i,k) = 0.0_r8
+                   if ((INFrehom(icol,ilev) < 0.5_r8) .and. (INhet(icol,ilev) < 1.0_r8))   then
+                      INnso4(icol,ilev) =0.0_r8
+                      INnbc(icol,ilev)  =0.0_r8
+                      INndust(icol,ilev)=0.0_r8
+                      INondust(icol,ilev)=0.0_r8
+                      INFreIN(icol,ilev)=0.0_r8
+                      INhet(icol,ilev) = 0.0_r8
+                      INhom(icol,ilev) = 0.0_r8
+                      INFrehom(icol,ilev)=0.0_r8
+                      wice(icol,ilev) = 0.0_r8
+                      weff(icol,ilev) = 0.0_r8
+                      fhom(icol,ilev) = 0.0_r8
                    endif
                 end if
 
              else ! Not cam_dev
 
-                naai_hom(i,k) = nihf(i,k)
+                naai_hom(icol,ilev) = nihf(icol,ilev)
 
                 ! output activated ice (convert from #/kg -> #/m3/s)
-                nihf(i,k)     = nihf(i,k) *rho(i,k)
-                niimm(i,k)    = niimm(i,k)*rho(i,k)
-                nidep(i,k)    = nidep(i,k)*rho(i,k)
-                nimey(i,k)    = nimey(i,k)*rho(i,k)
+                nihf(icol,ilev)     = nihf(icol,ilev) *rho(icol,ilev)
+                niimm(icol,ilev)    = niimm(icol,ilev)*rho(icol,ilev)
+                nidep(icol,ilev)    = nidep(icol,ilev)*rho(icol,ilev)
+                nimey(icol,ilev)    = nimey(icol,ilev)*rho(icol,ilev)
 
                 if (use_preexisting_ice) then
-                   INnso4(i,k) =so4_num*1e6_r8 ! (convert from #/cm3 -> #/m3/s)
-                   INnbc(i,k)  =soot_num*1e6_r8
-                   INndust(i,k)=dst_num*1e6_r8
-                   INondust(i,k)=odst_num*1e6_r8
-                   INFreIN(i,k)=1.0_r8          ! 1,ice nucleation occur
-                   INhet(i,k) = (niimm(i,k) + nidep(i,k))   ! #/m3, nimey not in cirrus
-                   INhom(i,k) = nihf(i,k)                 ! #/m3
-                   if (INhom(i,k).gt.1e3_r8)   then ! > 1/L
-                      INFrehom(i,k)=1.0_r8       ! 1, hom freezing occur
+                   INnso4(icol,ilev)   = so4_num*1e6_r8                        ! (convert from #/cm3 -> #/m3/s)
+                   INnbc(icol,ilev)    = soot_num*1e6_r8
+                   INndust(icol,ilev)  = dst_num*1e6_r8
+                   INondust(icol,ilev) = odst_num*1e6_r8
+                   INFreIN(icol,ilev)  = 1.0_r8                                ! 1,ice nucleation occur
+                   INhet(icol,ilev)    = (niimm(icol,ilev) + nidep(icol,ilev)) ! #/m3, nimey not in cirrus
+                   INhom(icol,ilev)    = nihf(icol,ilev)                       ! #/m3
+                   if (INhom(icol,ilev) > 1e3_r8)   then                       ! > 1/L
+                      INFrehom(icol,ilev)=1.0_r8                               ! 1, hom freezing occur
                    endif
 
                    ! exclude  no ice nucleaton
-                   if ((INFrehom(i,k) < 0.5_r8) .and. (INhet(i,k) < 1.0_r8))   then
-                      INnso4(i,k) =0.0_r8
-                      INnbc(i,k)  =0.0_r8
-                      INndust(i,k)=0.0_r8
-                      INondust(i,k)=0.0_r8
-                      INFreIN(i,k)=0.0_r8
-                      INhet(i,k) = 0.0_r8
-                      INhom(i,k) = 0.0_r8
-                      INFrehom(i,k)=0.0_r8
-                      wice(i,k) = 0.0_r8
-                      weff(i,k) = 0.0_r8
-                      fhom(i,k) = 0.0_r8
+                   if ((INFrehom(icol,ilev) < 0.5_r8) .and. (INhet(icol,ilev) < 1.0_r8))   then
+                      INnso4(icol,ilev)   = 0.0_r8
+                      INnbc(icol,ilev)    = 0.0_r8
+                      INndust(icol,ilev)  = 0.0_r8
+                      INondust(icol,ilev) = 0.0_r8
+                      INFreIN(icol,ilev)  = 0.0_r8
+                      INhet(icol,ilev)    = 0.0_r8
+                      INhom(icol,ilev)    = 0.0_r8
+                      INFrehom(icol,ilev) = 0.0_r8
+                      wice(icol,ilev)     = 0.0_r8
+                      weff(icol,ilev)     = 0.0_r8
+                      fhom(icol,ilev)     = 0.0_r8
                    endif
                 end if
 
