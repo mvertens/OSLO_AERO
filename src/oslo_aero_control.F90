@@ -24,7 +24,7 @@ module oslo_aero_control
   integer, parameter, public   :: dir_string_length=256
 
   ! Public Namelist variables:
-  logical, public   :: use_aerocom = .false. ! If true, turn on aerocom output
+  logical, public, protected :: use_aerocom = .false. ! If true, turn on aerocom output
 
   ! Private Namelist variables:
   real(r8)          :: volc_fraction_coarse = 0.0_r8  !Fraction of volcanic aerosols in coarse mode
