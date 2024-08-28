@@ -116,10 +116,10 @@ contains
     real(r8), intent(in) :: rhob(0:nmodes) !density of background mode
 
     ! local variables
-    real(r8), dimension(numberOfCoagulationReceivers, numberOfCoagulatingModes, nBinsTab) :: K12 = 0.0_r8  !Coagulation coefficient (m3/s)
-    real(r8), dimension(numberOfAddCoagReceivers,nBinsTab) :: CoagCoeffModeAdd = 0.0_r8  !Coagulation coefficient mode 1 (m3/s)
-    real(r8), dimension(numberOfCoagulatingModes,nBinsTab) :: K12Cl = 0.0_r8  !Coagulation coefficient (m3/s)
-    real(r8), dimension(nBinsTab) :: coagulationCoefficient
+    real(r8) :: K12(numberOfCoagulationReceivers, numberOfCoagulatingModes, nBinsTab) = 0.0_r8  !Coagulation coefficient (m3/s)
+    real(r8) :: CoagCoeffModeAdd(numberOfAddCoagReceivers,nBinsTab) = 0.0_r8  !Coagulation coefficient mode 1 (m3/s)
+    real(r8) :: K12Cl(numberOfCoagulatingModes,nBinsTab) = 0.0_r8  !Coagulation coefficient (m3/s)
+    real(r8) :: coagulationCoefficient(nBinsTab)
     !
     integer :: aMode
     integer :: modeIndex
@@ -363,7 +363,7 @@ contains
     real(r8), intent(in)  :: modeRadius      ! [m] (?)
     real(r8), intent(in)  :: modeDensity     ! [kg/m3] densityi
     real(r8), intent(in)  :: receiverDensity ! [kg/m3] density of receiver
-    real(r8), intent(out), dimension(:)  :: coagulationCoefficient ![m3/s]
+    real(r8), intent(out) :: coagulationCoefficient(:) ![m3/s]
 
     integer  :: ibin  !Counter for look-up tables
     real(r8) :: diff1 ![m2/s] diffusivity

@@ -1484,7 +1484,7 @@ contains
           deltah=deltah_km(icol,ilev)
 
           ! Modal and total mass concentrations for clean and dry aerosol,
-          ! imode.e. not including coag./cond./Aq. BC,OC,SO4 or condensed water.
+          ! i.e. not including coag./cond./Aq. BC,OC,SO4 or condensed water.
           ! Units: ug/m3 for concentrations and mg/m2 (--> kg/m2 later) for mass loading.
           do imode=0,nmodes
              ck(icol,ilev,imode)=cknorm(icol,ilev,imode)*Nnatk(icol,ilev,imode)

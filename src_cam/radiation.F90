@@ -1369,19 +1369,37 @@ subroutine radiation_tend( &
 
             if (active_calls(icall)) then
 
-               ! OSLO_AERO BEGIN
                ! update the concentrations in the RRTMG state object
                call  rrtmg_state_update( state, pbuf, icall, r_state)
 
-               ! Note that aer_lw_abs is calculated in the call to oslo_aero_optical_params_calc
+               ! OSLO_AERO BEGIN
+               ! Note that aer_lw_abs is set to zero below
+               call rad_rrtmg_lw(                                             &
+                    lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,         &
+                    aer_lw_abs*0.0_r8, cldfprime, c_cld_lw_abs, qrl, rd%qrlc, &
+                    flns, flnt, rd%flnsc, rd%flntc, cam_out%flwds,            &
+                    rd%flut, rd%flutc, fnl, fcnl, rd%fldsc,                   &
+                    lu, ld)
+
+               call outfld('FLNT_DRF',flnt(:)    , pcols, lchnk)
+               call outfld('FLNTCDRF',rd%flntc(:), pcols, lchnk)
                ! OSLO_AERO_END
 
+               ! Note that aer_lw_abs which is an input to
+               ! rad_rrtmg_lw is calculated in the call to
+               ! oslo_aero_optical_params_calc above
                call rad_rrtmg_lw( &
                   lchnk, ncol, num_rrtmg_levs, r_state, state%pmid,  &
                   aer_lw_abs, cldfprime, c_cld_lw_abs, qrl, rd%qrlc, &
                   flns, flnt, rd%flnsc, rd%flntc, cam_out%flwds,     &
                   rd%flut, rd%flutc, fnl, fcnl, rd%fldsc,            &
                   lu, ld)
+
+               ! OSLO_AERO BEGIN
+               ! Note that FLUS is only added to the diagnostics in camnor physics
+               ftem_1d(1:ncol) = cam_out%flwds(1:ncol) - flns(1:ncol)
+               call outfld('FLUS    ',ftem_1d ,pcols,lchnk)
+               ! OSLO_AERO END
 
                !  Output fluxes at 200 mb
                call vertinterp(ncol, pcols, pverp, state%pint, 20000._r8, fnl,  rd%fln200)
