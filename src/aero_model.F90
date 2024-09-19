@@ -60,6 +60,7 @@ module aero_model
   use oslo_aero_aerodry_tables, only: initdry
   use oslo_aero_aerocom_tables, only: initaeropt
   use oslo_aero_logn_tables,    only: initlogn
+  use atm_import_export,        only: dms_from_ocn
 
   implicit none
   private
@@ -595,9 +596,12 @@ contains
     endif
 
     ! Pick up correct DMS emissions (replace values from file if requested)
-    call oslo_aero_dms_emis(state%ncol, state%lchnk, &
-         state%u(:,pver), state%v(:,pver), state%zm(:,pver), &
-         cam_in%ocnfrac, cam_in%icefrac, cam_in%sst, cam_in%fdms, cam_in%cflx)
+    ! If DMS is sent from the ocean then cflx is updated in the nuopc cap
+    if (.not. dms_from_ocn) then
+       call oslo_aero_dms_emis(state%ncol, state%lchnk, &
+            state%u(:,pver), state%v(:,pver), state%zm(:,pver), &
+            cam_in%ocnfrac, cam_in%icefrac, cam_in%sst, cam_in%cflx)
+    end if
 
   end subroutine aero_model_emissions
 

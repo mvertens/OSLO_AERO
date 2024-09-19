@@ -24,6 +24,7 @@ module oslo_aero_ocean
   use physics_types,  only : physics_state
   use physics_buffer, only : physics_buffer_desc
   use tracer_data,    only : trfld, trfile, trcdata_init, advance_trcdata
+  use atm_import_export, only : brf_from_ocn
   !
   use oslo_aero_control, only: oslo_aero_getopts
 
@@ -48,7 +49,6 @@ module oslo_aero_ocean
 
   ! Private interfaces
   private:: oslo_aero_ocean_getnl
-
 
   !  These variables are settable via the namelist (with longer names)
   !  For reading concentration file
@@ -207,7 +207,10 @@ contains
   endsubroutine oslo_aero_ocean_adv
 
   !===============================================================================
-  subroutine oslo_aero_dms_emis(ncol, lchnk, u, v, zm, ocnfrc, icefrc, sst, fdms, cflx)
+  subroutine oslo_aero_dms_emis(ncol, lchnk, u, v, zm, ocnfrc, icefrc, sst, cflx)
+
+    ! Compute dms emissions from ocean
+    ! Called from aero_model_emissions
 
     ! arguments
     integer  , intent(in)    :: ncol  ![nbr] number of columns in use
@@ -218,12 +221,10 @@ contains
     real(r8) , intent(in)    :: ocnfrc(pcols)
     real(r8) , intent(in)    :: icefrc(pcols)
     real(r8) , intent(in)    :: sst(pcols)
-    real(r8) , intent(in)    :: fdms(pcols)
     real(r8) , intent(inout) :: cflx(pcols,pcnst)
 
     ! local variables
     real(r8) :: u10m(pcols)     ! [m/s]
-    real(r8) :: rk600(pcols)    ! ocean/atmos. DMS exchange factor [cm/hr]
     real(r8) :: flux(pcols)     ! Local flux array: DMS emission rate [kg m-2 s-1]
     real(r8) :: odms(pcols)     ! Ocean dms concentration [nmol/L] from file
     real(r8) :: open_ocn(pcols) ! Open Ocean
@@ -232,11 +233,9 @@ contains
     real(r8) :: kwdms(pcols)
     real(r8), parameter :: z0= 0.0001_r8     ! [m] roughness length over ocean
     real(r8), parameter :: Xconvxa= 6.97e-07 ! Wanninkhof's a=0.251 converted to ms-1/(ms-1)^2
-    logical , parameter :: method_oslo   = .false.
-    logical , parameter :: method_hamocc = .true.
 
+    ! use interpolated data if appropriate
     if (dms_source=='lana' .or. dms_source=='kettle') then
-
        ! if concentration file - obtain dms data from file
        flux(:) = 0._r8
        odms(:) = 0._r8
@@ -246,31 +245,18 @@ contains
        open_ocn(:ncol) = ocnfrc(:ncol) * (1._r8-icefrc(:ncol))
 
        !start with midpoint wind speed
-       u10m(:ncol)=sqrt(u(:ncol)**2 + v(:ncol)**2)
+       u10m(:ncol) = sqrt(u(:ncol)**2 + v(:ncol)**2)
 
-       if (method_oslo) then
-          ! move the winds to 10m high from the midpoint of the gridbox:
-          u10m (:ncol) = u10m(:ncol)*log(10._r8/z0)/log(zm(:ncol)/z0)
-          rk600(:ncol) = (0.222_r8*(u10m(:ncol)*u10m(:ncol))) + (0.333_r8*u10m(:ncol))        ! [cm/hr]
-          flux (:ncol) = 2.778e-15*cnst_mw(pndx_fdms)*rk600(:ncol)*open_ocn(:ncol)*odms(:ncol) ! [kg m-2 s-1]
-       else if (method_hamocc) then
-          t(:ncol)     = sst(:ncol)-273.15_r8
-          u10m (:ncol) = u10m(:ncol)*log(10._r8/z0)/log(zm(:ncol)/z0)
-          scdms(:ncol) = 2855.7+  (-177.63 + (6.0438 + (-0.11645 + 0.00094743*t(:ncol))*t(:ncol))*t(:ncol))*t(:ncol)
-          kwdms(:ncol) = open_ocn(:ncol) * Xconvxa *u10m(:ncol)**2*(660./scdms(:ncol))**0.5
-          flux (:ncol) = 62.13*kwdms(:ncol)*1e-9*odms(:ncol)
-       endif
-
-       cflx(:ncol,pndx_fdms) = flux(:ncol)
-
+       ! method_hamocc is the only one supported
+       t(:ncol)     = sst(:ncol)-273.15_r8
+       u10m (:ncol) = u10m(:ncol)*log(10._r8/z0)/log(zm(:ncol)/z0)
+       scdms(:ncol) = 2855.7+  (-177.63 + (6.0438 + (-0.11645 + 0.00094743*t(:ncol))*t(:ncol))*t(:ncol))*t(:ncol)
+       kwdms(:ncol) = open_ocn(:ncol) * Xconvxa *u10m(:ncol)**2*(660./scdms(:ncol))**0.5
+       flux (:ncol) = 62.13*kwdms(:ncol)*1e-9*odms(:ncol)
        call outfld('odms', odms(:ncol), ncol, lchnk)
 
-    elseif (dms_source=='ocean_flux') then
-
-       ! if ocean flux
-       cflx(:ncol,pndx_fdms) = fdms(:ncol)
-
-    endif
+       cflx(:ncol,pndx_fdms) = flux(:ncol)
+    end if
 
     ! IF EMISSION FILE
     ! return without changing cflx
