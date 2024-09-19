@@ -24,7 +24,6 @@ module oslo_aero_ocean
   use physics_types,  only : physics_state
   use physics_buffer, only : physics_buffer_desc
   use tracer_data,    only : trfld, trfile, trcdata_init, advance_trcdata
-  use atm_import_export, only : brf_from_ocn
   !
   use oslo_aero_control, only: oslo_aero_getopts
 
