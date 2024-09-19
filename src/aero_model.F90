@@ -581,7 +581,7 @@ contains
 
   !=============================================================================
   subroutine aero_model_emissions( state, cam_in )
-     use phys_control, only: dms_from_ocn
+     use oslo_aero_control, only: dms_from_ocn
 
     ! Arguments:
     type(physics_state), intent(in)    :: state   ! Physics state variables
