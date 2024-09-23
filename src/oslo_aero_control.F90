@@ -10,13 +10,17 @@ module oslo_aero_control
   use namelist_utils,    only: find_group_name
   use cam_logfile,       only: iulog
   use cam_abortutils,    only: endrun
-  use atm_import_export, only: dms_from_ocn
+  use atm_import_export, only: drv_dms_from_ocn => dms_from_ocn
 
   implicit none
   private
 
   public :: oslo_aero_ctl_readnl ! read namelist from file
   public :: oslo_aero_getopts    ! generic query method
+
+  ! Public module data
+  ! Take DMS from ocean?
+  logical, public, protected :: dms_from_ocn = .false.
 
   ! Private module data
   character(len=16), parameter :: unset_str = 'UNSET'
@@ -102,6 +106,9 @@ contains
     if (ierr /= mpi_success) call endrun(subname//" mpi_bcast: ocean_filename")
     call mpi_bcast(ocean_filepath, len(ocean_filepath), mpi_character, mstrid, mpicom, ierr)
     if (ierr /= mpi_success) call endrun(subname//" mpi_bcast: ocean_filepath")
+
+    ! Set this from the driver namelist (always read first)
+    dms_from_ocn = drv_dms_from_ocn
 
     ! Reset dms_source if ocean is sending dms to atm
     if (dms_from_ocn) then
