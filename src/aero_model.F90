@@ -78,8 +78,10 @@ module aero_model
 
   ! Misc private data
   integer :: pblh_idx= 0
-  integer :: ndx_h2so4, ndx_soa_lv, ndx_soa_sv ! for surf_area_dens
-  logical :: convproc_do_aer
+  integer :: ndx_h2so4 = -1  ! for surf_area_dens
+  integer :: ndx_soa_lv = -1 ! for surf_area_dens
+  integer :: ndx_soa_sv = -1 ! for surf_area_dens
+  logical :: convproc_do_aer = .false.
 
   ! Namelist variables
   real(r8) :: sol_facti_cloud_borne   = 1._r8
@@ -579,6 +581,7 @@ contains
 
   !=============================================================================
   subroutine aero_model_emissions( state, cam_in )
+     use oslo_aero_control, only: dms_from_ocn
 
     ! Arguments:
     type(physics_state), intent(in)    :: state   ! Physics state variables
@@ -592,12 +595,15 @@ contains
        call oslo_aero_seasalt_emis(state%ncol, state%lchnk, &
             state%u(:,pver), state%v(:,pver), state%zm(:,pver), &
             cam_in%ocnfrac, cam_in%icefrac, cam_in%sst, cam_in%cflx)
-    endif
+    end if
 
     ! Pick up correct DMS emissions (replace values from file if requested)
-    call oslo_aero_dms_emis(state%ncol, state%lchnk, &
-         state%u(:,pver), state%v(:,pver), state%zm(:,pver), &
-         cam_in%ocnfrac, cam_in%icefrac, cam_in%sst, cam_in%fdms, cam_in%cflx)
+    ! If DMS is sent from the ocean then cflx is updated in the nuopc cap
+    if (.not. dms_from_ocn) then
+       call oslo_aero_dms_emis(state%ncol, state%lchnk, &
+            state%u(:,pver), state%v(:,pver), state%zm(:,pver), &
+            cam_in%ocnfrac, cam_in%icefrac, cam_in%sst, cam_in%cflx)
+    end if
 
   end subroutine aero_model_emissions
 
