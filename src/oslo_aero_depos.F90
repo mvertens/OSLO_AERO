@@ -30,6 +30,7 @@ module oslo_aero_depos
   use oslo_aero_share,         only: getCloudTracerIndex, GetCloudTracerIndexDirect, getCloudTracerName, qqcw_get_field
   use oslo_aero_share,         only: l_bc_ax, l_bc_ni, l_bc_ai, l_bc_a, l_bc_ac
   use oslo_aero_share,         only: l_bc_n, l_om_ni, l_om_ai, l_om_ac, l_dst_a2, l_dst_a3
+  use oslo_aero_share,         only: l_ss_a2, l_ss_a3, l_so4_a2
   use oslo_aero_dust_sediment, only: oslo_aero_dust_sediment_tend, oslo_aero_dust_sediment_vel
 
   implicit none
@@ -680,6 +681,12 @@ contains
              else
                 jnv = 0  !==> below cloud scavenging coefficients are zero (see above)
              endif
+
+             ! Increase scavenging efficiency for large soluble particles.
+             if ((lphase==1).and.((mm==l_ss_a2) .or. (mm==l_ss_a3) .or. (mm==l_so4_a2))) then
+                sol_factic = 1.0_r8
+                f_act_conv = 1.0_r8
+             end if
 
              if ((lphase == 1) .and. (lspec <= num_tracers_in_mode(imode))) then
                 ptend%lq(itrac) = .TRUE.
