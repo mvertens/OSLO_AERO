@@ -582,10 +582,15 @@ contains
   !=============================================================================
   subroutine aero_model_emissions( state, cam_in )
      use oslo_aero_control, only: dms_from_ocn
+     use constituents     , only: cnst_get_ind, sflxnam
 
     ! Arguments:
     type(physics_state), intent(in)    :: state   ! Physics state variables
     type(cam_in_t),      intent(inout) :: cam_in  ! import state
+
+    ! Local variables
+    integer :: icol
+    integer :: pndx_fdms  ! DMS surface flux physics index
 
     if (dust_active) then
        call oslo_aero_dust_emis( state%lchnk, state%ncol, cam_in%dstflx, cam_in%cflx)
@@ -598,11 +603,16 @@ contains
     end if
 
     ! Pick up correct DMS emissions (replace values from file if requested)
-    ! If DMS is sent from the ocean then cflx is updated in the nuopc cap
     if (.not. dms_from_ocn) then
        call oslo_aero_dms_emis(state%ncol, state%lchnk, &
             state%u(:,pver), state%v(:,pver), state%zm(:,pver), &
             cam_in%ocnfrac, cam_in%icefrac, cam_in%sst, cam_in%cflx)
+    else
+       call cnst_get_ind('DMS', pndx_fdms, abort=.true.)
+       do icol = 1,state%ncol
+          cam_in%cflx(icol,pndx_fdms) = cam_in%fdms(icol)
+          call outfld('odms', cam_in%fdms(:state%ncol), state%ncol, state%lchnk)
+       end do
     end if
 
   end subroutine aero_model_emissions
