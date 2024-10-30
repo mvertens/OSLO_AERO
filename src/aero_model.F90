@@ -603,6 +603,7 @@ contains
     end if
 
     ! Pick up correct DMS emissions (replace values from file if requested)
+    ! Update cam_in%clfx for pndx_dms when dms is read in or obtained from the ocean
     if (.not. dms_from_ocn) then
        call oslo_aero_dms_emis(state%ncol, state%lchnk, &
             state%u(:,pver), state%v(:,pver), state%zm(:,pver), &
@@ -611,6 +612,8 @@ contains
        call cnst_get_ind('DMS', pndx_fdms, abort=.true.)
        do icol = 1,state%ncol
           cam_in%cflx(icol,pndx_fdms) = cam_in%fdms(icol)
+          ! Norw that addfld call for 'odms' is in the routine
+          ! oslo_aero_ocean_init in module oslo_aero_ocean.F90
           call outfld('odms', cam_in%fdms(:state%ncol), state%ncol, state%lchnk)
        end do
     end if
