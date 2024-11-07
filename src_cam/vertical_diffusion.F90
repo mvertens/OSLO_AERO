@@ -109,7 +109,6 @@ type(vdiff_selector) :: fieldlist_dry                ! Logical switches for dry 
 type(vdiff_selector) :: fieldlist_molec              ! Logical switches for molecular diffusion
 integer              :: tke_idx, kvh_idx, kvm_idx    ! TKE and eddy diffusivity indices for fields in the physics buffer
 integer              :: kvt_idx                      ! Index for kinematic molecular conductivity
-integer              :: turbtype_idx, smaw_idx       ! Turbulence type and instability functions
 integer              :: tauresx_idx, tauresy_idx     ! Redisual stress for implicit surface stress
 
 character(len=fieldname_len) :: vdiffnam(pcnst)      ! Names of vertical diffusion tendencies
@@ -232,8 +231,6 @@ subroutine vd_register()
   call pbuf_add_field('kvm',      'global', dtype_r8, (/pcols, pverp/), kvm_idx )
   call pbuf_add_field('pblh',     'global', dtype_r8, (/pcols/),        pblh_idx)
   call pbuf_add_field('tke',      'global', dtype_r8, (/pcols, pverp/), tke_idx)
-  call pbuf_add_field('turbtype', 'global', dtype_i4, (/pcols, pverp/), turbtype_idx)
-  call pbuf_add_field('smaw',     'global', dtype_r8, (/pcols, pverp/), smaw_idx)
 
   call pbuf_add_field('tauresx',  'global', dtype_r8, (/pcols/),        tauresx_idx)
   call pbuf_add_field('tauresy',  'global', dtype_r8, (/pcols/),        tauresy_idx)
@@ -432,7 +429,7 @@ subroutine vertical_diffusion_init(pbuf2d)
      do_pbl_diags = .true.
      call init_hb_diff(gravit, cpair, ntop_eddy, nbot_eddy, pref_mid, karman, eddy_scheme)
      !
-     ! run HB scheme where CLUBB is not active when running cam_dev or cam6 physics
+     ! run HB scheme where CLUBB is not active when running cam7 or cam6 physics
      ! else init_hb_diff is called just for diagnostic purposes
      !
      if (do_hb_above_clubb) then
@@ -652,8 +649,6 @@ subroutine vertical_diffusion_init(pbuf2d)
   ! Initialization of some pbuf fields
   if (is_first_step()) then
      ! Initialization of pbuf fields tke, kvh, kvm are done in phys_inidat
-     call pbuf_set_field(pbuf2d, turbtype_idx, 0    )
-     call pbuf_set_field(pbuf2d, smaw_idx,     0.0_r8)
      call pbuf_set_field(pbuf2d, tauresx_idx,  0.0_r8)
      call pbuf_set_field(pbuf2d, tauresy_idx,  0.0_r8)
      if (trim(shallow_scheme) == 'UNICON') then
@@ -760,9 +755,6 @@ subroutine vertical_diffusion_tend( &
 
   real(r8) :: dtk(pcols,pver)                                     ! T tendency from KE dissipation
   real(r8), pointer   :: tke(:,:)                                 ! Turbulent kinetic energy [ m2/s2 ]
-  integer(i4),pointer :: turbtype(:,:)                            ! Turbulent interface types [ no unit ]
-  real(r8), pointer   :: smaw(:,:)                                ! Normalized Galperin instability function
-  ! ( 0<= <=4.964 and 1 at neutral )
 
   real(r8), pointer   :: qtl_flx(:,:)                             ! overbar(w'qtl') where qtl = qv + ql
   real(r8), pointer   :: qti_flx(:,:)                             ! overbar(w'qti') where qti = qv + qi
@@ -898,7 +890,7 @@ subroutine vertical_diffusion_tend( &
   ! ----------------------- !
 
   ! Assume 'wet' mixing ratios in diffusion code.
-  call set_dry_to_wet(state)
+  call set_dry_to_wet(state, convert_cnst_type='dry')
 
   rztodt = 1._r8 / ztodt
   lchnk  = state%lchnk
@@ -909,7 +901,6 @@ subroutine vertical_diffusion_tend( &
   call pbuf_get_field(pbuf, tpert_idx,    tpert)
   call pbuf_get_field(pbuf, qpert_idx,    qpert)
   call pbuf_get_field(pbuf, pblh_idx,     pblh)
-  call pbuf_get_field(pbuf, turbtype_idx, turbtype)
 
   ! Interpolate temperature to interfaces.
   do k = 2, pver
@@ -1002,7 +993,6 @@ subroutine vertical_diffusion_tend( &
   !----------------------------------------------------------------------- !
   call pbuf_get_field(pbuf, kvm_idx,  kvm_in)
   call pbuf_get_field(pbuf, kvh_idx,  kvh_in)
-  call pbuf_get_field(pbuf, smaw_idx, smaw)
   call pbuf_get_field(pbuf, tke_idx,  tke)
 
   ! Get potential temperature.
@@ -1015,7 +1005,7 @@ subroutine vertical_diffusion_tend( &
           ztodt, p, tint, rhoi, cldn, wstarent, &
           kvm_in, kvh_in, ksrftms, dragblj, tauresx, tauresy, &
           rrho, ustar, pblh, kvm, kvh, kvq, cgh, cgs, tpert, qpert, &
-          tke, sprod, sfi, turbtype, smaw)
+          tke, sprod, sfi)
 
      ! The diag_TKE scheme does not calculate the Monin-Obukhov length, which is used in dry deposition calculations.
      ! Use the routines from pbl_utils to accomplish this. Assumes ustar and rrho have been set.
@@ -1044,7 +1034,7 @@ subroutine vertical_diffusion_tend( &
 
   case ( 'CLUBB_SGS' )
     !
-    ! run HB scheme where CLUBB is not active when running cam_dev
+    ! run HB scheme where CLUBB is not active when running cam7
     !
     if (do_hb_above_clubb) then
       call compute_hb_free_atm_diff( ncol          , &
@@ -1181,7 +1171,7 @@ subroutine vertical_diffusion_tend( &
      tauy = 0._r8
      shflux = 0._r8
      cflux(:,1) = 0._r8
-     if (cam_physpkg_is("cam_dev")) then
+     if (cam_physpkg_is("cam7")) then
        ! surface fluxes applied in clubb emissions module
        cflux(:,2:) = 0._r8
      else
@@ -1363,7 +1353,7 @@ subroutine vertical_diffusion_tend( &
      endif
   end do
   ! convert wet mmr back to dry before conservation check
-  call set_wet_to_dry(state)
+  call set_wet_to_dry(state, convert_cnst_type='dry')
 
   if (.not. do_pbl_diags) then
      slten(:ncol,:)         = ( sl(:ncol,:) - sl_prePBL(:ncol,:) ) * rztodt
@@ -1533,7 +1523,7 @@ subroutine vertical_diffusion_tend( &
   call outfld( 'KVT'          , kvt,                       pcols, lchnk )
   call outfld( 'KVM'          , kvm,                       pcols, lchnk )
   call outfld( 'CGS'          , cgs,                       pcols, lchnk )
-  dtk(:ncol,:) = dtk(:ncol,:) / cpair              ! Normalize heating for history
+  dtk(:ncol,:) = dtk(:ncol,:) / cpair / ztodt      ! Normalize heating for history
   call outfld( 'DTVKE'        , dtk,                       pcols, lchnk )
   dtk(:ncol,:) = ptend%s(:ncol,:) / cpair          ! Normalize heating for history using dtk
   call outfld( 'DTV'          , dtk,                       pcols, lchnk )
