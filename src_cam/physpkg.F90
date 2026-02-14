@@ -105,7 +105,6 @@ module physpkg
   real(r8) :: global_column_burden_after_tphysac(ncnst)
   real(r8) :: global_column_burden_init(ncnst)
   real(r8) :: global_sflx(ncnst)
-  real(r8) :: global_sum_TM(ncnst) = 0._r8
   real(r8) :: global_sum_SF(ncnst) = 0._r8
   real(r8) :: epsilon = 1.e-14
   logical  :: first_call = .true.
@@ -1377,7 +1376,8 @@ contains
           call cam_esmf_global_sum2(total_column_burden_init(m), global_column_burden_init(m), rc=rc)
           call chkrc(rc,__LINE__,u_FILE_u)
           if (masterproc) then
-             write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM init        (g)',get_nstep(),c_names(m),global_column_burden_init(m)
+             write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM init        (Pg)',get_nstep(),c_names(m),&
+                  global_column_burden_init(m)/1.e12_r8
           end if
        end do
        first_call = .false.
@@ -1441,19 +1441,20 @@ contains
        call cam_esmf_global_sum2(total_sflx(m), global_sflx(m), rc=rc)
        call chkrc(rc,__LINE__,u_FILE_u)
        !
-       global_sum_TM(m) = global_sum_TM(m) + global_column_burden_after_tphysac(m)
        global_sum_SF(m) = global_sum_SF(m) + global_sflx(m)
     end do
 
     if (masterproc) then
        do m = 1,ncnst
-          write(iulog,*)
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM offset      (g)', &
-               get_nstep(),c_names(m),global_sum_TM(m) - global_column_burden_init(m)
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global SF             (g)', &
-               get_nstep(),c_names(m),global_sum_SF(m)
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM offset - SF (g)', &
-               get_nstep(),c_names(m),global_sum_TM(m) - global_column_burden_init(m) - global_sum_SF(m)
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM offset      (Pg)', &
+               get_nstep(), c_names(m),  &
+               (global_column_burden_after_tphysac(m) - global_column_burden_init(m))/1.e12_r8
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global SF             (Pg)', &
+               get_nstep(), c_names(m), &
+               global_sum_SF(m)/1.e12_r8
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM offset - SF (Pg)', &
+               get_nstep(), c_names(m), &
+               (global_column_burden_after_tphysac(m) - global_column_burden_init(m) - global_sum_SF(m))/1.e12_r8
 
           ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before - tphysbc_after  at nstep ', &
           !      get_nstep(),c_names(m),&
