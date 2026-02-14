@@ -103,9 +103,12 @@ module physpkg
   real(r8) :: global_column_burden_after_tphysbc(ncnst)
   real(r8) :: global_column_burden_before_tphysac(ncnst)
   real(r8) :: global_column_burden_after_tphysac(ncnst)
+  real(r8) :: global_column_burden_init(ncnst)
   real(r8) :: global_sflx(ncnst)
-  real(r8) :: global_sum_TM_delta(ncnst) = 0._r8
+  real(r8) :: global_sum_TM(ncnst) = 0._r8
   real(r8) :: global_sum_SF(ncnst) = 0._r8
+  real(r8) :: epsilon = 1.e-14
+  logical  :: first_call = .true.
 
   character(len=*),parameter :: u_FILE_u = __FILE__
 
@@ -1237,13 +1240,12 @@ contains
           !      get_nstep(),c_names(m),global_column_burden_before_tphysbc(m)
           ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_after                   at nstep ', &
           !      get_nstep(),c_names(m),global_column_burden_after_tphysbc(m)
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_before - tphysac_after  at nstep ', &
-               get_nstep(),c_names(m),&
-               (global_column_burden_before_tphysbc(m) - global_column_burden_after_tphysac(m))/global_column_burden_before_tphysbc(m)
-
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_after  - tphysbc_before at nstep ', &
-               get_nstep(),c_names(m),&
-               (global_column_burden_after_tphysbc(m) - global_column_burden_before_tphysbc(m))/global_column_burden_after_tphysbc(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_before - tphysac_after  at nstep ', &
+          !      get_nstep(),c_names(m),&
+          !      (global_column_burden_before_tphysbc(m) - global_column_burden_after_tphysac(m))/global_column_burden_before_tphysbc(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_after  - tphysbc_before at nstep ', &
+          !      get_nstep(),c_names(m),&
+          !      (global_column_burden_after_tphysbc(m) - global_column_burden_before_tphysbc(m))/global_column_burden_after_tphysbc(m)
        end do
     end if
 
@@ -1310,6 +1312,7 @@ contains
     integer, parameter :: ncnst = 4
     real(r8) :: total_column_burden_before_tphysac(ncnst)
     real(r8) :: total_column_burden_after_tphysac(ncnst)
+    real(r8) :: total_column_burden_init(ncnst)
     real(r8) :: total_sflx(ncnst)
     integer  :: m,mm,icol,rc,nsize,ncols
     real(r8), allocatable :: area(:)
@@ -1357,6 +1360,29 @@ contains
     nsize = size(model_areas)
     allocate(area(nsize))
 
+    if (first_call) then
+       total_column_burden_init(:) = 0._r8
+       do m = 1,ncnst
+          mm = c_i(m)
+          do c = begchunk, endchunk
+             ncols = get_ncols_p(c)
+             call get_area_all_p(c, ncols, area)
+             do icol = 1,phys_state(c)%ncol
+                total_column_burden_init(m) = total_column_burden_init(m) + &
+                     sum(phys_state(c)%q(icol,:,mm) * phys_state(c)%pdeldry(icol,:), dim=1) * rga * area(icol) * SHR_CONST_REARTH**2
+             end do
+          end do
+       end do
+       do m = 1,ncnst
+          call cam_esmf_global_sum2(total_column_burden_init(m), global_column_burden_init(m), rc=rc)
+          call chkrc(rc,__LINE__,u_FILE_u)
+          if (masterproc) then
+             write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM init        (g)',get_nstep(),c_names(m),global_column_burden_init(m)
+          end if
+       end do
+       first_call = .false.
+    end if
+
     total_column_burden_before_tphysac(:) = 0._r8
     do m = 1,ncnst
        mm = c_i(m)
@@ -1369,7 +1395,6 @@ contains
           end do
        end do
     end do
-
     do m = 1,ncnst
        call cam_esmf_global_sum2(total_column_burden_before_tphysac(m), global_column_burden_before_tphysac(m), rc=rc)
        call chkrc(rc,__LINE__,u_FILE_u)
@@ -1405,7 +1430,7 @@ contains
           do icol = 1,phys_state(c)%ncol
              total_column_burden_after_tphysac(m) = total_column_burden_after_tphysac(m) + &
                   sum(phys_state(c)%q(icol,:,mm) * phys_state(c)%pdeldry(icol,:), dim=1) * rga * area(icol) * SHR_CONST_REARTH**2
-             total_sflx(m) = total_sflx(m) + cam_in(c)%cflx(icol,mm)*ztodt * area(icol) * SHR_CONST_REARTH**2
+             total_sflx(m) = total_sflx(m) + cam_in(c)%cflx(icol,mm) * ztodt * area(icol) * SHR_CONST_REARTH**2
           end do
        end do
     end do
@@ -1415,44 +1440,36 @@ contains
        call chkrc(rc,__LINE__,u_FILE_u)
        call cam_esmf_global_sum2(total_sflx(m), global_sflx(m), rc=rc)
        call chkrc(rc,__LINE__,u_FILE_u)
-       global_sum_TM_delta(m) = global_sum_TM_delta(m) + global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m)
-       global_sum_SF(m) = global_sum_SF(m) +  global_sflx(m)
+       !
+       global_sum_TM(m) = global_sum_TM(m) + global_column_burden_after_tphysac(m)
+       global_sum_SF(m) = global_sum_SF(m) + global_sflx(m)
     end do
 
     if (masterproc) then
        do m = 1,ncnst
+          write(iulog,*)
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM offset      (g)', &
+               get_nstep(),c_names(m),global_sum_TM(m) - global_column_burden_init(m)
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global SF             (g)', &
+               get_nstep(),c_names(m),global_sum_SF(m)
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global TM offset - SF (g)', &
+               get_nstep(),c_names(m),global_sum_TM(m) - global_column_burden_init(m) - global_sum_SF(m)
+
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before - tphysbc_after  at nstep ', &
+          !      get_nstep(),c_names(m),&
+          !      (global_column_burden_before_tphysac(m) - global_column_burden_after_tphysbc(m))/global_column_burden_before_tphysac(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_after  - tphysac_before at nstep ', &
+          !      get_nstep(),c_names(m),&
+          !      (global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m))/global_column_burden_after_tphysac(m)
           ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before                  at nstep ', &
           !      get_nstep(),c_names(m),global_column_burden_before_tphysac(m)
           ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_after                   at nstep ', &
           !      get_nstep(),c_names(m),global_column_burden_after_tphysac(m)
-
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before - tphysbc_after  at nstep ', &
-               get_nstep(),c_names(m),&
-               (global_column_burden_before_tphysac(m) - global_column_burden_after_tphysbc(m))/global_column_burden_before_tphysbc(m)
-
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_after  - tphysac_before at nstep ', &
-               get_nstep(),c_names(m),&
-               (global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m))/global_column_burden_after_tphysac(m)
-
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before                  at nstep ', &
-               get_nstep(),c_names(m),global_column_burden_before_tphysac(m)
-
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_after                   at nstep ', &
-               get_nstep(),c_names(m),global_column_burden_after_tphysac(m)
-
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' SF tphysac_after                   at nstep ', &
-               get_nstep(),c_names(m),global_sflx(m)
-
-          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' delta TM - SF                      at nstep ', &
-               get_nstep(),c_names(m),&
-               (global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m)) - global_sflx(m)
-
-          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global sum delta TM                at nstep ', &
-          !      get_nstep(),c_names(m), global_sum_TM_delta(m)
-          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global sum delta SF                at nstep ', &
-          !      get_nstep(),c_names(m), global_sum_SF(m)
-          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global sum delta TM - SF           at nstep ', &
-          !      get_nstep(),c_names(m),global_sum_TM_delta(m) - global_sum_SF(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' SF tphysac_after                   at nstep ', &
+          !      get_nstep(),c_names(m),global_sflx(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' delta TM - SF                      at nstep ', &
+          !      get_nstep(),c_names(m),&
+          !      (global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m)) - global_sflx(m)
        end do
     end if
 
