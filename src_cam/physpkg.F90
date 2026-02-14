@@ -15,7 +15,7 @@ module physpkg
        physics_ptend, physics_tend_init, physics_update,    &
        physics_type_alloc, physics_ptend_dealloc,&
        physics_state_alloc, physics_state_dealloc, physics_tend_alloc, physics_tend_dealloc
-  use phys_grid,        only: get_ncols_p
+  use phys_grid,        only: get_ncols_p, get_area_all_p
   use phys_gmean,       only: gmean_mass
   use ppgrid,           only: begchunk, endchunk, pcols, pver, pverp, psubcols
   use constituents,     only: pcnst, cnst_name, cnst_get_ind
@@ -34,6 +34,8 @@ module physpkg
   use modal_aero_calcsize,    only: modal_aero_calcsize_init, modal_aero_calcsize_diag, modal_aero_calcsize_reg
   use modal_aero_calcsize,    only: modal_aero_calcsize_sub
   use modal_aero_wateruptake, only: modal_aero_wateruptake_init, modal_aero_wateruptake_dr, modal_aero_wateruptake_reg
+  use shr_const_mod, only : SHR_CONST_REARTH
+  use cam_abortutils, only: endrun
 
   implicit none
   private
@@ -95,6 +97,18 @@ module physpkg
   integer ::  cmfmczm_idx        = 0     ! Zhang-McFarlane convective mass fluxes
   integer ::  rliqbc_idx         = 0     ! tphysbc reserve liquid
   integer ::  psl_idx            = 0
+
+  integer, parameter :: ncnst = 4
+  real(r8) :: global_column_burden_before_tphysbc(ncnst)
+  real(r8) :: global_column_burden_after_tphysbc(ncnst)
+  real(r8) :: global_column_burden_before_tphysac(ncnst)
+  real(r8) :: global_column_burden_after_tphysac(ncnst)
+  real(r8) :: global_sflx(ncnst)
+  real(r8) :: global_sum_TM_delta(ncnst) = 0._r8
+  real(r8) :: global_sum_SF(ncnst) = 0._r8
+
+  character(len=*),parameter :: u_FILE_u = __FILE__
+
 !=======================================================================
 contains
 !=======================================================================
@@ -1078,6 +1092,10 @@ contains
      use metdata,       only: get_met_srf1
 #endif
     !
+    use co2_cycle, only : c_i, c_names
+    use physconst, only: rga
+    use cam_esmf_mod, only : cam_esmf_global_sum2, model_areas
+    !
     ! Input arguments
     !
     real(r8), intent(in) :: ztodt            ! physics time step unless nstep=0
@@ -1098,6 +1116,11 @@ contains
     integer :: ncol                              ! number of columns
     integer :: nstep                             ! current timestep number
     type(physics_buffer_desc), pointer :: phys_buffer_chunk(:)
+    !
+    real(r8) :: total_column_burden_before_tphysbc(ncnst)
+    real(r8) :: total_column_burden_after_tphysbc(ncnst)
+    integer  :: m,mm,icol,rc,nsize,ncols
+    real(r8), allocatable :: area(:)
 
     call t_startf ('physpkg_st1')
     nstep = get_nstep()
@@ -1150,6 +1173,29 @@ contains
     call t_startf ('bc_physics')
     call t_adj_detailf(+1)
 
+    ! store global variable, output to log and output change
+    nsize = size(model_areas)
+    allocate(area(nsize))
+
+    total_column_burden_before_tphysbc(:) = 0._r8
+    do m = 1,ncnst
+       mm = c_i(m)
+       do c = begchunk, endchunk
+          ncols = get_ncols_p(c)
+          call get_area_all_p(c, ncols, area)
+          do icol = 1,phys_state(c)%ncol
+             total_column_burden_before_tphysbc(m) = total_column_burden_before_tphysbc(m) + &
+                  sum(phys_state(c)%q(icol,:,mm) * phys_state(c)%pdeldry(icol,:), dim=1) * rga * area(icol) * SHR_CONST_REARTH**2
+          end do
+       end do
+    end do
+
+    do m = 1,ncnst
+       call cam_esmf_global_sum2(total_column_burden_before_tphysbc(m), global_column_burden_before_tphysbc(m), rc=rc)
+       call chkrc(rc,__LINE__,u_FILE_u)
+    end do
+
+
 !$OMP PARALLEL DO PRIVATE (C, phys_buffer_chunk)
     do c=begchunk, endchunk
       !
@@ -1165,6 +1211,41 @@ contains
            phys_tend(c), phys_buffer_chunk, &
            cam_out(c), cam_in(c) )
     end do
+
+    total_column_burden_after_tphysbc(:) = 0._r8
+    do m = 1,ncnst
+       mm = c_i(m)
+       do c = begchunk, endchunk
+          ncols = get_ncols_p(c)
+          call get_area_all_p(c, ncols, area)
+          do icol = 1,phys_state(c)%ncol
+             total_column_burden_after_tphysbc(m) = total_column_burden_after_tphysbc(m) + &
+                  sum(phys_state(c)%q(icol,:,mm) * phys_state(c)%pdeldry(icol,:), dim=1) * rga * area(icol) * SHR_CONST_REARTH**2
+          end do
+       end do
+    end do
+
+    do m = 1,ncnst
+       call cam_esmf_global_sum2(total_column_burden_after_tphysbc(m), global_column_burden_after_tphysbc(m), rc=rc)
+       call chkrc(rc,__LINE__,u_FILE_u)
+    end do
+
+    if (masterproc .and. get_nstep() > 1) then
+       write(iulog,*)
+       do m = 1,ncnst
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_before                  at nstep ', &
+          !      get_nstep(),c_names(m),global_column_burden_before_tphysbc(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_after                   at nstep ', &
+          !      get_nstep(),c_names(m),global_column_burden_after_tphysbc(m)
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_before - tphysac_after  at nstep ', &
+               get_nstep(),c_names(m),&
+               (global_column_burden_before_tphysbc(m) - global_column_burden_after_tphysac(m))/global_column_burden_before_tphysbc(m)
+
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysbc_after  - tphysbc_before at nstep ', &
+               get_nstep(),c_names(m),&
+               (global_column_burden_after_tphysbc(m) - global_column_burden_before_tphysbc(m))/global_column_burden_after_tphysbc(m)
+       end do
+    end if
 
     call t_adj_detailf(-1)
     call t_stopf ('bc_physics')
@@ -1201,6 +1282,11 @@ contains
 #endif
     use hemco_interface, only: HCOI_Chunk_Run
     !
+    use co2_cycle,    only : c_i, c_names
+    use physconst,    only : rga
+    use cam_esmf_mod, only : cam_esmf_global_sum2, model_areas
+    use time_manager, only : get_nstep
+    !
     ! Input arguments
     !
     real(r8), intent(in) :: ztodt                       ! physics time step unless nstep=0
@@ -1220,6 +1306,13 @@ contains
     integer :: c                                 ! chunk index
     integer :: ncol                              ! number of columns
     type(physics_buffer_desc),pointer, dimension(:)     :: phys_buffer_chunk
+    !
+    integer, parameter :: ncnst = 4
+    real(r8) :: total_column_burden_before_tphysac(ncnst)
+    real(r8) :: total_column_burden_after_tphysac(ncnst)
+    real(r8) :: total_sflx(ncnst)
+    integer  :: m,mm,icol,rc,nsize,ncols
+    real(r8), allocatable :: area(:)
     !
     ! If exit condition just return
     !
@@ -1261,6 +1354,27 @@ contains
     call t_startf ('ac_physics')
     call t_adj_detailf(+1)
 
+    nsize = size(model_areas)
+    allocate(area(nsize))
+
+    total_column_burden_before_tphysac(:) = 0._r8
+    do m = 1,ncnst
+       mm = c_i(m)
+       do c = begchunk, endchunk
+          ncols = get_ncols_p(c)
+          call get_area_all_p(c, ncols, area)
+          do icol = 1,phys_state(c)%ncol
+             total_column_burden_before_tphysac(m) = total_column_burden_before_tphysac(m) + &
+                  sum(phys_state(c)%q(icol,:,mm) * phys_state(c)%pdeldry(icol,:), dim=1) * rga * area(icol) * SHR_CONST_REARTH**2
+          end do
+       end do
+    end do
+
+    do m = 1,ncnst
+       call cam_esmf_global_sum2(total_column_burden_before_tphysac(m), global_column_burden_before_tphysac(m), rc=rc)
+       call chkrc(rc,__LINE__,u_FILE_u)
+    end do
+
 !$OMP PARALLEL DO PRIVATE (C, NCOL, phys_buffer_chunk)
 
     do c=begchunk,endchunk
@@ -1280,6 +1394,67 @@ contains
 
     call t_adj_detailf(-1)
     call t_stopf('ac_physics')
+
+    total_column_burden_after_tphysac(:) = 0._r8
+    total_sflx(:) = 0._r8
+    do m = 1,ncnst
+       mm = c_i(m)
+       do c = begchunk, endchunk
+          ncols = get_ncols_p(c)
+          call get_area_all_p(c, ncols, area)
+          do icol = 1,phys_state(c)%ncol
+             total_column_burden_after_tphysac(m) = total_column_burden_after_tphysac(m) + &
+                  sum(phys_state(c)%q(icol,:,mm) * phys_state(c)%pdeldry(icol,:), dim=1) * rga * area(icol) * SHR_CONST_REARTH**2
+             total_sflx(m) = total_sflx(m) + cam_in(c)%cflx(icol,mm)*ztodt * area(icol) * SHR_CONST_REARTH**2
+          end do
+       end do
+    end do
+
+    do m = 1,ncnst
+       call cam_esmf_global_sum2(total_column_burden_after_tphysac(m), global_column_burden_after_tphysac(m), rc=rc)
+       call chkrc(rc,__LINE__,u_FILE_u)
+       call cam_esmf_global_sum2(total_sflx(m), global_sflx(m), rc=rc)
+       call chkrc(rc,__LINE__,u_FILE_u)
+       global_sum_TM_delta(m) = global_sum_TM_delta(m) + global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m)
+       global_sum_SF(m) = global_sum_SF(m) +  global_sflx(m)
+    end do
+
+    if (masterproc) then
+       do m = 1,ncnst
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before                  at nstep ', &
+          !      get_nstep(),c_names(m),global_column_burden_before_tphysac(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_after                   at nstep ', &
+          !      get_nstep(),c_names(m),global_column_burden_after_tphysac(m)
+
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before - tphysbc_after  at nstep ', &
+               get_nstep(),c_names(m),&
+               (global_column_burden_before_tphysac(m) - global_column_burden_after_tphysbc(m))/global_column_burden_before_tphysbc(m)
+
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_after  - tphysac_before at nstep ', &
+               get_nstep(),c_names(m),&
+               (global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m))/global_column_burden_after_tphysac(m)
+
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_before                  at nstep ', &
+               get_nstep(),c_names(m),global_column_burden_before_tphysac(m)
+
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' TM tphysac_after                   at nstep ', &
+               get_nstep(),c_names(m),global_column_burden_after_tphysac(m)
+
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' SF tphysac_after                   at nstep ', &
+               get_nstep(),c_names(m),global_sflx(m)
+
+          write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' delta TM - SF                      at nstep ', &
+               get_nstep(),c_names(m),&
+               (global_column_burden_after_tphysac(m) - global_column_burden_before_tphysac(m)) - global_sflx(m)
+
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global sum delta TM                at nstep ', &
+          !      get_nstep(),c_names(m), global_sum_TM_delta(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global sum delta SF                at nstep ', &
+          !      get_nstep(),c_names(m), global_sum_SF(m)
+          ! write(iulog,'(a,2x,i0,2x,a,2x,d23.15)')' global sum delta TM - SF           at nstep ', &
+          !      get_nstep(),c_names(m),global_sum_TM_delta(m) - global_sum_SF(m)
+       end do
+    end if
 
 #ifdef TRACER_CHECK
     call gmean_mass ('after tphysac FV:WET)', phys_state)
@@ -3065,5 +3240,20 @@ subroutine phys_timestep_init(phys_state, cam_in, cam_out, pbuf2d)
   call phys_grid_ctem_diags(phys_state)
 
 end subroutine phys_timestep_init
+
+  !================================================================
+  subroutine chkrc(rc, line, file)
+     use ESMF           , only: ESMF_SUCCESS, ESMF_LOGMSG_ERROR, ESMF_LogWrite
+     use cam_abortutils , only: endrun
+
+     integer          , intent(in) :: rc
+     integer          , intent(in) :: line
+     character(len=*) , intent(in) :: file
+
+     if ( rc /= ESMF_SUCCESS ) then
+        call ESMF_LogWrite('ERROR:', ESMF_LOGMSG_ERROR, line=line, file=file)
+        call endrun('chkrc')
+     end if
+  end subroutine chkrc
 
 end module physpkg
